@@ -212,8 +212,12 @@
         const phase = enemy.walkCycle + (near ? 0 : Math.PI)
         const step = Math.sin(phase) * 5
         const lift = Math.max(0, Math.cos(phase)) * 3
-        crawlingLimb(context, backLeg, { x: -21, y: near ? 5 : 2 }, { x: -31 + step, y: 19 - lift }, legAnchors)
-        crawlingLimb(context, arm, { x: 13, y: near ? -3 : -7 }, { x: 31 + step, y: 18 - lift }, armAnchors)
+        const side = near ? 1 : -1
+        crawlingLimb(context, backLeg, { x: -21 + side * 2, y: near ? 5 : 2 }, { x: -31 + step, y: 19 - lift + side * 2 }, legAnchors)
+        // Spread the two forearms at the shoulder and hand so the crawler
+        // visibly supports itself on both sides instead of showing one
+        // merged arm.
+        crawlingLimb(context, arm, { x: 13 + side * 4, y: near ? -3 : -7 }, { x: 31 + step + side * 5, y: 18 - lift + side * 3 }, armAnchors)
       }
       limbPair(false)
       body(context, "crawler", Math.sin(enemy.walkCycle * 2) * .8, 1)
