@@ -167,8 +167,10 @@
         leg(context, type, { x: side * 8, y: 7 }, { x: side * 10 + foot * .45, y: 31 + foot }, facing)
       }
       context.translate(sway, -Math.abs(stride) * .18)
-      infectedArm(context, type, facing, true, stride * .15)
       body(context, type, 0, facing)
+      // Paint both arms after the torso. The far arm is mirrored outward and
+      // must stay visible instead of being occluded by the oversized body.
+      infectedArm(context, type, facing, true, stride * .15)
       infectedArm(context, type, facing, false, stride * .15)
       if (enemy.burn > 0) {
         context.fillStyle = "#ff983a"
