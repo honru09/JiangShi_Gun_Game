@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import vm from "node:vm";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const evidence = join(root, "evidence/local/firearms-motion");
+const evidence = join(root, "evidence/local/cartoon-character-art");
 mkdirSync(evidence, { recursive: true });
 const results = [];
 const pass = (label, details = {}) => {
@@ -17,9 +17,32 @@ const pass = (label, details = {}) => {
 
 function miniProgramChecks() {
   let definition;
+  const indexPath = join(root, "wechat-miniprogram/miniprogram/pages/index/index.js");
+  const miniRoot = join(root, "wechat-miniprogram/miniprogram");
+  const require = createRequire(indexPath);
+  const manifest = require(join(miniRoot, "assets/cartoon-rig-manifest.json"));
+  const images = new Map();
+  let imageDraws = 0;
   const context = new Proxy({}, { get: (_, name) => name === "createLinearGradient"
-    ? () => ({ addColorStop() {} }) : () => {} });
+    ? () => ({ addColorStop() {} }) : name === "drawImage" ? (...args) => {
+      assert.equal(args.length, 9);
+      const [source, x, y, width, height, dx, dy, dw, dh] = args;
+      const bounds = images.get(source);
+      assert(bounds, "drawImage must use a confirmed packaged texture");
+      assert([x, y, width, height, dx, dy, dw, dh].every(Number.isFinite));
+      assert(x >= 0 && y >= 0 && width > 0 && height > 0 && dw > 0 && dh > 0);
+      assert(x + width <= bounds.width && y + height <= bounds.height);
+      imageDraws += 1;
+    } : () => {} });
   const wx = {
+    getImageInfo: ({ src, success }) => {
+      const asset = join(miniRoot, src.replace(/^\//, ""));
+      const png = readFileSync(asset);
+      assert.equal(png.toString("hex", 0, 8), "89504e470d0a1a0a");
+      const info = { path: asset, width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+      images.set(asset, info);
+      success(info);
+    },
     getSystemInfoSync: () => ({ windowWidth: 390, windowHeight: 844, screenHeight: 844,
       safeArea: { top: 24, bottom: 824 } }),
     createCanvasContext: () => context,
@@ -34,14 +57,17 @@ function miniProgramChecks() {
       return query;
     }
   };
-  vm.runInNewContext(readFileSync(join(root, "wechat-miniprogram/miniprogram/pages/index/index.js"), "utf8"),
-    { Page: value => { definition = value; }, wx, console, Date, Math,
+  vm.runInNewContext(readFileSync(indexPath, "utf8"),
+    { Page: value => { definition = value; }, require, wx, console, Date, Math,
       setInterval: () => 1, clearInterval() {}, setTimeout: callback => callback() });
   const page = { ...definition, data: structuredClone(definition.data),
     setData(value) { Object.assign(this.data, value); } };
   page.onLoad({ admin: "1" });
   page.onReady();
   page.confirmDraft();
+  page.draw();
+  assert(imageDraws >= 9 * 5, "the survivor and eight zombies must use the new atlas");
+  pass("mini program packaged atlas loads and character crops stay in bounds", { version: manifest.version, imageDraws });
   assert.equal(page.data.skillSlots.length, 7);
   assert.equal(page._state.enemies.length, 8);
   const state = page._state;
@@ -177,7 +203,9 @@ async function browserChecks() {
       response.writeHead(403).end(); return;
     }
     try {
-      response.setHeader("Content-Type", filename.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/html; charset=utf-8");
+      const mime = filename.endsWith(".js") ? "text/javascript; charset=utf-8"
+        : filename.endsWith(".png") ? "image/png" : filename.endsWith(".json") ? "application/json; charset=utf-8" : "text/html; charset=utf-8";
+      response.setHeader("Content-Type", mime);
       response.end(readFileSync(filename));
     } catch { response.writeHead(404).end(); }
   });
@@ -192,6 +220,8 @@ async function browserChecks() {
       page.on("pageerror", error => errors.push(error.message));
       page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
       await page.goto(`${url}?admin=1&tester=automated`);
+      await page.waitForFunction(() => window.__LAST_NIGHT_DEBUG__?.atlasReady === true);
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.artStatus), "ready");
       await page.locator("#enterDraft").click();
       await page.locator("#confirmDraft").click();
       const initial = await page.evaluate(() => {

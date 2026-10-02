@@ -105,12 +105,15 @@
       context.restore()
     }
 
-    function infectedArm(context, type, facing, rear, armBob) {
+    function infectedArm(context, type, facing, rear, armBob, side = 1) {
       const part = parts.get(`${type}.arm`)
       context.save()
       context.scale(facing, 1)
-      context.translate(rear ? -11 : 10, rear ? -17 : -11)
-      context.rotate(rear ? -.035 + armBob * .01 : -.08 - armBob * .01)
+      // Keep both shoulders separated in screen space. Drawing both arms toward
+      // the front without a vertical offset makes the second hand disappear
+      // under the first one at the game's small sprite scale.
+      context.translate(side * 13, -16 + side * 3)
+      context.rotate((rear ? -.035 : -.08) + side * .025 + armBob * (rear ? .01 : -.01))
       const scale = Math.min((rear ? 38 : 34) / part.source.width, 22 / part.source.height)
       const width = part.source.width * scale
       const height = part.source.height * scale
@@ -134,8 +137,10 @@
         const phase = stride * side
         leg(context, "hero", { x: side * 8, y: 4 }, { x: side * 8 + phase * 5, y: 30 + phase * 8 }, side)
       }
-      heroArm(context, player, true)
       body(context, "hero", -lift * 1.6)
+      // Both arms stay above the torso so the rear hand remains visible while
+      // the rifle and the near hand keep their existing aim order.
+      heroArm(context, player, true)
       // A tall head would hide the unchanged upward muzzle, so keep the rifle readable in every aim direction.
       options.drawWeapon?.()
       // Keep the near arm and palm over the chest/rifle, including upward aim.
@@ -161,9 +166,9 @@
         leg(context, type, { x: side * 8, y: 7 }, { x: side * 10 + foot * .45, y: 31 + foot }, facing)
       }
       context.translate(sway, -Math.abs(stride) * .18)
-      infectedArm(context, type, facing, true, stride * .15)
       body(context, type, 0, facing)
-      infectedArm(context, type, facing, false, stride * .15)
+      infectedArm(context, type, facing, true, stride * .15, -1)
+      infectedArm(context, type, facing, false, stride * .15, 1)
       if (enemy.burn > 0) {
         context.fillStyle = "#ff983a"
         context.beginPath(); context.arc(-12, 3, 3, 0, Math.PI * 2); context.arc(10, -8, 4, 0, Math.PI * 2); context.fill()

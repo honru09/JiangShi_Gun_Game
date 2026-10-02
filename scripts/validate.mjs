@@ -51,8 +51,13 @@ try {
 }
 
 checkJavaScript("prototype-2d/skills.js");
+checkJavaScript("prototype-2d/character-atlas.js");
+checkJavaScript("prototype-2d/character-art.js");
 checkJavaScript("wechat-miniprogram/miniprogram/app.js");
 checkJavaScript("wechat-miniprogram/miniprogram/pages/index/index.js");
+checkJavaScript("wechat-miniprogram/miniprogram/renderers/cartoon-characters.js");
+parseJson("prototype-2d/assets/cartoon-rig-manifest.json");
+parseJson("wechat-miniprogram/miniprogram/assets/cartoon-rig-manifest.json");
 
 const projectConfig = parseJson("wechat-miniprogram/project.config.json");
 const appConfig = parseJson("wechat-miniprogram/miniprogram/app.json");

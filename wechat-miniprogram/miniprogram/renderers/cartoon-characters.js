@@ -227,8 +227,10 @@ function createCharacterRenderer(wxApi, manifest, onChange) {
       drawBody(context, source, character, geometry, sway, bob, enemy.facing)
       const shoulderY = geometry.bottom - geometry.height * 0.34 + bob
       for (let side = -1; side <= 1; side += 2) {
-        const shoulder = { x: side * geometry.width * 0.36 + sway, y: shoulderY }
-        const hand = { x: shoulder.x + enemy.facing * 0.54 * scale, y: shoulder.y + 0.085 * scale + gait * 0.025 * scale }
+        // Separate the two reaching arms vertically. At the game's small scale
+        // a pair aimed from the same y coordinate collapses into one visible arm.
+        const shoulder = { x: side * geometry.width * 0.36 + sway, y: shoulderY + side * 0.055 * scale }
+        const hand = { x: shoulder.x + enemy.facing * 0.45 * scale, y: shoulder.y + side * 0.075 * scale + 0.085 * scale + gait * 0.025 * scale }
         arm(context, source, character.arm, shoulder, hand, scale)
       }
       context.restore()
