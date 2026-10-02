@@ -287,13 +287,13 @@
       line(ctx, x - size, y + 4, x + size, y + 3, "#637233", 1)
     }
 
-    // Dust-covered tarmac and yellow shoulders keep the modern street layout
-    // legible while the uneven painted edges echo the reference's warm paths.
-    rect(ctx, 0, 0, width, height, "#b0a455")
+    // Warm dirt covers most of the old streets. Tarmac survives in irregular
+    // islands, like worn paint, rather than a flat grey city grid.
+    rect(ctx, 0, 0, width, height, "#c2b16c")
     for (let i = 0; i < 2100; i += 1) {
       const x = random() * width
       const y = random() * height
-      oval(ctx, x, y, 4 + random() * 13, 2 + random() * 8, i % 3 ? "#bea95c30" : "#807b4430")
+      oval(ctx, x, y, 4 + random() * 13, 2 + random() * 8, i % 3 ? "#e0cd8d35" : "#9e8a4b25")
     }
 
     const allGreen = [...blocks]
@@ -308,10 +308,10 @@
       for (let y = block.y; y < block.y + block.height; y += 12 * sy) points.push([block.x + block.width + (random() - .5) * jitter, y])
       for (let x = block.x + block.width; x > block.x; x -= 12 * sx) points.push([x, block.y + block.height + (random() - .5) * jitter])
       for (let y = block.y + block.height; y > block.y; y -= 12 * sy) points.push([block.x + (random() - .5) * jitter, y])
-      polygon(ctx, points, "#8d9e43", "#687632", 3 * scale)
+      polygon(ctx, points, "#98a748", "#687632", 3 * scale)
       // Broad, faint brush strokes; there is no rectangular tile grid.
       for (let i = 0; i < 15; i += 1) {
-        oval(ctx, block.x + 8 + random() * Math.max(1, block.width - 16), block.y + 8 + random() * Math.max(1, block.height - 16), 9 + random() * 17, 4 + random() * 8, "#a5ad482e")
+        oval(ctx, block.x + 8 + random() * Math.max(1, block.width - 16), block.y + 8 + random() * Math.max(1, block.height - 16), 9 + random() * 17, 4 + random() * 8, "#b9bd563d")
       }
       for (let x = block.x + 4; x < block.x + block.width; x += 15 * sx) {
         grass(x + (random() - .5) * 4, block.y - 1, 3 * scale)
@@ -324,19 +324,41 @@
     }
 
     // Wide cracked sandstone pavements join continuously at each intersection.
-    for (const x of vertical) rect(ctx, x - roadX / 2 - sidewalkX, 0, roadX + sidewalkX * 2, height, "#d0bb72")
-    for (const y of horizontal) rect(ctx, 0, y - roadY / 2 - sidewalkY, width, roadY + sidewalkY * 2, "#d0bb72")
-    for (const x of vertical) rect(ctx, x - roadX / 2 - 3 * sx, 0, roadX + 6 * sx, height, "#7f7350")
-    for (const y of horizontal) rect(ctx, 0, y - roadY / 2 - 3 * sy, width, roadY + 6 * sy, "#7f7350")
-    for (const x of vertical) rect(ctx, x - roadX / 2, 0, roadX, height, "#928774")
-    for (const y of horizontal) rect(ctx, 0, y - roadY / 2, width, roadY, "#928774")
+    for (const x of vertical) rect(ctx, x - roadX / 2 - sidewalkX, 0, roadX + sidewalkX * 2, height, "#dac780")
+    for (const y of horizontal) rect(ctx, 0, y - roadY / 2 - sidewalkY, width, roadY + sidewalkY * 2, "#dac780")
+    for (const x of vertical) rect(ctx, x - roadX / 2 - 3 * sx, 0, roadX + 6 * sx, height, "#a28e55")
+    for (const y of horizontal) rect(ctx, 0, y - roadY / 2 - 3 * sy, width, roadY + 6 * sy, "#a28e55")
+    for (const x of vertical) rect(ctx, x - roadX / 2, 0, roadX, height, "#c7b777")
+    for (const y of horizontal) rect(ctx, 0, y - roadY / 2, width, roadY, "#c7b777")
+    function wornRoadPatch(x, y, rx, ry, fill) {
+      const points = []
+      for (let edge = 0; edge < 14; edge += 1) {
+        const angle = edge / 14 * Math.PI * 2
+        const roughness = .74 + random() * .28
+        points.push([x + Math.cos(angle) * rx * roughness, y + Math.sin(angle) * ry * roughness])
+      }
+      polygon(ctx, points, fill)
+    }
+    for (const x of vertical) {
+      for (let y = 42; y < height; y += 116 * sy) {
+        const patchX = x + (random() - .5) * 65 * sx
+        wornRoadPatch(patchX, y, (12 + random() * 18) * sx, (18 + random() * 25) * sy, "#8c816353")
+        wornRoadPatch(x + (random() - .5) * 85 * sx, y + 55 * sy, (17 + random() * 15) * sx, (7 + random() * 8) * sy, "#e2ce903d")
+      }
+    }
+    for (const y of horizontal) {
+      for (let x = 55; x < width; x += 143 * sx) {
+        wornRoadPatch(x, y + (random() - .5) * 60 * sy, (21 + random() * 20) * sx, (10 + random() * 13) * sy, "#8c81634b")
+        wornRoadPatch(x + 71 * sx, y + (random() - .5) * 90 * sy, (15 + random() * 15) * sx, (8 + random() * 7) * sy, "#e9d39436")
+      }
+    }
     // Weathered shoulders erase the perfectly straight road edge in little chips.
     for (const x of vertical) {
       for (let y = 8; y < height; y += 22 * sy) {
         for (const side of [-1, 1]) {
           if (horizontal.some(cross => Math.abs(cross - y) < roadY / 2 + sidewalkY)) continue
           const edge = x + side * roadX / 2
-          polygon(ctx, [[edge - side * (3 + random() * 6) * sx, y], [edge + side * 2 * sx, y - 4 * sy], [edge + side * 6 * sx, y + 8 * sy], [edge - side * 3 * sx, y + 14 * sy]], "#c8b773")
+          polygon(ctx, [[edge - side * (3 + random() * 6) * sx, y], [edge + side * 2 * sx, y - 4 * sy], [edge + side * 6 * sx, y + 8 * sy], [edge - side * 3 * sx, y + 14 * sy]], "#dbc77e")
           line(ctx, edge + side * 11 * sx, y + 3 * sy, edge + side * 15 * sx, y + 8 * sy, "#aa945c", 1.4 * scale)
         }
       }
@@ -346,27 +368,27 @@
         for (const side of [-1, 1]) {
           if (vertical.some(cross => Math.abs(cross - x) < roadX / 2 + sidewalkX)) continue
           const edge = y + side * roadY / 2
-          polygon(ctx, [[x, edge - side * 4 * sy], [x - 4 * sx, edge + side * 2 * sy], [x + 11 * sx, edge + side * 5 * sy], [x + 18 * sx, edge - side * 3 * sy]], "#c8b773")
+          polygon(ctx, [[x, edge - side * 4 * sy], [x - 4 * sx, edge + side * 2 * sy], [x + 11 * sx, edge + side * 5 * sy], [x + 18 * sx, edge - side * 3 * sy]], "#dbc77e")
         }
       }
     }
     for (const x of vertical) {
       for (let y = 26; y < height - 26; y += 53 * sy) {
         if (horizontal.some(cross => Math.abs(cross - y) < roadY / 2 + 44 * sy)) continue
-        rect(ctx, x - 3 * sx, y, 4 * sx, 26 * sy, "#d7c174")
+        rect(ctx, x - 3 * sx, y, 4 * sx, 26 * sy, "#e2ca823d")
         if (Math.round(y / sy) % 3) rect(ctx, x + 34 * sx, y + 5 * sy, 2 * sx, 20 * sy, "#c7be955e")
       }
     }
     for (const y of horizontal) {
       for (let x = 26; x < width - 26; x += 53 * sx) {
         if (vertical.some(cross => Math.abs(cross - x) < roadX / 2 + 44 * sx)) continue
-        rect(ctx, x, y - 2 * sy, 26 * sx, 4 * sy, "#d7c174")
+        rect(ctx, x, y - 2 * sy, 26 * sx, 4 * sy, "#e2ca823d")
       }
     }
     for (const x of vertical) for (const y of horizontal) {
       for (const side of [-1, 1]) for (let stripe = 0; stripe < 4; stripe += 1) {
-        rect(ctx, x - roadX / 2 + 18 * sx, y + side * (roadY / 2 + 8 * sy + stripe * 7 * sy), roadX - 36 * sx, 3 * sy, "#e4d49b")
-        rect(ctx, x + side * (roadX / 2 + 8 * sx + stripe * 7 * sx), y - roadY / 2 + 18 * sy, 3 * sx, roadY - 36 * sy, "#e4d49b")
+        rect(ctx, x - roadX / 2 + 18 * sx, y + side * (roadY / 2 + 8 * sy + stripe * 7 * sy), roadX - 36 * sx, 3 * sy, "#e9dba983")
+        rect(ctx, x + side * (roadX / 2 + 8 * sx + stripe * 7 * sx), y - roadY / 2 + 18 * sy, 3 * sx, roadY - 36 * sy, "#e9dba983")
       }
       // Dirt washed out over the crossing rather than clean grey paving.
       oval(ctx, x - 30 * sx, y + 32 * sy, 31 * sx, 17 * sy, "#c4ab6333")
@@ -376,15 +398,15 @@
       const x = random() * width
       const y = random() * height
       const onRoad = vertical.some(road => Math.abs(road - x) < roadX / 2) || horizontal.some(road => Math.abs(road - y) < roadY / 2)
-      oval(ctx, x, y, 1 + random() * 2, .7 + random() * 1.3, onRoad ? "#635f472b" : "#e1cd8830")
+      oval(ctx, x, y, 1 + random() * 2, .7 + random() * 1.3, onRoad ? "#7d6e4242" : "#e1cd8830")
       if (i % 9 === 0 && !onRoad) {
         oval(ctx, x, y, 2.8 * scale, 1.8 * scale, "#b4ac7e", "#767346", .8)
         if (i % 18 === 0) grass(x + 6 * sx, y, 3.5 * scale)
       }
       if (i % 23 === 0 && onRoad) {
-        line(ctx, x, y, x + 12 * sx, y + 6 * sy, "#6a614c", 1.4 * scale)
-        line(ctx, x + 12 * sx, y + 6 * sy, x + 8 * sx, y + 14 * sy, "#6a614c", 1.4 * scale)
-        line(ctx, x + 12 * sx, y + 6 * sy, x + 21 * sx, y + 4 * sy, "#6a614c", 1 * scale)
+        line(ctx, x, y, x + 12 * sx, y + 6 * sy, "#8d7a4c", 1.4 * scale)
+        line(ctx, x + 12 * sx, y + 6 * sy, x + 8 * sx, y + 14 * sy, "#8d7a4c", 1.4 * scale)
+        line(ctx, x + 12 * sx, y + 6 * sy, x + 21 * sx, y + 4 * sy, "#8d7a4c", 1 * scale)
         if (i % 46 === 0) grass(x + 9 * sx, y + 12 * sy, 3 * scale, true)
       }
     }
@@ -415,11 +437,14 @@
         if (Math.floor(y / 64) % 3 === 0) prop(8, x + (x < 100 ? 29 : -29), base - 22, 52, 64)
       }
     }
-    // Small trees in the block corners, behind the houses' pedestrian entrances.
+    // Street trees sit outside the house footprints. Their crowns frame the
+    // visible block edge; the 64-pixel passage down the block centre stays clear.
     rows.forEach(([top, bottom], row) => {
       for (const [left, right] of columns) {
-        prop(8, left + 20, top + 32, 40, 49)
-        prop(row % 3 === 0 ? 9 : 8, right - 14, bottom - 4, 38, 48)
+        prop(8, left + 1, top + 24, 60, 73)
+        prop(8, right - 1, top + 21, 54, 68)
+        prop(8, left + 1, bottom - 11, 63, 77)
+        prop(row % 4 === 0 ? 9 : 8, right - 1, bottom - 8, 57, 72)
         // Oil drums and crates stay off the central 64-pixel passages.
         prop(12, left + 24, bottom - 22, 30, 29)
         if (row % 2) prop(14, right - 35, top + 39, 33, 25)
