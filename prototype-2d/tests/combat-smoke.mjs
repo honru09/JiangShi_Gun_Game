@@ -5,6 +5,9 @@ import vm from "node:vm"
 // DOM/Canvas stand-ins exercise the page's real gameplay script, not browser rendering.
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8")
 const skillSource = readFileSync(new URL("../skills.js", import.meta.url), "utf8")
+const atlasSource = readFileSync(new URL("../character-atlas.js", import.meta.url), "utf8")
+const characterSource = readFileSync(new URL("../character-art.js", import.meta.url), "utf8")
+const manifest = JSON.parse(readFileSync(new URL("../assets/cartoon-rig-manifest.json", import.meta.url), "utf8"))
 const inline = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(match => match[1]).filter(source => source.trim())
 
 function boot(coarse = false, admin = true) {
@@ -42,9 +45,12 @@ function boot(coarse = false, admin = true) {
   sandbox.window = sandbox
   const runtime = vm.createContext(sandbox)
   vm.runInContext(skillSource, runtime)
+  vm.runInContext(atlasSource, runtime)
+  vm.runInContext(characterSource, runtime)
   inline.forEach(source => vm.runInContext(source, runtime))
   return {
     debug: sandbox.__LAST_NIGHT_DEBUG__, elements,
+    art: sandbox.WASTELAND_CHARACTER_ART,
     key(code, down = true) { windowEvents.emit(down ? "keydown" : "keyup", { code, repeat: false }) },
     blur() { windowEvents.emit("blur") },
     frame(seconds = 1 / 60) { now += seconds * 1000; animationFrame(now) },
@@ -62,7 +68,26 @@ assert.equal(debug.snapshot().build.slots.length, 7)
 assert.equal((page.elements.get("skillDock").innerHTML.match(/class="skill-slot /g) || []).length, 7)
 assert.equal(debug.config.runSeconds, 180)
 assert.equal(debug.snapshot().nextXp, 5)
+assert.equal(debug.atlasReady, false)
+assert.equal(debug.artStatus, "unavailable")
+const painted = page.art.createRenderer({
+  image: { width: manifest.width, height: manifest.height },
+  images: { [manifest.characters.crawler.image]: { width: manifest.characters.crawler.imageWidth, height: manifest.characters.crawler.imageHeight } },
+  manifest,
+})
+assert.equal(painted.ready, true)
+let drawnSprites = 0
+const paintContext = new Proxy({}, { get: (_, key) => key === "drawImage" ? () => { drawnSprites += 1 } : () => {} })
+let drawnWeapon = false
+painted.drawPlayer(paintContext, debug.state.player, { drawWeapon: () => { drawnWeapon = true } })
+painted.drawEnemy(paintContext, debug.state.enemies[0], { playerX: debug.state.player.x })
+painted.drawEnemy(paintContext, { type: "crawler", x: 120, y: 180, radius: 18, walkCycle: 1, maxHp: 48, hp: 48, burn: 0 }, { playerX: debug.state.player.x })
+assert.equal(drawnWeapon, true)
+assert.ok(drawnSprites >= 12)
+console.log("PASS sprite renderer loads valid bounds, draws articulated parts, and missing image uses fallback")
 assert.equal(debug.state.enemies.every(enemy => enemy.type === "walker" && enemy.speed === 38), true)
+assert.equal(debug.state.enemies.every(enemy => enemy.motion === "walk"), true)
+assert.equal(debug.state.enemies.some(enemy => enemy.type === "crawler"), false)
 debug.state.godMode = true
 debug.state.nextXp = 1e9
 debug.step(5)
@@ -120,6 +145,37 @@ assert.equal(debug.build.level(upgradeId), 2)
 assert.equal(debug.snapshot().build.slots.length, 7)
 console.log("PASS upgrades only affect locked build slots")
 
+const motionPage = boot()
+motionPage.start()
+const motion = motionPage.debug
+motion.state.godMode = true
+motion.state.nextXp = 1e9
+motion.state.player.fireTimer = Infinity
+motion.state.enemies = [
+  { id: 1001, type: "walker", motion: "walk", motionTime: 0, x: 80, y: 180, radius: 17, hp: 1000, maxHp: 1000, baseSpeed: 38, speed: 38, damage: 0, xp: 1, color: "#7c8b66", hit: 0, burn: 0, burnLevel: 0, burnTimer: 0, contactTimer: 0, sawTimer: 0, walkCycle: 0, dead: false },
+  { id: 1002, type: "runner", motion: "run", motionTime: 0, x: 100, y: 320, radius: 14, hp: 1000, maxHp: 1000, baseSpeed: 72, speed: 72, damage: 0, xp: 1, color: "#b7a378", hit: 0, burn: 0, burnLevel: 0, burnTimer: 0, contactTimer: 0, sawTimer: 0, walkCycle: 0, dead: false },
+  { id: 1003, type: "brute", motion: "hop", motionTime: .1, hopPhase: "windup", hopHeight: 0, hopDirX: 0, hopDirY: 0, x: 130, y: 460, radius: 24, hp: 1000, maxHp: 1000, baseSpeed: 26, speed: 26, damage: 0, xp: 1, color: "#67715c", hit: 0, burn: 0, burnLevel: 0, burnTimer: 0, contactTimer: 0, sawTimer: 0, walkCycle: 0, dead: false },
+  { id: 1004, type: "crawler", motion: "crawl", motionTime: 0, x: 180, y: 600, radius: 18, hp: 1000, maxHp: 1000, baseSpeed: 22, speed: 22, damage: 0, xp: 1, color: "#8a9472", hit: 0, burn: 0, burnLevel: 0, burnTimer: 0, contactTimer: 0, sawTimer: 0, walkCycle: 0, dead: false }
+]
+motion.state.time = 65
+const positionsBefore = motion.state.enemies.map(enemy => enemy.x)
+motion.step(.61)
+const hop = motion.state.enemies.find(enemy => enemy.motion === "hop")
+assert.equal(hop.hopPhase, "airborne")
+assert.ok(hop.hopHeight > 0)
+assert.ok(hop.x !== positionsBefore[2])
+assert.ok(motion.state.enemies.some(enemy => enemy.motion === "crawl" && enemy.walkCycle > 0))
+const hopContactHp = motion.state.player.hp
+hop.x = motion.state.player.x
+hop.y = motion.state.player.y
+hop.contactTimer = 0
+motion.step(.1)
+assert.equal(motion.state.player.hp, hopContactHp)
+motion.step(.6)
+assert.ok(hop.hopPhase === "recovery" || hop.hopPhase === "approach")
+assert.ok(motion.state.enemies.find(enemy => enemy.motion === "run").speed > motion.state.enemies.find(enemy => enemy.motion === "walk").speed)
+console.log("PASS walk/run/hop/crawl modes: hop windup-airborne-recovery and airborne contact immunity")
+
 const closeEnemy = { ...debug.state.enemies[0], x: debug.state.player.x, y: debug.state.player.y, radius: 17, baseSpeed: 0, hp: 100, maxHp: 100, dead: false }
 debug.state.enemies = [closeEnemy]
 debug.state.player.fireTimer = 0
@@ -162,6 +218,7 @@ function pressure(coarse) {
   assert.ok(api.state.enemies.some(enemy => enemy.type === "runner"))
   assert.ok(api.state.enemies.some(enemy => enemy.type === "brute"))
   assert.ok(api.state.enemies.some(enemy => enemy.type === "bloater"))
+  assert.ok(api.state.enemies.some(enemy => enemy.type === "crawler"))
   api.state.time = 179
   api.step(.5)
   assert.equal(api.state.phase, "playing")
