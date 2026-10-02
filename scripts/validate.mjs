@@ -53,6 +53,9 @@ try {
 checkJavaScript("prototype-2d/skills.js");
 checkJavaScript("prototype-2d/character-atlas.js");
 checkJavaScript("prototype-2d/character-art.js");
+checkJavaScript("prototype-2d/city-map.js");
+checkJavaScript("prototype-2d/house-system.js");
+checkJavaScript("prototype-2d/loot-system.js");
 checkJavaScript("wechat-miniprogram/miniprogram/app.js");
 checkJavaScript("wechat-miniprogram/miniprogram/pages/index/index.js");
 checkJavaScript("wechat-miniprogram/miniprogram/renderers/cartoon-characters.js");

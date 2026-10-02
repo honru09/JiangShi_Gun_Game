@@ -1,21 +1,22 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import vm from "node:vm"
+import { fileURLToPath } from "node:url"
+import { join, resolve } from "node:path"
 
 // DOM/Canvas stand-ins exercise the page's real gameplay script, not browser rendering.
-const html = readFileSync(new URL("../index.html", import.meta.url), "utf8")
-const skillSource = readFileSync(new URL("../skills.js", import.meta.url), "utf8")
-const atlasSource = readFileSync(new URL("../character-atlas.js", import.meta.url), "utf8")
-const characterSource = readFileSync(new URL("../character-art.js", import.meta.url), "utf8")
-const manifest = JSON.parse(readFileSync(new URL("../assets/cartoon-rig-manifest.json", import.meta.url), "utf8"))
-const inline = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(match => match[1]).filter(source => source.trim())
+const root = process.env.GAME_TEST_ROOT ? resolve(process.env.GAME_TEST_ROOT, "prototype-2d")
+  : fileURLToPath(new URL("../", import.meta.url))
+const html = readFileSync(join(root, "index.html"), "utf8")
+const manifest = JSON.parse(readFileSync(join(root, "assets/cartoon-rig-manifest.json"), "utf8"))
 
 function boot(coarse = false, admin = true) {
   let now = 0
   let animationFrame = null
   const noop = () => {}
   const drawing = new Proxy({}, { get(target, key) {
-    if (key === "createLinearGradient") return () => ({ addColorStop: noop })
+    if (key === "createLinearGradient" || key === "createRadialGradient") return () => ({ addColorStop: noop })
+    if (key === "measureText") return text => ({ width: String(text).length * 8 })
     return target[key] || noop
   }, set(target, key, value) { target[key] = value; return true } })
   class Element {
@@ -44,10 +45,11 @@ function boot(coarse = false, admin = true) {
   }
   sandbox.window = sandbox
   const runtime = vm.createContext(sandbox)
-  vm.runInContext(skillSource, runtime)
-  vm.runInContext(atlasSource, runtime)
-  vm.runInContext(characterSource, runtime)
-  inline.forEach(source => vm.runInContext(source, runtime))
+  for (const script of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    const filename = /src="([^"]+)"/.exec(script[1])?.[1]
+    const source = filename ? readFileSync(join(root, filename), "utf8") : script[2]
+    if (source.trim()) vm.runInContext(source, runtime, { filename: filename || "index.html#inline" })
+  }
   return {
     debug: sandbox.__LAST_NIGHT_DEBUG__, elements,
     art: sandbox.WASTELAND_CHARACTER_ART,
@@ -55,7 +57,7 @@ function boot(coarse = false, admin = true) {
     blur() { windowEvents.emit("blur") },
     frame(seconds = 1 / 60) { now += seconds * 1000; animationFrame(now) },
     click(id) { elements.get(id).emit("click") },
-    start() { elements.get("enterDraft").emit("click"); elements.get("confirmDraft").emit("click") }
+    start() { elements.get("startRun").emit("click") }
   }
 }
 
@@ -64,7 +66,7 @@ page.start()
 const debug = page.debug
 assert.equal(debug.snapshot().phase, "playing")
 assert.equal(debug.snapshot().enemies, 8)
-assert.equal(debug.snapshot().build.slots.length, 7)
+assert.equal(debug.snapshot().build.slots.length, 2)
 assert.equal((page.elements.get("skillDock").innerHTML.match(/class="skill-slot /g) || []).length, 7)
 assert.equal(debug.config.runSeconds, 180)
 assert.equal(debug.snapshot().nextXp, 5)
@@ -94,7 +96,7 @@ debug.step(5)
 assert.ok(debug.snapshot().stats.shots > 0)
 assert.ok(debug.snapshot().stats.hits > 0)
 assert.ok(debug.snapshot().kills > 0)
-console.log("PASS real page script starts with seven slots, 8 slow walkers, rifle shots and hits")
+console.log("PASS real page script starts with two skills, seven dock slots, 8 slow walkers, rifle shots and hits")
 
 const beforeMove = debug.snapshot().player
 page.key("KeyD")
@@ -107,7 +109,8 @@ page.key("KeyD", false)
 debug.step(.25)
 assert.equal(debug.state.player.movingSpeed, 0)
 assert.equal(debug.state.player.gait, 0)
-debug.state.player.x = 690
+debug.state.player.x = debug.config.worldWidth - debug.config.worldMargin - debug.state.player.radius
+debug.state.player.y = debug.map.spawn.y
 page.key("KeyD")
 debug.step(.5)
 assert.equal(debug.state.player.movingSpeed, 0)
@@ -133,17 +136,18 @@ debug.step(.1)
 assert.equal(debug.state.player.x, stoppedX)
 console.log("PASS normal pause and focus loss freeze action and release held movement")
 
-debug.state.xp = debug.state.nextXp
+const lootBefore = debug.loot.length
 page.click("adminLevel")
-assert.equal(debug.state.phase, "levelup")
-const choices = debug.state.pendingChoices
-assert.ok(choices.every(skill => debug.build.selectedSkills().some(selected => selected.id === skill.id)))
-const upgradeId = choices[0].id
-page.elements.get("upgradeList").emit("click", { target: { closest: () => ({ dataset: { upgradeId } }) } })
 assert.equal(debug.state.phase, "playing")
-assert.equal(debug.build.level(upgradeId), 2)
-assert.equal(debug.snapshot().build.slots.length, 7)
-console.log("PASS upgrades only affect locked build slots")
+assert.equal(debug.loot.length, lootBefore + 1)
+const upgradeId = "scatterModule"
+const ball = debug.spawnLoot(upgradeId, "common", debug.state.player.x, debug.state.player.y)
+debug.state.player.x = ball.x; debug.state.player.y = ball.y
+debug.step(1 / 60)
+assert.equal(debug.build.level(upgradeId), 1)
+assert.equal(debug.snapshot().build.slots.length, 3)
+assert.equal(page.elements.has("upgradeList"), false)
+console.log("PASS administrator creates a scene ball; touching a new skill acquires level one without an upgrade dialog")
 
 const motionPage = boot()
 motionPage.start()
@@ -233,9 +237,8 @@ function pressure(coarse) {
   assert.equal(api.snapshot().stats.shots, finished.stats.shots)
   assert.equal(api.snapshot().player.walkCycle, finished.player.walkCycle)
   test.click("restartRun")
-  assert.equal(api.state.phase, "draft")
-  test.click("confirmDraft")
   assert.equal(api.state.phase, "playing")
+  assert.equal(api.snapshot().build.slots.length, 2)
   assert.equal(api.state.time, 0)
   assert.equal(api.state.enemies.length, 8)
   console.log(`PASS ${coarse ? "touch" : "desktop"} pressure: peak ${finished.stats.peakEnemies}/${api.config.enemyCap}; 179s live, 180s victory, frozen result and restart`)

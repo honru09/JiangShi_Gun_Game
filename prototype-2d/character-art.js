@@ -105,15 +105,14 @@
       context.restore()
     }
 
-    function infectedArm(context, type, facing, rear, armBob, side = 1) {
+    function infectedArm(context, type, facing, rear, armBob) {
       const part = parts.get(`${type}.arm`)
       context.save()
-      context.scale(facing, 1)
-      // Keep both shoulders separated in screen space. Drawing both arms toward
-      // the front without a vertical offset makes the second hand disappear
-      // under the first one at the game's small sprite scale.
-      context.translate(side * 13, -16 + side * 3)
-      context.rotate((rear ? -.035 : -.08) + side * .025 + armBob * (rear ? .01 : -.01))
+      // The atlas arm runs from sleeve (left) to hand (right). Mirror the far
+      // arm so it leaves the far shoulder instead of crossing the torso.
+      context.scale(facing * (rear ? -1 : 1), 1)
+      context.translate(rear ? -11 : 10, rear ? -17 : -11)
+      context.rotate(rear ? -.035 + armBob * .01 : -.08 - armBob * .01)
       const scale = Math.min((rear ? 38 : 34) / part.source.width, 22 / part.source.height)
       const width = part.source.width * scale
       const height = part.source.height * scale
@@ -167,8 +166,8 @@
       }
       context.translate(sway, -Math.abs(stride) * .18)
       body(context, type, 0, facing)
-      infectedArm(context, type, facing, true, stride * .15, -1)
-      infectedArm(context, type, facing, false, stride * .15, 1)
+      infectedArm(context, type, facing, true, stride * .15)
+      infectedArm(context, type, facing, false, stride * .15)
       if (enemy.burn > 0) {
         context.fillStyle = "#ff983a"
         context.beginPath(); context.arc(-12, 3, 3, 0, Math.PI * 2); context.arc(10, -8, 4, 0, Math.PI * 2); context.fill()
@@ -211,8 +210,9 @@
         const phase = enemy.walkCycle + (near ? 0 : Math.PI)
         const step = Math.sin(phase) * 5
         const lift = Math.max(0, Math.cos(phase)) * 3
-        crawlingLimb(context, backLeg, { x: -21, y: near ? 5 : 2 }, { x: -31 + step, y: 19 - lift }, legAnchors)
-        crawlingLimb(context, arm, { x: 13, y: near ? -3 : -7 }, { x: 31 + step, y: 18 - lift }, armAnchors)
+        const side = near ? 1 : -1
+        crawlingLimb(context, backLeg, { x: -21 + side * 2, y: near ? 5 : 2 }, { x: -31 + step, y: 19 - lift + side * 2 }, legAnchors)
+        crawlingLimb(context, arm, { x: 13 + side * 4, y: near ? -3 : -7 }, { x: 31 + step + side * 5, y: 18 - lift + side * 3 }, armAnchors)
       }
       limbPair(false)
       body(context, "crawler", Math.sin(enemy.walkCycle * 2) * .8, 1)
