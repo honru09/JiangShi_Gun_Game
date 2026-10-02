@@ -1,0 +1,9 @@
+{
+  "desc": "测试版本不参与搜索",
+  "rules": [
+    {
+      "action": "disallow",
+      "page": "*"
+    }
+  ]
+}

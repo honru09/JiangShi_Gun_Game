@@ -1,0 +1,21 @@
+{
+  "description": "西游八十一劫竖屏2D测试版",
+  "packOptions": {
+    "ignore": []
+  },
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": false,
+    "compileHotReLoad": true,
+    "lazyloadPlaceholderEnable": false
+  },
+  "compileType": "miniprogram",
+  "libVersion": "trial",
+  "appid": "touristappid",
+  "projectname": "xiyou-eighty-one-calamities-test",
+  "miniprogramRoot": "miniprogram/",
+  "condition": {}
+}

@@ -1,0 +1,56 @@
+# Local work and generated scratch data
+/work/
+/tmp/
+/temp/
+*.tmp
+*.temp
+*.log
+
+# Temporary test evidence and browser artifacts
+/evidence/tmp/
+/evidence/local/
+/evidence/playwright/
+/evidence/screenshots-temp/
+/test-results/
+/playwright-report/
+/blob-report/
+
+# Dependencies and coverage
+node_modules/
+coverage/
+.nyc_output/
+
+# WeChat Developer Tools local/private state
+**/project.private.config.json
+**/*.private.config.json
+**/.miniprogram-ci/
+**/.wechatide/
+**/.wxapkg/
+**/.devtools/
+
+# Secrets and local credentials
+.env
+.env.*
+!.env.example
+/secrets/
+**/secrets.local.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+private.*.json
+credentials*.json
+service-account*.json
+
+# Editor and operating-system files
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.DS_Store
+Thumbs.db
+Desktop.ini

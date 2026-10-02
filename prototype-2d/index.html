@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#101712">
+  <title>尸潮：最后一夜 · LAST NIGHT SURVIVOR</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #0c100d;
+      --asphalt: #151c18;
+      --panel: #1b241f;
+      --panel-2: #222e27;
+      --bone: #e8e2c7;
+      --muted: #9ca890;
+      --acid: #d8f25a;
+      --hazard: #ffb340;
+      --rust: #dc5f3f;
+      --blood: #b73535;
+      --cyan: #74e1cf;
+      --line: #435047;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { width: 100%; min-height: 100%; overscroll-behavior: none; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      color: var(--bone);
+      background:
+        radial-gradient(circle at 50% -15%, #35483b 0, transparent 42rem),
+        repeating-linear-gradient(135deg, #111713 0 2px, #0d120f 2px 10px);
+      font-family: "Bahnschrift Condensed", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+
+    button { font: inherit; }
+    .page-shell { min-height: 100dvh; display: grid; place-items: center; }
+    .game-shell {
+      position: relative;
+      width: min(100vw, 540px, calc(100dvh * .5625));
+      aspect-ratio: 9 / 16;
+      overflow: hidden;
+      isolation: isolate;
+      background: #131a16;
+      box-shadow: 0 0 0 1px #58625766, 0 24px 90px #000c;
+    }
+
+    .game-shell::after {
+      content: "";
+      position: absolute;
+      z-index: 20;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, #0005, transparent 5%, transparent 95%, #0005),
+        repeating-linear-gradient(0deg, #fff0 0 3px, #fff008 4px);
+      mix-blend-mode: soft-light;
+      opacity: .32;
+    }
+
+    canvas { display: block; width: 100%; height: 100%; outline: none; }
+    canvas:focus-visible { box-shadow: inset 0 0 0 3px var(--acid); }
+
+    .hud {
+      position: absolute;
+      z-index: 5;
+      inset: max(10px, env(safe-area-inset-top, 0px)) 10px auto;
+      pointer-events: none;
+      filter: drop-shadow(0 2px 5px #000a);
+    }
+
+    .hud-top { display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 8px; }
+    .run-mark {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      width: max-content;
+      padding: 5px 9px 5px 7px;
+      border: 1px solid #6d786c99;
+      background: #111915d9;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      transform: skewX(-4deg);
+    }
+
+    .run-mark::before { content: ""; width: 6px; height: 17px; background: var(--acid); box-shadow: 9px 0 0 var(--hazard); }
+    .hud-clock { text-align: right; }
+    .time { font: 900 clamp(22px, 6vw, 32px)/.9 Impact, "Bahnschrift Condensed", sans-serif; letter-spacing: .05em; }
+    .wave { margin-top: 5px; color: var(--acid); font-size: 10px; font-weight: 900; letter-spacing: .15em; }
+    .health-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 9px; margin-top: 8px; }
+    .health-track, .xp-track { position: relative; overflow: hidden; background: #080b09cc; border: 1px solid #59655a88; }
+    .health-track { height: 14px; transform: skewX(-8deg); }
+    .health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, var(--blood), #ed7043 65%, var(--hazard)); transition: width .12s linear; }
+    .health-copy { min-width: 62px; text-align: right; color: #f1ead0; font-size: 11px; font-weight: 900; font-variant-numeric: tabular-nums; }
+    .stat-row { display: flex; justify-content: space-between; align-items: center; margin-top: 7px; color: #bec7b5; font-size: 10px; font-weight: 800; letter-spacing: .06em; }
+    .stat-row strong { color: var(--bone); font-size: 12px; }
+    .xp-track { height: 6px; margin-top: 5px; border-color: #43504688; }
+    .xp-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), var(--acid)); transition: width .16s ease; }
+
+    .skill-dock {
+      position: absolute;
+      z-index: 6;
+      left: 50%;
+      bottom: calc(12px + var(--safe-bottom));
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+      width: calc(100% - 18px);
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .skill-slot {
+      position: relative;
+      min-width: 0;
+      height: 46px;
+      padding: 4px 2px 3px;
+      border: 1px solid #65706499;
+      background: linear-gradient(160deg, #263229e8, #111814ed);
+      text-align: center;
+      clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+      filter: drop-shadow(0 3px 4px #0008);
+    }
+
+    .skill-slot.fixed { border-color: #ffb340aa; }
+    .skill-slot.core { border-color: #d8f25aaa; }
+    .skill-slot.boost { border-color: #74e1cfaa; }
+    .skill-icon { display: block; font-size: 16px; font-weight: 1000; line-height: 19px; }
+    .skill-name { display: block; overflow: hidden; color: #d9ddca; font-size: 8px; font-weight: 800; white-space: nowrap; text-overflow: ellipsis; }
+    .skill-level { position: absolute; right: 3px; top: 2px; color: var(--acid); font-size: 7px; font-weight: 1000; }
+
+    .touch-zone {
+      position: absolute;
+      z-index: 7;
+      left: 14px;
+      bottom: calc(70px + var(--safe-bottom));
+      display: none;
+      width: 94px;
+      height: 94px;
+      border: 1px solid #cad0bc42;
+      border-radius: 50%;
+      background: #11181473;
+      box-shadow: inset 0 0 0 10px #ffffff07;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    .touch-zone::after { content: "移动"; position: absolute; inset: 0; display: grid; place-items: center; color: #c8ceb83d; font-size: 10px; font-weight: 900; letter-spacing: .12em; }
+    .touch-stick { position: absolute; z-index: 1; left: 50%; top: 50%; width: 42px; height: 42px; margin: -21px; border: 2px solid #eff7c6aa; border-radius: 50%; background: #b8d745cc; box-shadow: 0 6px 18px #0009; pointer-events: none; }
+
+    .wave-callout {
+      position: absolute;
+      z-index: 8;
+      left: 50%;
+      top: 27%;
+      min-width: 190px;
+      padding: 9px 24px;
+      border-block: 2px solid var(--acid);
+      background: #101712de;
+      text-align: center;
+      font: 900 24px/1 Impact, "Bahnschrift Condensed", sans-serif;
+      letter-spacing: .12em;
+      transform: translate(-50%, -10px) skewX(-6deg);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .wave-callout.show { animation: wave-in 1.9s both; }
+    @keyframes wave-in { 0% { opacity: 0; transform: translate(-50%, -22px) skewX(-6deg) scale(.9); } 14%, 68% { opacity: 1; transform: translate(-50%, 0) skewX(-6deg) scale(1); } 100% { opacity: 0; transform: translate(-50%, 8px) skewX(-6deg); } }
+
+    .toast {
+      position: absolute;
+      z-index: 8;
+      left: 50%;
+      bottom: calc(126px + var(--safe-bottom));
+      max-width: calc(100% - 120px);
+      padding: 6px 10px;
+      border-left: 3px solid var(--acid);
+      background: #101712dd;
+      color: #e4e8d4;
+      font-size: 10px;
+      font-weight: 800;
+      text-align: center;
+      transform: translateX(-50%);
+      opacity: 0;
+      transition: opacity .18s ease;
+      pointer-events: none;
+    }
+
+    .toast.show { opacity: 1; }
+
+    .overlay {
+      position: absolute;
+      z-index: 12;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: max(18px, env(safe-area-inset-top, 0px)) 18px calc(18px + var(--safe-bottom));
+      overflow: auto;
+      background: linear-gradient(#0a0e0bcf, #111812f2), repeating-linear-gradient(135deg, #fff0 0 8px, #ffffff05 8px 9px);
+      backdrop-filter: blur(4px);
+    }
+
+    .sheet {
+      position: relative;
+      width: 100%;
+      max-width: 430px;
+      padding: 24px 20px 20px;
+      border: 1px solid #687568aa;
+      background: linear-gradient(145deg, #263129f5, #151d18f8 58%);
+      box-shadow: 0 24px 70px #000c, inset 0 1px #ffffff12;
+      clip-path: polygon(17px 0, 100% 0, 100% calc(100% - 17px), calc(100% - 17px) 100%, 0 100%, 0 17px);
+    }
+
+    .sheet::before { content: ""; position: absolute; left: 0; top: 0; width: 92px; height: 4px; background: var(--acid); box-shadow: 98px 0 0 var(--hazard); }
+    .eyebrow { margin: 0 0 8px; color: var(--acid); font-size: 10px; font-weight: 1000; letter-spacing: .2em; text-transform: uppercase; }
+    .logo { margin: 0; font: 900 clamp(36px, 11vw, 56px)/.88 Impact, "Bahnschrift Condensed", sans-serif; letter-spacing: -.02em; text-transform: uppercase; text-shadow: 3px 3px 0 #0b0e0c; }
+    .logo span { display: block; margin-top: 9px; color: var(--hazard); font: 900 12px/1 "Bahnschrift Condensed", sans-serif; letter-spacing: .28em; }
+    .sheet h2 { margin: 0; font: 900 28px/1 Impact, "Bahnschrift Condensed", sans-serif; letter-spacing: .04em; }
+    .lead { margin: 16px 0 0; color: #b9c2ae; font-size: 13px; line-height: 1.7; }
+    .brief { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 18px 0; }
+    .brief-item { padding: 9px 6px; border-top: 1px solid #5d685e; background: #11181388; text-align: center; }
+    .brief-item strong { display: block; color: var(--bone); font-size: 12px; }
+    .brief-item span { display: block; margin-top: 3px; color: #8e9a88; font-size: 8px; letter-spacing: .08em; }
+
+    .primary-action {
+      width: 100%;
+      min-height: 48px;
+      border: 0;
+      background: var(--acid);
+      color: #151b10;
+      font-weight: 1000;
+      letter-spacing: .08em;
+      cursor: pointer;
+      clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+      box-shadow: inset 0 -4px #91a633;
+    }
+
+    .primary-action:hover { filter: brightness(1.06); }
+    .primary-action:active { transform: translateY(2px); box-shadow: inset 0 -2px #91a633; }
+    .primary-action:disabled { cursor: not-allowed; filter: grayscale(.8); opacity: .42; }
+    .text-action { border: 0; padding: 7px; color: #aeb8a6; background: transparent; font-size: 10px; font-weight: 800; cursor: pointer; }
+    .hint { margin: 11px 0 0; color: #7f8b7c; font-size: 9px; line-height: 1.5; text-align: center; }
+
+    .draft-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 14px; }
+    .draft-count { color: #aeb8a8; font-size: 10px; font-weight: 900; white-space: nowrap; }
+    .draft-count strong { color: var(--acid); }
+    .draft-section + .draft-section { margin-top: 13px; }
+    .section-label { display: flex; align-items: center; gap: 8px; margin: 0 0 7px; color: #9eaa98; font-size: 9px; font-weight: 1000; letter-spacing: .14em; }
+    .section-label::after { content: ""; flex: 1; height: 1px; background: #4c584e; }
+    .pick-list { display: grid; gap: 5px; }
+    .pick-card, .upgrade-card {
+      position: relative;
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      align-items: center;
+      gap: 9px;
+      width: 100%;
+      min-height: 49px;
+      padding: 7px 10px;
+      border: 1px solid #475349;
+      background: #111813ad;
+      color: var(--bone);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .pick-card.selected { border-color: var(--acid); background: #26321e; box-shadow: inset 3px 0 var(--acid); }
+    .pick-card.boost.selected { border-color: var(--cyan); box-shadow: inset 3px 0 var(--cyan); }
+    .pick-icon { display: grid; place-items: center; width: 31px; height: 31px; border: 1px solid #687365; background: #202a23; color: var(--acid); font-size: 15px; font-weight: 1000; }
+    .boost .pick-icon { color: var(--cyan); }
+    .pick-copy strong { display: block; font-size: 12px; }
+    .pick-copy small { display: block; overflow: hidden; margin-top: 2px; color: #899486; font-size: 8px; white-space: nowrap; text-overflow: ellipsis; }
+    .pick-check { width: 17px; height: 17px; border: 1px solid #677365; color: transparent; font-size: 12px; font-weight: 1000; line-height: 15px; text-align: center; }
+    .selected .pick-check { border-color: var(--acid); background: var(--acid); color: #141a11; }
+    .boost.selected .pick-check { border-color: var(--cyan); background: var(--cyan); }
+    .draft-actions { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; margin-top: 15px; }
+
+    .upgrade-list { display: grid; gap: 7px; margin-top: 16px; }
+    .upgrade-card { grid-template-columns: 38px 1fr auto; min-height: 58px; }
+    .upgrade-card:hover { border-color: var(--acid); background: #222e22; }
+    .upgrade-next { color: var(--acid); font-size: 11px; font-weight: 1000; }
+    .upgrade-empty { padding: 18px; border: 1px solid #4b574d; color: #9ba695; text-align: center; }
+
+    .admin-toggle {
+      position: absolute;
+      z-index: 15;
+      right: 7px;
+      top: 45%;
+      width: 30px;
+      height: 30px;
+      border: 1px solid #8c998d99;
+      background: #101712d9;
+      color: var(--acid);
+      font-size: 9px;
+      font-weight: 1000;
+      cursor: pointer;
+    }
+
+    .admin-panel {
+      position: absolute;
+      z-index: 16;
+      right: 8px;
+      top: 72px;
+      width: min(270px, calc(100% - 16px));
+      max-height: calc(100% - 145px);
+      overflow: auto;
+      padding: 12px;
+      border: 1px solid #687469;
+      background: #0d130fee;
+      box-shadow: 0 18px 50px #000c;
+      font-size: 10px;
+    }
+
+    .admin-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
+    .admin-head strong { color: var(--acid); letter-spacing: .1em; }
+    .admin-close { border: 0; background: transparent; color: #adb7a9; cursor: pointer; }
+    .admin-metrics { margin: 0 0 9px; color: #b8c6b7; font: 9px/1.55 Consolas, monospace; white-space: pre-wrap; }
+    .admin-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+    .admin-grid button { min-height: 30px; border: 1px solid #526055; background: #202b24; color: #dce2d4; font-size: 9px; cursor: pointer; }
+    .admin-range { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 7px; margin: 10px 0; color: #9eaa9d; }
+    .admin-range input { min-width: 0; accent-color: var(--acid); }
+    .event-log { margin-top: 9px; padding-top: 8px; border-top: 1px solid #39453c; color: #7f9083; font: 8px/1.55 Consolas, monospace; }
+
+    @media (pointer: coarse), (max-width: 720px) { .touch-zone { display: block; } }
+    @media (max-height: 650px) { .sheet { padding-block: 18px 15px; } .brief { margin: 12px 0; } .lead { margin-top: 11px; } .pick-card { min-height: 43px; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <main class="game-shell" id="gameShell" aria-label="尸潮：最后一夜竖屏生存战斗">
+      <canvas id="gameCanvas" width="720" height="1280" tabindex="0" aria-label="战斗区域，使用方向键或摇杆移动幸存者"></canvas>
+
+      <header class="hud" aria-live="polite">
+        <div class="hud-top">
+          <div class="run-mark">LAST NIGHT</div>
+          <div class="hud-clock"><div class="time" id="timeValue">00:00</div><div class="wave" id="waveValue">尸潮 01</div></div>
+        </div>
+        <div class="health-row"><div class="health-track"><div class="health-fill" id="healthFill"></div></div><div class="health-copy" id="healthValue">100 / 100</div></div>
+        <div class="stat-row"><span>等级 <strong id="levelValue">1</strong></span><span>击倒 <strong id="killValue">0</strong></span><span>场上 <strong id="enemyValue">0</strong></span></div>
+        <div class="xp-track"><div class="xp-fill" id="xpFill"></div></div>
+      </header>
+
+      <div class="wave-callout" id="waveCallout">尸潮 01</div>
+      <div class="toast" id="toast"></div>
+      <div class="touch-zone" id="joystick" aria-label="移动摇杆"><div class="touch-stick" id="stick"></div></div>
+      <div class="skill-dock" id="skillDock" aria-label="七槽构筑"></div>
+
+      <section class="overlay" id="introOverlay">
+        <div class="sheet">
+          <p class="eyebrow">WASTELAND SURVIVAL PROTOTYPE</p>
+          <h1 class="logo">尸潮：最后一夜<span>LAST NIGHT SURVIVOR</span></h1>
+          <p class="lead">天亮前，废城区只剩一名幸存者。移动、聚怪，突击步枪会自动锁定最近的感染者。</p>
+          <div class="brief">
+            <div class="brief-item"><strong>自动瞄准</strong><span>清晰弹道</span></div>
+            <div class="brief-item"><strong>密集尸潮</strong><span>四类感染者</span></div>
+            <div class="brief-item"><strong>固定构筑</strong><span>后续只加点</span></div>
+          </div>
+          <button class="primary-action" id="enterDraft" type="button">配置本夜装备</button>
+          <p class="hint">电脑：WASD / 方向键　·　手机：拖动左下摇杆</p>
+        </div>
+      </section>
+
+      <section class="overlay" id="draftOverlay" hidden>
+        <div class="sheet">
+          <div class="draft-head"><div><p class="eyebrow">7 SLOT LOADOUT</p><h2>锁定本夜构筑</h2></div><div class="draft-count" id="draftCount">核心 <strong>3/3</strong> · 增益 <strong>2/2</strong></div></div>
+          <div class="draft-section"><p class="section-label">核心战术技能 · 选 3</p><div class="pick-list" id="corePicks"></div></div>
+          <div class="draft-section"><p class="section-label">生存增益 · 选 2</p><div class="pick-list" id="boostPicks"></div></div>
+          <div class="draft-actions"><button class="text-action" id="rerollDraft" type="button">换一批</button><button class="primary-action" id="confirmDraft" type="button">锁定并进入尸潮</button></div>
+          <p class="hint">固定槽：突击步枪 + 求生本能。开战后不再更换技能，只升级已选 5 项。</p>
+        </div>
+      </section>
+
+      <section class="overlay" id="levelOverlay" hidden>
+        <div class="sheet"><p class="eyebrow">LEVEL UP</p><h2>选一项加点</h2><div class="upgrade-list" id="upgradeList"></div><p class="hint">只出现本夜已锁定的技能。</p></div>
+      </section>
+
+      <section class="overlay" id="gameOverOverlay" hidden>
+        <div class="sheet"><p class="eyebrow">RUN ENDED</p><h2>黎明前倒下</h2><p class="lead" id="gameOverSummary">坚持 00:00，击倒 0 名感染者。</p><button class="primary-action" id="restartRun" type="button">重新构筑</button></div>
+      </section>
+
+      <button class="admin-toggle" id="adminToggle" type="button" hidden>DEV</button>
+      <aside class="admin-panel" id="adminPanel" hidden>
+        <div class="admin-head"><strong>管理员调试</strong><button class="admin-close" id="adminClose" type="button">关闭</button></div>
+        <pre class="admin-metrics" id="adminMetrics">等待战斗数据…</pre>
+        <label class="admin-range">密度<input id="densityRange" type="range" min="0.5" max="2.5" value="1" step="0.1"><span id="densityValue">1.0×</span></label>
+        <div class="admin-grid">
+          <button id="adminPause" type="button">暂停</button><button id="adminStep" type="button">单步</button>
+          <button id="adminHorde" type="button">+20 感染者</button><button id="adminLevel" type="button">强制升级</button>
+          <button id="adminClear" type="button">清场</button><button id="adminGod" type="button">无敌：关</button>
+          <button id="adminHitbox" type="button">判定层：关</button><button id="adminCopy" type="button">复制快照</button>
+        </div>
+        <div class="event-log" id="eventLog">调试入口已就绪</div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="skills.js"></script>
+  <script>
+  (() => {
+    "use strict"
+
+    const Skills = window.WASTELAND_SKILLS
+    if (!Skills) {
+      document.getElementById("introOverlay").innerHTML = '<div class="sheet"><h2>技能配置未加载</h2><p class="lead">请将 skills.js 与 index.html 放在同一目录后重新打开。</p></div>'
+      return
+    }
+
+    const WIDTH = 720
+    const HEIGHT = 1280
+    const FIXED_STEP = 1 / 60
+    const PLAY_BOUNDS = { left: 30, right: 690, top: 108, bottom: 1162 }
+    const coarsePointer = matchMedia("(pointer: coarse)").matches
+    const CONFIG = {
+      enemyCap: coarsePointer ? 104 : 138,
+      particleCap: coarsePointer ? 220 : 320,
+      projectileCap: 120,
+      pickupCap: 72,
+      baseSpawnRate: coarsePointer ? 1.72 : 1.92
+    }
+
+    const canvas = document.getElementById("gameCanvas")
+    const context = canvas.getContext("2d", { alpha: false, desynchronized: true })
+    const ui = Object.fromEntries([
+      "introOverlay", "draftOverlay", "levelOverlay", "gameOverOverlay", "enterDraft", "restartRun",
+      "corePicks", "boostPicks", "draftCount", "rerollDraft", "confirmDraft", "upgradeList",
+      "timeValue", "waveValue", "healthFill", "healthValue", "levelValue", "killValue", "enemyValue", "xpFill",
+      "waveCallout", "toast", "skillDock", "joystick", "stick", "gameOverSummary",
+      "adminToggle", "adminPanel", "adminClose", "adminMetrics", "densityRange", "densityValue",
+      "adminPause", "adminStep", "adminHorde", "adminLevel", "adminClear", "adminGod", "adminHitbox", "adminCopy", "eventLog"
+    ].map(id => [id, document.getElementById(id)]))
+
+    const query = new URLSearchParams(location.search)
+    const adminMode = query.get("admin") === "1"
+    const testerId = query.get("tester") || "local"
+    const keys = new Set()
+    const touchInput = { x: 0, y: 0 }
+    const frameTimes = []
+    const eventLog = []
+    const build = new Skills.BuildSystem()
+    let state = null
+    let entityId = 1
+    let lastFrame = performance.now()
+    let accumulator = 0
+    let hudTimer = 0
+    let toastTimer = 0
+    let joystickPointer = null
+
+    function clamp(value, minimum, maximum) { return Math.max(minimum, Math.min(maximum, value)) }
+    function lerp(start, end, amount) { return start + (end - start) * amount }
+    function distanceSquared(firstX, firstY, secondX, secondY) { const x = firstX - secondX; const y = firstY - secondY; return x * x + y * y }
+    function randomBetween(minimum, maximum) { return minimum + Math.random() * (maximum - minimum) }
+    function formatTime(totalSeconds) { const value = Math.max(0, Math.floor(totalSeconds)); return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}` }
+    function id() { entityId += 1; return entityId }
+
+    function seededRandom(seed) {
+      let value = seed >>> 0
+      return () => {
+        value += 0x6d2b79f5
+        let result = value
+        result = Math.imul(result ^ result >>> 15, result | 1)
+        result ^= result + Math.imul(result ^ result >>> 7, result | 61)
+        return ((result ^ result >>> 14) >>> 0) / 4294967296
+      }
+    }
+
+    function roundedPath(target, x, y, width, height, radius) {
+      const limited = Math.min(radius, width / 2, height / 2)
+      target.beginPath()
+      target.moveTo(x + limited, y)
+      target.arcTo(x + width, y, x + width, y + height, limited)
+      target.arcTo(x + width, y + height, x, y + height, limited)
+      target.arcTo(x, y + height, x, y, limited)
+      target.arcTo(x, y, x + width, y, limited)
+      target.closePath()
+    }
+
+    function makeTerrain() {
+      const surface = document.createElement("canvas")
+      surface.width = WIDTH
+      surface.height = HEIGHT
+      const target = surface.getContext("2d")
+      const random = seededRandom(81427)
+      const base = target.createLinearGradient(0, 0, WIDTH, HEIGHT)
+      base.addColorStop(0, "#263129")
+      base.addColorStop(.52, "#1a231e")
+      base.addColorStop(1, "#111814")
+      target.fillStyle = base
+      target.fillRect(0, 0, WIDTH, HEIGHT)
+
+      target.save()
+      target.translate(WIDTH * .57, HEIGHT * .49)
+      target.rotate(-.08)
+      target.fillStyle = "#2b302c"
+      target.fillRect(-160, -760, 320, 1520)
+      target.fillStyle = "#b6a45a1f"
+      for (let y = -720; y < 720; y += 130) target.fillRect(-5, y, 10, 64)
+      target.strokeStyle = "#0d110e99"
+      target.lineWidth = 4
+      for (let index = 0; index < 18; index += 1) {
+        const x = randomBetween.call({ random }, -130, 130)
+        const y = -700 + random() * 1400
+        target.beginPath()
+        target.moveTo(x, y)
+        target.lineTo(x + (random() - .5) * 35, y + 20 + random() * 40)
+        target.lineTo(x + (random() - .5) * 55, y + 52 + random() * 55)
+        target.stroke()
+      }
+      target.restore()
+
+      for (let index = 0; index < 180; index += 1) {
+        const x = random() * WIDTH
+        const y = random() * HEIGHT
+        const size = 1 + random() * 4
+        target.fillStyle = random() > .72 ? "#8b744429" : "#070b0833"
+        target.fillRect(x, y, size * 1.7, size)
+      }
+
+      target.lineCap = "round"
+      for (let index = 0; index < 34; index += 1) {
+        const x = random() * WIDTH
+        const y = 95 + random() * (HEIGHT - 170)
+        target.strokeStyle = "#090d0a88"
+        target.lineWidth = 2 + random() * 2
+        target.beginPath()
+        target.moveTo(x, y)
+        for (let part = 1; part <= 3; part += 1) target.lineTo(x + (random() - .5) * 32, y + part * (9 + random() * 8))
+        target.stroke()
+      }
+
+      const wrecks = [[86, 305, -.18], [622, 880, .2], [112, 1042, -.08]]
+      for (const [x, y, rotation] of wrecks) {
+        target.save()
+        target.translate(x, y)
+        target.rotate(rotation)
+        target.fillStyle = "#0a0e0bdd"
+        roundedPath(target, -45, -22, 90, 44, 10)
+        target.fill()
+        target.fillStyle = "#5c4835"
+        target.fillRect(-26, -17, 45, 22)
+        target.fillStyle = "#111713"
+        target.fillRect(-18, -14, 28, 12)
+        target.fillStyle = "#070a08"
+        target.beginPath(); target.arc(-31, 23, 11, 0, Math.PI * 2); target.arc(31, 23, 11, 0, Math.PI * 2); target.fill()
+        target.restore()
+      }
+
+      target.strokeStyle = "#5b6b5b35"
+      target.lineWidth = 2
+      target.strokeRect(18, 90, WIDTH - 36, HEIGHT - 120)
+      return surface
+    }
+
+    const terrain = makeTerrain()
+
+    function modifiers() {
+      const level = skillId => build.level(skillId)
+      const hpRatio = state?.player ? state.player.hp / Math.max(1, state.player.maxHp) : 1
+      const instinct = hpRatio < .34 ? 1 : 0
+      const adrenaline = level("adrenalineAmpule")
+      return {
+        maxHp: 112 + level("armorLining") * 18 + level("rationPack") * 10,
+        speed: 188 * (1 + level("trailBoots") * .09 + instinct * (.1 + adrenaline * .055)),
+        damageReduction: Math.min(.38, level("armorLining") * .085),
+        regen: level("fieldBandage") * .34,
+        magnet: 64 + level("magnetHarness") * 42,
+        xpMultiplier: 1 + level("magnetHarness") * .1,
+        fireInterval: .39 / (1 + instinct * (.12 + adrenaline * .07)),
+        bulletDamage: 20 * (1 + level("armorPiercingBolt") * .12),
+        bulletSpeed: 760 + level("armorPiercingBolt") * 28,
+        pierce: level("armorPiercingBolt"),
+        pellets: level("scatterModule") ? 2 + level("scatterModule") : 1,
+        spread: level("scatterModule") ? .08 + level("scatterModule") * .018 : 0,
+        burn: level("incendiaryMagazine"),
+        arc: level("arcGenerator"),
+        saw: level("sawDrone"),
+        mine: level("proximityMine")
+      }
+    }
+
+    function createPlayer() {
+      const stats = modifiers()
+      return {
+        x: WIDTH / 2,
+        y: HEIGHT * .54,
+        radius: 19,
+        hp: stats.maxHp,
+        maxHp: stats.maxHp,
+        vx: 0,
+        vy: 0,
+        aim: -Math.PI / 2,
+        fireTimer: .15,
+        mineTimer: 2.8,
+        attack: 0,
+        muzzle: 0,
+        hurt: 0,
+        invulnerable: 0,
+        sinceHit: 99,
+        instinctReady: true,
+        instinctFlash: 0,
+        walkCycle: 0
+      }
+    }
+
+    function createState(phase = "intro") {
+      return {
+        runId: `${Date.now().toString(36)}-${testerId}`,
+        phase,
+        paused: false,
+        godMode: false,
+        showHitboxes: false,
+        density: Number(ui.densityRange.value),
+        time: 0,
+        wave: 1,
+        previousWave: 1,
+        level: 1,
+        xp: 0,
+        nextXp: 8,
+        kills: 0,
+        spawnBudget: 0,
+        hordeTimer: 10,
+        cameraShake: 0,
+        redFlash: 0,
+        hitStop: 0,
+        player: createPlayer(),
+        enemies: [],
+        projectiles: [],
+        particles: [],
+        pickups: [],
+        explosions: [],
+        arcs: [],
+        mines: [],
+        floaters: [],
+        stats: { shots: 0, hits: 0, damage: 0, peakEnemies: 0, explosions: 0 },
+        pendingChoices: [],
+        lastFps: 60
+      }
+    }
+
+    function logEvent(message) {
+      const entry = `${formatTime(state?.time || 0)}  ${message}`
+      eventLog.unshift(entry)
+      eventLog.splice(9)
+      ui.eventLog.textContent = eventLog.join("\n")
+    }
+
+    function toast(message, duration = 1.8) {
+      ui.toast.textContent = message
+      ui.toast.classList.add("show")
+      toastTimer = duration
+    }
+
+    function showOnlyOverlay(target) {
+      for (const element of [ui.introOverlay, ui.draftOverlay, ui.levelOverlay, ui.gameOverOverlay]) element.hidden = element !== target
+    }
+
+    function renderPick(skill, group, selected) {
+      return `<button class="pick-card ${group === "boost" ? "boost" : ""} ${selected ? "selected" : ""}" type="button" data-pick-group="${group}" data-pick-id="${skill.id}"><span class="pick-icon">${skill.icon}</span><span class="pick-copy"><strong>${skill.name}</strong><small>${skill.description}</small></span><span class="pick-check">✓</span></button>`
+    }
+
+    function renderDraft() {
+      ui.corePicks.innerHTML = build.coreCandidates.map(skill => renderPick(skill, "core", build.selectedCore.includes(skill.id))).join("")
+      ui.boostPicks.innerHTML = build.boostCandidates.map(skill => renderPick(skill, "boost", build.selectedBoost.includes(skill.id))).join("")
+      ui.draftCount.innerHTML = `核心 <strong>${build.selectedCore.length}/3</strong> · 增益 <strong>${build.selectedBoost.length}/2</strong>`
+      ui.confirmDraft.disabled = !build.canLock()
+    }
+
+    function renderSkillDock() {
+      const slots = build.locked ? build.slots() : Skills.fixed.map(skill => ({ ...skill, level: 1 }))
+      const placeholders = Array.from({ length: Math.max(0, 7 - slots.length) }, (_, index) => ({ id: `empty-${index}`, name: "待选择", short: "空位", icon: "·", group: "empty", level: 0 }))
+      ui.skillDock.innerHTML = slots.concat(placeholders).map(skill => `<div class="skill-slot ${skill.group}" title="${skill.name}"><span class="skill-icon">${skill.icon}</span><span class="skill-name">${skill.short}</span>${skill.level ? `<span class="skill-level">${skill.level}</span>` : ""}</div>`).join("")
+    }
+
+    function beginDraft() {
+      build.reset()
+      state = createState("draft")
+      renderDraft()
+      renderSkillDock()
+      showOnlyOverlay(ui.draftOverlay)
+      logEvent("进入本夜构筑")
+    }
+
+    function startRun() {
+      if (!build.lock()) return
+      state = createState("playing")
+      for (let index = 0; index < 14; index += 1) spawnEnemy(index < 9 ? "walker" : undefined)
+      renderSkillDock()
+      showOnlyOverlay(null)
+      canvas.focus({ preventScroll: true })
+      ui.waveCallout.textContent = "尸潮 01"
+      ui.waveCallout.classList.remove("show")
+      void ui.waveCallout.offsetWidth
+      ui.waveCallout.classList.add("show")
+      toast("突击步枪已自动锁定", 2.2)
+      logEvent("尸潮开始 · 构筑已锁定")
+    }
+
+    function syncPlayerStats(healAdded = false) {
+      if (!state?.player) return
+      const previousMax = state.player.maxHp
+      const nextMax = modifiers().maxHp
+      state.player.maxHp = nextMax
+      if (healAdded && nextMax > previousMax) state.player.hp = Math.min(nextMax, state.player.hp + (nextMax - previousMax) + 12)
+      else state.player.hp = Math.min(state.player.hp, nextMax)
+    }
+
+    function openLevelUp() {
+      if (state.phase !== "playing" || state.xp < state.nextXp) return
+      state.xp -= state.nextXp
+      state.level += 1
+      state.nextXp = Math.round(8 + state.level * 4.2)
+      const choices = build.upgradeChoices(3)
+      if (!choices.length) {
+        state.player.hp = Math.min(state.player.maxHp, state.player.hp + 20)
+        toast("构筑已满 · 转化为医疗补给")
+        return
+      }
+      state.phase = "levelup"
+      state.pendingChoices = choices
+      ui.upgradeList.innerHTML = choices.map(skill => `<button class="upgrade-card ${skill.group === "boost" ? "boost" : ""}" type="button" data-upgrade-id="${skill.id}"><span class="pick-icon">${skill.icon}</span><span class="pick-copy"><strong>${skill.name}</strong><small>${skill.description}</small></span><span class="upgrade-next">Lv.${build.level(skill.id)} → ${build.level(skill.id) + 1}</span></button>`).join("")
+      showOnlyOverlay(ui.levelOverlay)
+      logEvent(`升级节点 Lv.${state.level}`)
+    }
+
+    function chooseUpgrade(skillId) {
+      if (state.phase !== "levelup" || !state.pendingChoices.some(skill => skill.id === skillId)) return
+      if (!build.upgrade(skillId)) return
+      const healAdded = skillId === "armorLining" || skillId === "rationPack"
+      syncPlayerStats(healAdded)
+      if (skillId === "rationPack") state.player.hp = Math.min(state.player.maxHp, state.player.hp + 15)
+      state.phase = "playing"
+      state.pendingChoices = []
+      showOnlyOverlay(null)
+      renderSkillDock()
+      const skill = Skills.byId(skillId)
+      toast(`${skill.name} · Lv.${build.level(skillId)}`)
+      logEvent(`${skill.name} 升至 Lv.${build.level(skillId)}`)
+    }
+
+    /* GAME_SCRIPT_CHUNK_2 */
+  })()
+  </script>
+</body>
+</html>
