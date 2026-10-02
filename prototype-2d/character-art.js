@@ -108,8 +108,10 @@
     function infectedArm(context, type, facing, rear, armBob) {
       const part = parts.get(`${type}.arm`)
       context.save()
-      // The atlas arm runs from sleeve (left) to hand (right). Mirror the far
-      // arm so it leaves the far shoulder instead of crossing the torso.
+      // The atlas arm is drawn from sleeve (left) to hand (right). Mirror the
+      // far arm so it leaves the far shoulder instead of travelling through
+      // the torso and disappearing under the body. This keeps both hands
+      // visible while preserving the zombie's forward-facing pose.
       context.scale(facing * (rear ? -1 : 1), 1)
       context.translate(rear ? -11 : 10, rear ? -17 : -11)
       context.rotate(rear ? -.035 + armBob * .01 : -.08 - armBob * .01)
@@ -137,8 +139,8 @@
         leg(context, "hero", { x: side * 8, y: 4 }, { x: side * 8 + phase * 5, y: 30 + phase * 8 }, side)
       }
       body(context, "hero", -lift * 1.6)
-      // Both arms stay above the torso so the rear hand remains visible while
-      // the rifle and the near hand keep their existing aim order.
+      // Render both arms over the torso so the far hand cannot be hidden by
+      // the large illustrated body. The rifle remains between the two hands.
       heroArm(context, player, true)
       // A tall head would hide the unchanged upward muzzle, so keep the rifle readable in every aim direction.
       options.drawWeapon?.()
@@ -166,6 +168,8 @@
       }
       context.translate(sway, -Math.abs(stride) * .18)
       body(context, type, 0, facing)
+      // Paint both arms after the torso. The far arm is mirrored outward and
+      // must stay visible instead of being occluded by the oversized body.
       infectedArm(context, type, facing, true, stride * .15)
       infectedArm(context, type, facing, false, stride * .15)
       if (enemy.burn > 0) {
@@ -206,17 +210,21 @@
       const metadata = characters.crawler
       const armAnchors = metadata.armAnchors || { start: { x: .13, y: .2 }, end: { x: .83, y: .8 } }
       const legAnchors = metadata.legAnchors || { start: { x: .35, y: .1 }, end: { x: .68, y: .9 } }
-      function limbPair(near) {
+      function limbPair(near, drawLeg = true, drawArm = true) {
         const phase = enemy.walkCycle + (near ? 0 : Math.PI)
         const step = Math.sin(phase) * 5
         const lift = Math.max(0, Math.cos(phase)) * 3
         const side = near ? 1 : -1
-        crawlingLimb(context, backLeg, { x: -21 + side * 2, y: near ? 5 : 2 }, { x: -31 + step, y: 19 - lift + side * 2 }, legAnchors)
-        crawlingLimb(context, arm, { x: 13 + side * 4, y: near ? -3 : -7 }, { x: 31 + step + side * 5, y: 18 - lift + side * 3 }, armAnchors)
+        if (drawLeg) crawlingLimb(context, backLeg, { x: -21 + side * 2, y: near ? 5 : 2 }, { x: -31 + step, y: 19 - lift + side * 2 }, legAnchors)
+        // Spread the two forearms at the shoulder and hand so the crawler
+        // visibly supports itself on both sides instead of showing one
+        // merged arm.
+        if (drawArm) crawlingLimb(context, arm, { x: 13 + side * 4, y: near ? -3 : -7 }, { x: 31 + step + side * 5, y: 18 - lift + side * 3 }, armAnchors)
       }
-      limbPair(false)
+      limbPair(false, true, false)
       body(context, "crawler", Math.sin(enemy.walkCycle * 2) * .8, 1)
-      limbPair(true)
+      limbPair(false, false, true)
+      limbPair(true, false, true)
       if (enemy.burn > 0) {
         context.fillStyle = "#ff983a"; context.beginPath(); context.arc(-8, -1, 3, 0, Math.PI * 2); context.fill()
       }
