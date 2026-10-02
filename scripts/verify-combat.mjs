@@ -108,9 +108,13 @@ function miniProgramChecks() {
   before = pausedState();
   page.frame();
   assert.equal(pausedState(), before);
-  assert(page.data.levelChoices.every(skill => state.selectedCore.concat(state.selectedBoost).includes(skill.id)));
+  assert(page.data.levelChoices.length > 0);
+  assert(page.data.levelChoices.every(skill => skill.level >= 0 && skill.nextLevel === skill.level + 1));
+  assert(page.data.levelChoices.some(skill => skill.level === 0), "empty slots must offer a new skill");
+  const chosenSkill = page.data.levelChoices[0].id;
   page.upgradeSkill({ currentTarget: { dataset: { id: page.data.levelChoices[0].id } } });
   assert.equal(page.data.levelUpOpen, false);
+  assert(state.selectedCore.concat(state.selectedBoost).includes(chosenSkill));
   pass("mini program pause, background, and upgrade freeze combat");
 
   // A target-free interval must not accumulate a burst of overdue shots.

@@ -25,7 +25,13 @@
     let serial = 0
 
     function addBuilding(x, y, w, h, kind) {
-      buildings.push(Object.freeze({ x: x * sx, y: y * sy, width: w * sx, height: h * sy, kind, variant: serial++ }))
+      const variant = serial++
+      // Keep the visual map's varied footprints aligned with the house and
+      // loot systems, which use these fields for room layouts and acceptance.
+      const houseType = kind === "apartment" ? "floor" : variant % 4 === 0 ? "courtyard" : "bungalow"
+      const floors = kind === "apartment" || variant % 7 === 0 ? 2 : 1
+      const ruined = variant % 9 === 0
+      buildings.push(Object.freeze({ x: x * sx, y: y * sy, width: w * sx, height: h * sy, kind, variant, houseType, floors, ruined }))
     }
 
     rows.forEach(([top, bottom], row) => {
