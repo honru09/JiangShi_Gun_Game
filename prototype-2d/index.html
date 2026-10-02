@@ -838,7 +838,7 @@
 
     function enterBuilding(buildingId) {
       if (!state || state.phase !== "playing" || state.paused || state.room) return false
-      const house = houseSystem.houses.find(item => item.id === buildingId) || houseSystem.getNearbyEntrance(state.player, Infinity)
+      const house = houseSystem.houses.find(item => item.id === buildingId) || houseSystem.getNearbyEntrance(state.player, 1e9)
       if (!house) return false
       state.player.x = house.door.x; state.player.y = house.door.y
       return interact()
