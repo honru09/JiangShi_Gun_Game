@@ -8,6 +8,7 @@ import { join, resolve } from "node:path"
 const root = process.env.GAME_TEST_ROOT ? resolve(process.env.GAME_TEST_ROOT, "prototype-2d")
   : fileURLToPath(new URL("../", import.meta.url))
 const html = readFileSync(join(root, "index.html"), "utf8")
+const citySource = readFileSync(join(root, "city-map.js"), "utf8")
 const skillSource = readFileSync(join(root, "skills.js"), "utf8")
 const inline = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(match => match[1]).filter(source => source.trim())
 
@@ -45,6 +46,7 @@ function boot(coarse = false, admin = true) {
   }
   sandbox.window = sandbox
   const runtime = vm.createContext(sandbox)
+  vm.runInContext(citySource, runtime)
   vm.runInContext(skillSource, runtime)
   inline.forEach(source => vm.runInContext(source, runtime))
   return {
@@ -86,7 +88,8 @@ page.key("KeyD", false)
 debug.step(.25)
 assert.equal(debug.state.player.movingSpeed, 0)
 assert.equal(debug.state.player.gait, 0)
-debug.state.player.x = 690
+debug.state.player.x = debug.config.worldWidth - debug.config.worldMargin - debug.state.player.radius
+debug.state.player.y = debug.map.spawn.y
 page.key("KeyD")
 debug.step(.5)
 assert.equal(debug.state.player.movingSpeed, 0)
