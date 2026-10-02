@@ -11,8 +11,6 @@ const MAX_PARTICLES = 112
 const MAX_BLASTS = 14
 const MAX_BEAMS = 14
 const MAX_FLOATERS = 18
-const CORE_SLOT_LIMIT = 3
-const BOOST_SLOT_LIMIT = 2
 
 const FIXED_SKILLS = [
   {
@@ -199,18 +197,21 @@ Page({
     enemyCount: 0,
     enemyCap: HIGH_ENEMY_CAP,
     threatText: '寂静',
-    statusText: '升级时三选一，逐步获得技能',
+    fireText: '待命',
+    statusText: '先锁定本局 3 项核心战术与 2 项生存增益',
     stickX: 0,
     stickY: 0,
     skillSlots: [],
-    skillGroups: [],
+    draftCore: [],
+    draftBoost: [],
     selectedCoreCount: 0,
     selectedBoostCount: 0,
+    draftRoll: 1,
     levelChoices: [],
     endTitle: '本轮结束',
     endText: '调整构筑后再守一夜。',
     admin: {
-      status: '等待出发',
+      status: '构筑阶段',
       fps: '0',
       tick: '0',
       objects: '0 / 0 / 0',
@@ -219,7 +220,7 @@ Page({
       target: '--',
       spawnRate: '0.0/s',
       quality: '标准 · 104',
-      build: '0 战术 + 0 增益',
+      build: '未锁定',
       log: '等待事件…'
     }
   },
@@ -338,7 +339,7 @@ Page({
       selectedCore: [],
       selectedBoost: [],
       skillLevels: {},
-      levelChoiceIds: [],
+      draftRoll: 1,
       player: {
         x: 0,
         y: 0,
@@ -366,7 +367,7 @@ Page({
       lowQuality: false,
       godMode: false,
       showHitboxes: false,
-      toast: '升级时三选一，逐步获得技能',
+      toast: '先锁定本局 3 项核心战术与 2 项生存增益',
       toastTime: 99
     }
   },
@@ -374,6 +375,7 @@ Page({
   startRun() {
     this._touchInput = { x: 0, y: 0 }
     this._state = this.createState()
+    this.prepareDraft()
     this.setData({
       started: false,
       ended: false,
@@ -381,7 +383,6 @@ Page({
       pauseOpen: false,
       draftOpen: true,
       levelUpOpen: false,
-      levelChoices: [],
       adminOpen: false,
       godMode: false,
       showHitboxes: false,
@@ -391,26 +392,86 @@ Page({
       endTitle: '本轮结束',
       endText: '调整构筑后再守一夜。'
     })
-    this.recordEvent('新一夜已生成，等待出发')
+    this.recordEvent('新一夜已生成，等待锁定构筑')
     this.refreshSkillSlots()
     this.refreshData()
     this.draw()
   },
 
+  prepareDraft() {
+    const core = this.shuffle(CORE_SKILLS).slice(0, 4).map((skill, index) => ({
+      ...skill,
+      selected: index < 3
+    }))
+    const boost = this.shuffle(BOOST_SKILLS).slice(0, 3).map((skill, index) => ({
+      ...skill,
+      selected: index < 2
+    }))
+    this._draftCore = core
+    this._draftBoost = boost
+    this.syncDraftData()
+  },
+
+  syncDraftData() {
+    const selectedCoreCount = this._draftCore.filter(skill => skill.selected).length
+    const selectedBoostCount = this._draftBoost.filter(skill => skill.selected).length
+    this.setData({
+      draftCore: this._draftCore,
+      draftBoost: this._draftBoost,
+      selectedCoreCount,
+      selectedBoostCount,
+      draftRoll: this._state.draftRoll
+    })
+  },
+
+  toggleDraftCore(event) {
+    this.toggleDraftChoice(this._draftCore, event.currentTarget.dataset.id, 3)
+  },
+
+  toggleDraftBoost(event) {
+    this.toggleDraftChoice(this._draftBoost, event.currentTarget.dataset.id, 2)
+  },
+
+  toggleDraftChoice(group, id, limit) {
+    const selectedCount = group.filter(skill => skill.selected).length
+    const target = group.find(skill => skill.id === id)
+    if (!target) return
+    if (!target.selected && selectedCount >= limit) {
+      wx.showToast({ title: `最多选择 ${limit} 项`, icon: 'none' })
+      return
+    }
+    target.selected = !target.selected
+    this.syncDraftData()
+  },
+
+  rerollDraft() {
+    if (!this._state || this._state.status !== 'draft') return
+    this._state.draftRoll += 1
+    this.prepareDraft()
+    this.recordEvent(`已更换构筑方案 ${String(this._state.draftRoll).padStart(2, '0')}`)
+  },
+
   confirmDraft() {
+    const selectedCore = this._draftCore.filter(skill => skill.selected)
+    const selectedBoost = this._draftBoost.filter(skill => skill.selected)
+    if (selectedCore.length !== 3 || selectedBoost.length !== 2) {
+      wx.showToast({ title: '请选择 3 核心 + 2 增益', icon: 'none' })
+      return
+    }
     const state = this._state
-    if (!state || state.status !== 'draft') return
-    state.selectedCore = []
-    state.selectedBoost = []
+    state.selectedCore = selectedCore.map(skill => skill.id)
+    state.selectedBoost = selectedBoost.map(skill => skill.id)
     state.skillLevels = {}
-    state.levelChoiceIds = []
+    state.selectedCore.concat(state.selectedBoost).forEach(id => {
+      state.skillLevels[id] = 1
+    })
     state.status = 'running'
     state.paused = false
-    state.toast = '收集样本，升级获得新技能'
+    state.toast = '自动火力上线：保持移动，等待撤离车'
     state.toastTime = 3.2
     this.updatePlayerStats(true)
     this.spawnPack(8, true)
-    this.recordEvent('出发：突击步枪 + 求生本能，成长槽为空')
+    this.recordEvent(`构筑锁定：${selectedCore.concat(selectedBoost).map(skill => skill.name).join(' / ')}`)
     this.setData({
       started: true,
       draftOpen: false,
@@ -419,7 +480,6 @@ Page({
     })
     this.measureJoystick()
     this.refreshSkillSlots()
-    this.refreshData()
   },
 
   shuffle(items) {
@@ -535,52 +595,26 @@ Page({
 
   refreshSkillSlots() {
     const state = this._state
-    const makeSlots = (ids, limit, tone) => {
-      const slots = []
-      for (let index = 0; index < limit; index += 1) {
-        const skill = this.findSkill(ids[index])
-        const level = skill ? tone === 'fixed' ? 1 : this.skillLevel(skill.id) : 0
-        slots.push({
-          id: skill ? skill.id : `empty-${tone}-${index}`,
-          name: skill ? skill.name : tone === 'core' ? '战术空槽' : '增益空槽',
-          short: skill ? skill.short : '+',
-          level,
-          max: skill ? skill.max : 0,
-          levelText: skill ? tone === 'fixed' ? '固定' : this.skillStars(level, skill.max) : '待获取',
-          tone,
-          empty: !skill
-        })
+    const ids = FIXED_SKILLS.map(skill => skill.id).concat(state.selectedCore, state.selectedBoost)
+    const skillSlots = ids.map((id, index) => {
+      const skill = this.findSkill(id)
+      const level = index < 2 ? 1 : this.skillLevel(id)
+      return {
+        id,
+        name: skill.name,
+        short: skill.short,
+        kind: skill.kind,
+        level,
+        max: skill.max,
+        levelText: index < 2 ? '固定' : `Lv.${level}`,
+        tone: index < 2 ? 'fixed' : index < 5 ? 'core' : 'boost'
       }
-      return slots
-    }
-    const skillGroups = [
-      { id: 'fixed', label: '固定', slots: makeSlots(FIXED_SKILLS.map(skill => skill.id), 2, 'fixed') },
-      { id: 'core', label: '战术', slots: makeSlots(state.selectedCore, CORE_SLOT_LIMIT, 'core') },
-      { id: 'boost', label: '增益', slots: makeSlots(state.selectedBoost, BOOST_SLOT_LIMIT, 'boost') }
-    ]
-    this.setData({
-      skillGroups,
-      skillSlots: skillGroups.reduce((slots, group) => slots.concat(group.slots), []),
-      selectedCoreCount: state.selectedCore.length,
-      selectedBoostCount: state.selectedBoost.length
     })
-  },
-
-  skillStars(level, max) {
-    return '★'.repeat(level) + '☆'.repeat(max - level)
-  },
-
-  canUpgradeSkill(id) {
-    const state = this._state
-    if (!state) return false
-    const core = CORE_SKILLS.find(skill => skill.id === id)
-    const boost = BOOST_SKILLS.find(skill => skill.id === id)
-    const skill = core || boost
-    if (!skill) return false
-    const selected = core ? state.selectedCore : state.selectedBoost
-    const limit = core ? CORE_SLOT_LIMIT : BOOST_SLOT_LIMIT
-    const level = this.skillLevel(id)
-    return level < skill.max && (selected.includes(id) || (level === 0 && selected.length < limit))
+    while (skillSlots.length < 7) {
+      const index = skillSlots.length
+      skillSlots.push({ id: `empty-${index}`, name: index < 5 ? '核心战术' : '生存增益', short: '+', levelText: '待锁定', tone: index < 5 ? 'core' : 'boost' })
+    }
+    this.setData({ skillSlots })
   },
 
   gainXp(amount) {
@@ -600,38 +634,34 @@ Page({
 
   openLevelUp() {
     const state = this._state
-    if (!state || state.status !== 'running' || state.pendingLevels <= 0) return
-    const available = CORE_SKILLS.concat(BOOST_SKILLS).filter(skill => this.canUpgradeSkill(skill.id))
+    const available = state.selectedCore.concat(state.selectedBoost).filter(id => {
+      const skill = this.findSkill(id)
+      return skill && this.skillLevel(id) < skill.max
+    })
     if (!available.length) {
-      const healingLevels = state.pendingLevels
       state.pendingLevels = 0
-      state.levelChoiceIds = []
-      state.player.hp = Math.min(state.player.maxHp, state.player.hp + state.player.maxHp * 0.24 * healingLevels)
-      state.toast = '技能已满星：升级转为应急治疗'
+      state.player.hp = Math.min(state.player.maxHp, state.player.hp + state.player.maxHp * 0.24)
+      state.toast = '构筑已满：升级转化为应急治疗'
       state.toastTime = 2.6
       state.paused = false
-      this.setData({ levelUpOpen: false, levelChoices: [], paused: false, pauseOpen: false })
-      this.recordEvent(state.toast)
-      this.refreshData()
+      this.setData({ levelUpOpen: false, paused: false })
       return
     }
-    const levelChoices = this.shuffle(available).slice(0, 3).map(skill => {
-      const level = this.skillLevel(skill.id)
+    const levelChoices = this.shuffle(available).slice(0, 3).map(id => {
+      const skill = this.findSkill(id)
+      const level = this.skillLevel(id)
       return {
-        id: skill.id,
+        id,
         name: skill.name,
         short: skill.short,
         kind: skill.kind,
         level,
         nextLevel: level + 1,
         max: skill.max,
-        actionText: level === 0 ? '新获得' : '强化',
-        starsText: this.skillStars(level + 1, skill.max),
         description: skill.description,
-        tone: CORE_SKILLS.some(core => core.id === skill.id) ? 'core' : 'boost'
+        tone: state.selectedCore.includes(id) ? 'core' : 'boost'
       }
     })
-    state.levelChoiceIds = levelChoices.map(choice => choice.id)
     state.paused = true
     this._touchInput = { x: 0, y: 0 }
     this.setData({
@@ -643,36 +673,30 @@ Page({
       levelChoices
     })
     this.recordEvent(`幸存者提升至 Lv.${state.level}`)
-    this.refreshData()
   },
 
   upgradeSkill(event) {
     const id = event.currentTarget.dataset.id
     const state = this._state
     const skill = this.findSkill(id)
-    if (!state || state.status !== 'running' || state.pendingLevels <= 0 || !this.data.levelUpOpen || !state.levelChoiceIds.includes(id) || !this.canUpgradeSkill(id)) return
+    if (!skill || !this.data.levelUpOpen || !this.data.levelChoices.some(choice => choice.id === id)) return
     const currentLevel = this.skillLevel(id)
-    if (currentLevel === 0) {
-      const selected = CORE_SKILLS.some(core => core.id === id) ? state.selectedCore : state.selectedBoost
-      selected.push(id)
-    }
+    if (currentLevel >= skill.max) return
     state.skillLevels[id] = currentLevel + 1
-    state.levelChoiceIds = []
     state.pendingLevels = Math.max(0, state.pendingLevels - 1)
     this.updatePlayerStats(true)
     this.createBurst(state.player.x, state.player.y, '#d9f06a', 18, 2.2)
-    state.toast = currentLevel === 0 ? `获得 ${skill.name}` : `${skill.name}强化至 ${state.skillLevels[id]} 星`
+    state.toast = `${skill.name}提升至 Lv.${state.skillLevels[id]}`
     state.toastTime = 2.4
     this.recordEvent(state.toast)
     this.refreshSkillSlots()
-    this.setData({ levelUpOpen: false, levelChoices: [] })
+    this.setData({ levelUpOpen: false })
     if (state.pendingLevels > 0) {
       this.openLevelUp()
     } else {
       state.paused = false
       this.setData({ paused: false })
     }
-    this.refreshData()
   },
 
   togglePause() {
@@ -744,7 +768,7 @@ Page({
 
   step(deltaTime = TICK_SECONDS) {
     const state = this._state
-    if (!state || state.status !== 'running' || this.data.levelUpOpen) return
+    if (!state || state.status !== 'running') return
     const wasPaused = state.paused
     state.tick += 1
     state.elapsed = Math.min(RUN_SECONDS, state.elapsed + deltaTime)
@@ -1378,7 +1402,7 @@ Page({
 
   adminStep() {
     const state = this._state
-    if (!state || state.status !== 'running' || this.data.levelUpOpen) return
+    if (!state || state.status !== 'running') return
     state.paused = true
     this.step(TICK_SECONDS)
     state.paused = true
@@ -1507,9 +1531,10 @@ Page({
       enemyCount: state.enemies.length,
       enemyCap: cap,
       threatText: threat > 0.8 ? '包围' : threat > 0.45 ? '高压' : state.enemies.length ? '接敌' : '寂静',
-      statusText: state.toastTime > 0 ? state.toast : state.elapsed >= 150 ? '等待撤离：守住最后 30 秒' : '',
+      fireText: state.status === 'draft' ? '待命' : state.paused ? '暂停' : state.targetId ? '自动射击' : '搜索目标',
+      statusText: state.toastTime > 0 ? state.toast : state.elapsed >= 150 ? '等待撤离：守住最后 30 秒' : '拖动摇杆移动 · 自动瞄准射击',
       admin: {
-        status: state.status === 'draft' ? '等待出发' : state.status === 'ended' ? '本轮结束' : state.paused ? '暂停' : '运行中',
+        status: state.status === 'draft' ? '构筑阶段' : state.status === 'ended' ? '本轮结束' : state.paused ? '暂停' : '运行中',
         fps: String(this._perf.fps),
         tick: String(state.tick),
         objects: `${state.projectiles.length} / ${state.particles.length} / ${state.pickups.length}`,
@@ -1518,7 +1543,7 @@ Page({
         target: state.targetId ? `#${state.targetId} · ${state.targetDistance.toFixed(1)}m` : '--',
         spawnRate: `${state.spawnRate.toFixed(1)}/s · 第 ${state.hordeWave} 波`,
         quality: `${state.lowQuality ? '省电' : '标准'} · ${cap}`,
-        build: `${state.selectedCore.length} 战术 + ${state.selectedBoost.length} 增益`,
+        build: state.selectedCore.length ? '3 战术 + 2 增益' : '未锁定',
         log: state.logs.join('\n') || '等待事件…'
       }
     })
