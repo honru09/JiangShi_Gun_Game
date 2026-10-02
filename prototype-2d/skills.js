@@ -169,49 +169,14 @@
     }
 
     reset() {
-      this.locked = false
-      this.coreCandidates = []
-      this.boostCandidates = []
+      this.active = false
       this.selectedCore = []
       this.selectedBoost = []
       this.levels = { assaultRifle: 1, survivalInstinct: 1 }
-      this.reroll()
     }
 
-    reroll() {
-      if (this.locked) return false
-      this.coreCandidates = shuffled(CORE_SKILLS, this.random).slice(0, 5)
-      this.boostCandidates = shuffled(BOOST_SKILLS, this.random).slice(0, 4)
-      this.selectedCore = this.coreCandidates.slice(0, 3).map(skill => skill.id)
-      this.selectedBoost = this.boostCandidates.slice(0, 2).map(skill => skill.id)
-      return true
-    }
-
-    toggle(group, id) {
-      if (this.locked) return false
-      const source = group === "core" ? this.coreCandidates : this.boostCandidates
-      const limit = group === "core" ? 3 : 2
-      const selected = group === "core" ? this.selectedCore : this.selectedBoost
-      if (!source.some(skill => skill.id === id)) return false
-      const index = selected.indexOf(id)
-      if (index >= 0) {
-        selected.splice(index, 1)
-        return true
-      }
-      if (selected.length >= limit) return false
-      selected.push(id)
-      return true
-    }
-
-    canLock() {
-      return this.selectedCore.length === 3 && this.selectedBoost.length === 2
-    }
-
-    lock() {
-      if (!this.canLock()) return false
-      this.locked = true
-      for (const id of [...this.selectedCore, ...this.selectedBoost]) this.levels[id] = 1
-      return true
+    start() {
+      this.active = true
     }
 
     level(id) {
@@ -231,24 +196,43 @@
     }
 
     upgradeChoices(count = 3) {
-      const available = this.selectedSkills().filter(skill => this.level(skill.id) < skill.max)
-      return shuffled(available, this.random).slice(0, count)
+      if (!this.active) return []
+      const available = [...CORE_SKILLS, ...BOOST_SKILLS].filter(skill => this.canUpgrade(skill.id))
+      return shuffled(available, this.random).slice(0, count).map(skill => ({
+        ...skill,
+        action: this.has(skill.id) ? "upgrade" : "acquire",
+        level: this.level(skill.id),
+        nextLevel: this.level(skill.id) + 1
+      }))
+    }
+
+    canUpgrade(id) {
+      const skill = SKILL_MAP.get(id)
+      if (!this.active || !skill || skill.group === "fixed") return false
+      if (this.has(id)) return this.level(id) < skill.max
+      const selected = skill.group === "core" ? this.selectedCore : this.selectedBoost
+      return selected.length < (skill.group === "core" ? 3 : 2)
     }
 
     upgrade(id) {
-      const skill = SKILL_MAP.get(id)
-      if (!this.locked || !skill || !this.has(id) || this.level(id) >= skill.max) return false
-      this.levels[id] += 1
+      if (!this.canUpgrade(id)) return false
+      if (!this.has(id)) {
+        const skill = SKILL_MAP.get(id)
+        const selected = skill.group === "core" ? this.selectedCore : this.selectedBoost
+        selected.push(id)
+      }
+      this.levels[id] = this.level(id) + 1
       return true
     }
 
     isComplete() {
-      return this.selectedSkills().every(skill => this.level(skill.id) >= skill.max)
+      return this.active && this.selectedCore.length === 3 && this.selectedBoost.length === 2
+        && this.selectedSkills().every(skill => this.level(skill.id) >= skill.max)
     }
 
     snapshot() {
       return {
-        locked: this.locked,
+        active: this.active,
         selectedCore: [...this.selectedCore],
         selectedBoost: [...this.selectedBoost],
         levels: { ...this.levels },

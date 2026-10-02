@@ -110,32 +110,34 @@
       z-index: 6;
       left: 50%;
       bottom: calc(12px + var(--safe-bottom));
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 4px;
+      display: flex;
+      gap: 8px;
       width: calc(100% - 18px);
       transform: translateX(-50%);
       pointer-events: none;
     }
 
+    .skill-group { flex: 1; min-width: 0; }
+    .skill-group.core { flex: 1.5; }
+    .skill-group-label { margin-bottom: 4px; color: #9ca890; font-size: 8px; text-align: center; }
+    .skill-group-slots { display: flex; gap: 3px; padding: 3px; border-radius: 5px; background: #111814cf; }
     .skill-slot {
       position: relative;
+      flex: 1;
       min-width: 0;
-      height: 46px;
-      padding: 4px 2px 3px;
-      border: 1px solid #65706499;
-      background: linear-gradient(160deg, #263229e8, #111814ed);
+      height: 32px;
+      padding: 2px 0;
+      border-radius: 3px;
+      background: #26322999;
       text-align: center;
-      clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
-      filter: drop-shadow(0 3px 4px #0008);
     }
 
-    .skill-slot.fixed { border-color: #ffb340aa; }
-    .skill-slot.core { border-color: #d8f25aaa; }
-    .skill-slot.boost { border-color: #74e1cfaa; }
-    .skill-icon { display: block; font-size: 16px; font-weight: 1000; line-height: 19px; }
-    .skill-name { display: block; overflow: hidden; color: #d9ddca; font-size: 8px; font-weight: 800; white-space: nowrap; text-overflow: ellipsis; }
-    .skill-level { position: absolute; right: 3px; top: 2px; color: var(--acid); font-size: 7px; font-weight: 1000; }
+    .skill-slot.fixed { color: var(--hazard); }
+    .skill-slot.core { color: var(--acid); }
+    .skill-slot.boost { color: var(--cyan); }
+    .skill-slot.empty { color: #7d897c; background: transparent; }
+    .skill-icon { display: block; font-size: 13px; font-weight: 900; line-height: 17px; }
+    .skill-level { display: block; font-size: 7px; line-height: 9px; }
 
     .touch-zone {
       position: absolute;
@@ -205,6 +207,7 @@
       place-items: center;
       padding: max(18px, env(safe-area-inset-top, 0px)) 18px calc(18px + var(--safe-bottom));
       overflow: auto;
+      touch-action: pan-y;
       background: linear-gradient(#0a0e0bcf, #111812f2), repeating-linear-gradient(135deg, #fff0 0 8px, #ffffff05 8px 9px);
       backdrop-filter: blur(4px);
     }
@@ -213,6 +216,11 @@
       position: relative;
       width: 100%;
       max-width: 430px;
+      max-height: 100%;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      touch-action: pan-y;
       padding: 24px 20px 20px;
       border: 1px solid #687568aa;
       background: linear-gradient(145deg, #263129f5, #151d18f8 58%);
@@ -250,22 +258,15 @@
     .text-action { border: 0; padding: 7px; color: #aeb8a6; background: transparent; font-size: 10px; font-weight: 800; cursor: pointer; }
     .hint { margin: 11px 0 0; color: #7f8b7c; font-size: 9px; line-height: 1.5; text-align: center; }
 
-    .draft-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 14px; }
-    .draft-count { color: #aeb8a8; font-size: 10px; font-weight: 900; white-space: nowrap; }
-    .draft-count strong { color: var(--acid); }
-    .draft-section + .draft-section { margin-top: 13px; }
-    .section-label { display: flex; align-items: center; gap: 8px; margin: 0 0 7px; color: #9eaa98; font-size: 9px; font-weight: 1000; letter-spacing: .14em; }
-    .section-label::after { content: ""; flex: 1; height: 1px; background: #4c584e; }
-    .pick-list { display: grid; gap: 5px; }
-    .pick-card, .upgrade-card {
+    .upgrade-card {
       position: relative;
       display: grid;
-      grid-template-columns: 34px 1fr auto;
+      grid-template-columns: 38px 1fr;
       align-items: center;
       gap: 9px;
       width: 100%;
-      min-height: 49px;
-      padding: 7px 10px;
+      min-height: 100px;
+      padding: 12px;
       border: 1px solid #475349;
       background: #111813ad;
       color: var(--bone);
@@ -273,22 +274,26 @@
       cursor: pointer;
     }
 
-    .pick-card.selected { border-color: var(--acid); background: #26321e; box-shadow: inset 3px 0 var(--acid); }
-    .pick-card.boost.selected { border-color: var(--cyan); box-shadow: inset 3px 0 var(--cyan); }
     .pick-icon { display: grid; place-items: center; width: 31px; height: 31px; border: 1px solid #687365; background: #202a23; color: var(--acid); font-size: 15px; font-weight: 1000; }
     .boost .pick-icon { color: var(--cyan); }
-    .pick-copy strong { display: block; font-size: 12px; }
-    .pick-copy small { display: block; overflow: hidden; margin-top: 2px; color: #899486; font-size: 8px; white-space: nowrap; text-overflow: ellipsis; }
-    .pick-check { width: 17px; height: 17px; border: 1px solid #677365; color: transparent; font-size: 12px; font-weight: 1000; line-height: 15px; text-align: center; }
-    .selected .pick-check { border-color: var(--acid); background: var(--acid); color: #141a11; }
-    .boost.selected .pick-check { border-color: var(--cyan); background: var(--cyan); }
-    .draft-actions { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; margin-top: 15px; }
-
+    .pick-copy { min-width: 0; }
+    .choice-heading { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+    .choice-heading strong { font-size: 14px; }
+    .choice-action { padding: 3px 6px; border-radius: 3px; background: #d8f25a18; color: var(--acid); font-size: 10px; white-space: nowrap; }
+    .boost .choice-action { color: var(--cyan); background: #74e1cf18; }
+    .pick-copy small { display: block; margin-top: 5px; color: #abb5a3; font-size: 11px; line-height: 1.5; }
+    .choice-stars { display: block; margin-top: 5px; color: var(--acid); font-size: 11px; }
+    .boost .choice-stars { color: var(--cyan); }
+    .next-star { color: var(--bone); }
+    .empty-star { color: #52604f; }
+    .upgrade-summary { margin: 12px 0 0; color: var(--muted); font-size: 11px; }
     .upgrade-list { display: grid; gap: 7px; margin-top: 16px; }
-    .upgrade-card { grid-template-columns: 38px 1fr auto; min-height: 58px; }
     .upgrade-card:hover { border-color: var(--acid); background: #222e22; }
-    .upgrade-next { color: var(--acid); font-size: 11px; font-weight: 1000; }
-    .upgrade-empty { padding: 18px; border: 1px solid #4b574d; color: #9ba695; text-align: center; }
+    .upgrade-card:focus-visible { outline: 2px solid var(--bone); outline-offset: 2px; }
+    .pause-skills { display: grid; gap: 8px; margin: 15px 0; }
+    .pause-skill { padding-block: 8px; border-top: 1px solid #435047; font-size: 11px; }
+    .pause-skill span { color: var(--acid); margin-left: 7px; }
+    .pause-skill small { display: block; margin-top: 3px; color: var(--muted); line-height: 1.4; }
 
     .admin-toggle {
       position: absolute;
@@ -333,7 +338,7 @@
     .event-log { margin-top: 9px; padding-top: 8px; border-top: 1px solid #39453c; color: #7f9083; font: 8px/1.55 Consolas, monospace; }
 
     @media (pointer: coarse), (max-width: 720px) { .touch-zone { display: block; } }
-    @media (max-height: 650px) { .sheet { padding-block: 18px 15px; } .brief { margin: 12px 0; } .lead { margin-top: 11px; } .pick-card { min-height: 43px; } }
+    @media (max-height: 650px) { .sheet { padding-block: 18px 15px; } .brief { margin: 12px 0; } .lead { margin-top: 11px; } .upgrade-card { min-height: 80px; padding: 9px; } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
   </style>
 </head>
@@ -365,34 +370,25 @@
           <div class="brief">
             <div class="brief-item"><strong>自动瞄准</strong><span>清晰弹道</span></div>
             <div class="brief-item"><strong>密集尸潮</strong><span>四类感染者</span></div>
-            <div class="brief-item"><strong>固定构筑</strong><span>后续只加点</span></div>
+            <div class="brief-item"><strong>升级三选一</strong><span>获取技能 · 逐步升星</span></div>
           </div>
-          <button class="primary-action" id="enterDraft" type="button">配置本夜装备</button>
+          <button class="primary-action" id="startRun" type="button">开始生存</button>
+          <p class="hint">开局携带步枪与求生本能，拾取经验解锁 3 项战术与 2 项增益。</p>
           <p class="hint">电脑：WASD / 方向键　·　手机：拖动左下摇杆</p>
         </div>
       </section>
 
-      <section class="overlay" id="draftOverlay" hidden>
-        <div class="sheet">
-          <div class="draft-head"><div><p class="eyebrow">7 SLOT LOADOUT</p><h2>锁定本夜构筑</h2></div><div class="draft-count" id="draftCount">核心 <strong>3/3</strong> · 增益 <strong>2/2</strong></div></div>
-          <div class="draft-section"><p class="section-label">核心战术技能 · 选 3</p><div class="pick-list" id="corePicks"></div></div>
-          <div class="draft-section"><p class="section-label">生存增益 · 选 2</p><div class="pick-list" id="boostPicks"></div></div>
-          <div class="draft-actions"><button class="text-action" id="rerollDraft" type="button">换一批</button><button class="primary-action" id="confirmDraft" type="button">锁定并进入尸潮</button></div>
-          <p class="hint">固定槽：突击步枪 + 求生本能。开战后不再更换技能，只升级已选 5 项。</p>
-        </div>
-      </section>
-
       <section class="overlay" id="levelOverlay" hidden>
-        <div class="sheet"><p class="eyebrow">LEVEL UP</p><h2>选一项加点</h2><div class="upgrade-list" id="upgradeList"></div><p class="hint">只出现本夜已锁定的技能。</p></div>
+        <div class="sheet"><p class="eyebrow">LEVEL UP</p><h2>选择一项技能</h2><p class="upgrade-summary" id="upgradeSummary"></p><div class="upgrade-list" id="upgradeList"></div><p class="hint">获得新技能或强化已有技能 · 选择期间战斗暂停</p></div>
       </section>
 
       <section class="overlay" id="gameOverOverlay" hidden>
-        <div class="sheet"><p class="eyebrow" id="resultEyebrow">RUN ENDED</p><h2 id="resultTitle">撤离前倒下</h2><p class="lead" id="gameOverSummary">坚持 00:00，击倒 0 名感染者。</p><button class="primary-action" id="restartRun" type="button">重新构筑</button></div>
+        <div class="sheet"><p class="eyebrow" id="resultEyebrow">RUN ENDED</p><h2 id="resultTitle">撤离前倒下</h2><p class="lead" id="gameOverSummary">坚持 00:00，击倒 0 名感染者。</p><button class="primary-action" id="restartRun" type="button">再守一夜</button></div>
       </section>
 
       <button class="pause-toggle" id="pauseRun" type="button" hidden aria-label="暂停游戏">暂停 Ⅱ</button>
       <section class="overlay" id="pauseOverlay" hidden>
-        <div class="sheet"><p class="eyebrow">PAUSED</p><h2>战斗已暂停</h2><p class="lead">喘口气，准备好再继续。</p><button class="primary-action" id="resumeRun" type="button">继续生存</button><p class="hint">P / Esc 暂停或继续</p></div>
+        <div class="sheet"><p class="eyebrow">PAUSED</p><h2>本局技能</h2><div class="pause-skills" id="pauseSkills"></div><button class="primary-action" id="resumeRun" type="button">继续生存</button><p class="hint">P / Esc 暂停或继续</p></div>
       </section>
 
       <button class="admin-toggle" id="adminToggle" type="button" hidden>DEV</button>
@@ -405,7 +401,7 @@
           <button id="adminHorde" type="button">+20 感染者</button><button id="adminLevel" type="button">强制升级</button>
           <button id="adminClear" type="button">清场</button><button id="adminGod" type="button">无敌：关</button>
           <button id="adminHitbox" type="button">判定层：关</button><button id="adminCopy" type="button">复制快照</button>
-          <button id="adminRestart" type="button">重开构筑</button>
+          <button id="adminRestart" type="button">重新开始</button>
         </div>
         <div class="event-log" id="eventLog">调试入口已就绪</div>
       </aside>
@@ -451,8 +447,8 @@
     const canvas = document.getElementById("gameCanvas")
     const context = canvas.getContext("2d", { alpha: false, desynchronized: true })
     const ui = Object.fromEntries([
-      "introOverlay", "draftOverlay", "levelOverlay", "gameOverOverlay", "pauseOverlay", "pauseRun", "resumeRun", "enterDraft", "restartRun",
-      "corePicks", "boostPicks", "draftCount", "rerollDraft", "confirmDraft", "upgradeList",
+      "introOverlay", "levelOverlay", "gameOverOverlay", "pauseOverlay", "pauseRun", "resumeRun", "startRun", "restartRun",
+      "upgradeList", "upgradeSummary", "pauseSkills",
       "timeValue", "waveValue", "healthFill", "healthValue", "levelValue", "killValue", "enemyValue", "xpFill",
       "waveCallout", "toast", "skillDock", "joystick", "stick", "gameOverSummary", "resultTitle", "resultEyebrow",
       "adminToggle", "adminPanel", "adminClose", "adminMetrics", "densityRange", "densityValue",
@@ -690,38 +686,28 @@
     }
 
     function showOnlyOverlay(target) {
-      for (const element of [ui.introOverlay, ui.draftOverlay, ui.levelOverlay, ui.gameOverOverlay, ui.pauseOverlay]) element.hidden = element !== target
+      for (const element of [ui.introOverlay, ui.levelOverlay, ui.gameOverOverlay, ui.pauseOverlay]) element.hidden = element !== target
     }
 
-    function renderPick(skill, group, selected) {
-      return `<button class="pick-card ${group === "boost" ? "boost" : ""} ${selected ? "selected" : ""}" type="button" data-pick-group="${group}" data-pick-id="${skill.id}"><span class="pick-icon">${skill.icon}</span><span class="pick-copy"><strong>${skill.name}</strong><small>${skill.description}</small></span><span class="pick-check">✓</span></button>`
-    }
-
-    function renderDraft() {
-      ui.corePicks.innerHTML = build.coreCandidates.map(skill => renderPick(skill, "core", build.selectedCore.includes(skill.id))).join("")
-      ui.boostPicks.innerHTML = build.boostCandidates.map(skill => renderPick(skill, "boost", build.selectedBoost.includes(skill.id))).join("")
-      ui.draftCount.innerHTML = `核心 <strong>${build.selectedCore.length}/3</strong> · 增益 <strong>${build.selectedBoost.length}/2</strong>`
-      ui.confirmDraft.disabled = !build.canLock()
+    function renderStars(level, max, preview = false) {
+      return `${"★".repeat(level)}${preview ? '<span class="next-star">★</span>' : ""}<span class="empty-star">${"☆".repeat(Math.max(0, max - level - (preview ? 1 : 0)))}</span>`
     }
 
     function renderSkillDock() {
-      const slots = build.locked ? build.slots() : Skills.fixed.map(skill => ({ ...skill, level: 1 }))
-      const placeholders = Array.from({ length: Math.max(0, 7 - slots.length) }, (_, index) => ({ id: `empty-${index}`, name: "待选择", short: "空位", icon: "·", group: "empty", level: 0 }))
-      ui.skillDock.innerHTML = slots.concat(placeholders).map(skill => `<div class="skill-slot ${skill.group}" title="${skill.name}"><span class="skill-icon">${skill.icon}</span><span class="skill-name">${skill.short}</span>${skill.level ? `<span class="skill-level">${skill.level}</span>` : ""}</div>`).join("")
-    }
-
-    function beginDraft() {
-      releaseInput()
-      build.reset()
-      state = createState("draft")
-      renderDraft()
-      renderSkillDock()
-      showOnlyOverlay(ui.draftOverlay)
-      logEvent("进入本夜构筑")
+      const slots = build.slots()
+      ui.skillDock.innerHTML = [{ group: "fixed", label: "基础", count: 2 }, { group: "core", label: "战术", count: 3 }, { group: "boost", label: "增益", count: 2 }].map(({ group, label, count }) => {
+        const owned = slots.filter(skill => skill.group === group)
+        const placeholders = Array.from({ length: count - owned.length }, (_, index) => ({ id: `${group}-empty-${index}`, group, name: `空${label}槽 · 升级时获得`, icon: "＋", level: 0 }))
+        return `<div class="skill-group ${group}"><div class="skill-group-label">${label}${group === "fixed" ? "" : ` ${owned.length}/${count}`}</div><div class="skill-group-slots">${owned.concat(placeholders).map(skill => `<div class="skill-slot ${skill.group} ${skill.level ? "" : "empty"}" data-skill-id="${skill.id}" role="img" aria-label="${skill.name}${skill.level ? ` · ${skill.level}星` : ""}" title="${skill.name}${skill.description ? ` · ${skill.description}` : ""}"><span class="skill-icon">${skill.icon}</span><span class="skill-level">${skill.level ? group === "fixed" ? "固定" : "★".repeat(skill.level) : ""}</span></div>`).join("")}</div></div>`
+      }).join("")
+      ui.pauseSkills.innerHTML = slots.map(skill => `<div class="pause-skill"><strong>${skill.name}</strong><span>${skill.group === "fixed" ? "固定" : "★".repeat(skill.level)}</span><small>${skill.description}</small></div>`).join("")
     }
 
     function startRun() {
-      if (!build.lock()) return
+      releaseInput()
+      build.reset()
+      build.start()
+      accumulator = 0
       state = createState("playing")
       for (let index = 0; index < CONFIG.initialEnemies; index += 1) spawnEnemy(index < 15 ? "walker" : undefined)
       renderSkillDock()
@@ -731,8 +717,8 @@
       ui.waveCallout.classList.remove("show")
       void ui.waveCallout.offsetWidth
       ui.waveCallout.classList.add("show")
-      toast("突击步枪已自动锁定", 2.2)
-      logEvent("尸潮开始 · 构筑已锁定")
+      toast("拾取经验，升级时选择技能", 2.2)
+      logEvent("尸潮开始 · 成长槽位等待获取")
     }
 
     function syncPlayerStats(healAdded = false) {
@@ -745,27 +731,33 @@
     }
 
     function openLevelUp() {
-      if (state.phase !== "playing" || state.xp < state.nextXp) return
-      state.xp -= state.nextXp
-      state.level += 1
-      state.player.hp = Math.min(state.player.maxHp, state.player.hp + build.level("rationPack") * 8)
-      state.nextXp = Math.round(5 + state.level * 2.1)
-      const choices = build.upgradeChoices(3)
-      if (!choices.length) {
-        state.player.hp = Math.min(state.player.maxHp, state.player.hp + 20)
-        toast("构筑已满 · 转化为医疗补给")
+      if (state.phase !== "playing") return
+      while (state.xp >= state.nextXp) {
+        state.xp -= state.nextXp
+        state.level += 1
+        state.player.hp = Math.min(state.player.maxHp, state.player.hp + build.level("rationPack") * 8)
+        state.nextXp = Math.round(5 + state.level * 2.1)
+        const choices = build.upgradeChoices(3)
+        if (!choices.length) {
+          state.player.hp = Math.min(state.player.maxHp, state.player.hp + 20)
+          toast("技能已满星 · 获得医疗补给")
+          continue
+        }
+        state.phase = "levelup"
+        accumulator = 0
+        releaseInput()
+        state.pendingChoices = choices
+        ui.upgradeSummary.textContent = `等级 ${state.level} · 战术 ${build.selectedCore.length}/3 · 增益 ${build.selectedBoost.length}/2`
+        ui.upgradeList.innerHTML = choices.map(skill => `<button class="upgrade-card ${skill.group === "boost" ? "boost" : ""}" type="button" data-upgrade-id="${skill.id}"><span class="pick-icon">${skill.icon}</span><span class="pick-copy"><span class="choice-heading"><strong>${skill.name}</strong><span class="choice-action">${skill.action === "acquire" ? "获得" : "升星"} · ${skill.group === "boost" ? "增益" : "战术"}</span></span><span class="choice-stars" aria-label="${skill.level}星升至${skill.nextLevel}星">${renderStars(skill.level, skill.max, true)}</span><small>${skill.description}</small></span></button>`).join("")
+        showOnlyOverlay(ui.levelOverlay)
+        logEvent(`升级节点 Lv.${state.level}`)
         return
       }
-      state.phase = "levelup"
-      releaseInput()
-      state.pendingChoices = choices
-      ui.upgradeList.innerHTML = choices.map(skill => `<button class="upgrade-card ${skill.group === "boost" ? "boost" : ""}" type="button" data-upgrade-id="${skill.id}"><span class="pick-icon">${skill.icon}</span><span class="pick-copy"><strong>${skill.name}</strong><small>${skill.description}</small></span><span class="upgrade-next">Lv.${build.level(skill.id)} → ${build.level(skill.id) + 1}</span></button>`).join("")
-      showOnlyOverlay(ui.levelOverlay)
-      logEvent(`升级节点 Lv.${state.level}`)
     }
 
     function chooseUpgrade(skillId) {
       if (state.phase !== "levelup" || !state.pendingChoices.some(skill => skill.id === skillId)) return
+      const acquired = !build.has(skillId)
       if (!build.upgrade(skillId)) return
       const healAdded = skillId === "armorLining" || skillId === "rationPack"
       syncPlayerStats(healAdded)
@@ -775,8 +767,10 @@
       showOnlyOverlay(state.paused ? ui.pauseOverlay : null)
       renderSkillDock()
       const skill = Skills.byId(skillId)
-      toast(`${skill.name} · Lv.${build.level(skillId)}`)
-      logEvent(`${skill.name} 升至 Lv.${build.level(skillId)}`)
+      toast(`${acquired ? "获得" : "强化"}${skill.name} · ${build.level(skillId)}星`)
+      logEvent(`${acquired ? "获得" : "强化"}${skill.name} · ${build.level(skillId)}星`)
+      openLevelUp()
+      syncHud()
     }
 
     const ENEMY_TYPES = {
@@ -1400,14 +1394,8 @@
       syncHud()
     }
 
-    ui.enterDraft.addEventListener("click", beginDraft)
-    ui.restartRun.addEventListener("click", beginDraft)
-    ui.rerollDraft.addEventListener("click", () => { if (build.reroll()) renderDraft() })
-    ui.confirmDraft.addEventListener("click", startRun)
-    for (const group of [ui.corePicks, ui.boostPicks]) group.addEventListener("click", event => {
-      const button = event.target.closest("[data-pick-id]")
-      if (button && build.toggle(button.dataset.pickGroup, button.dataset.pickId)) renderDraft()
-    })
+    ui.startRun.addEventListener("click", startRun)
+    ui.restartRun.addEventListener("click", startRun)
     ui.upgradeList.addEventListener("click", event => {
       const button = event.target.closest("[data-upgrade-id]")
       if (button) chooseUpgrade(button.dataset.upgradeId)
@@ -1446,7 +1434,7 @@
       ui.adminToggle.hidden = false
       ui.adminToggle.addEventListener("click", () => { ui.adminPanel.hidden = !ui.adminPanel.hidden; syncHud() })
       ui.adminClose.addEventListener("click", () => { ui.adminPanel.hidden = true })
-      ui.adminRestart.addEventListener("click", beginDraft)
+      ui.adminRestart.addEventListener("click", startRun)
       ui.densityRange.addEventListener("input", () => { state.density = Number(ui.densityRange.value); ui.densityValue.textContent = `${state.density.toFixed(1)}×` })
       ui.adminPause.addEventListener("click", () => togglePause())
       ui.adminStep.addEventListener("click", () => { togglePause(true); update(FIXED_STEP); draw(); syncHud() })
