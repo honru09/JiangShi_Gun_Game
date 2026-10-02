@@ -1,6 +1,4 @@
 import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
 const root = new URL("../", import.meta.url);
@@ -29,9 +27,12 @@ function parseJson(path) {
 }
 
 function checkJavaScript(path) {
-  const absolutePath = fileURLToPath(new URL(path, root));
-  const result = spawnSync(process.execPath, ["--check", absolutePath], { encoding: "utf8" });
-  check(`JavaScript ${path}`, result.status === 0, result.stderr.trim() || "syntax error");
+  try {
+    new vm.Script(read(path), { filename: path });
+    check(`JavaScript ${path}`, true);
+  } catch (error) {
+    check(`JavaScript ${path}`, false, error.message);
+  }
 }
 
 const html = read("prototype-2d/index.html");
