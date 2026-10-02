@@ -443,6 +443,8 @@
       pickupCap: 72,
       lootCap: 24,
       worldLootCap: 48,
+      combatDropCap: 10,
+      combatDropChance: .005,
       indoorEnemyCap: 18,
       firstLootTime: 3,
       baseSpawnRate: .8,
@@ -518,6 +520,8 @@
       const level = skillId => build.effect(skillId)
       const weapon = Loot.weapons[state?.weapon?.id || "assaultRifle"]
       const weaponQuality = Loot.qualities[state?.weapon?.quality || "common"].multiplier
+      const fireRateMultiplier = state?.player?.fireRateBoost > 0 ? 2 : 1
+      const ammoEffectBoost = state?.player?.ammoBoost > 0 ? 2 : 0
       const hpRatio = state?.player ? state.player.hp / Math.max(1, state.player.maxHp) : 1
       const instinct = hpRatio < .34 ? 1 : 0
       const adrenaline = level("adrenalineAmpule")
@@ -529,20 +533,22 @@
         regen: level("fieldBandage") * .34,
         magnet: 64 + level("magnetHarness") * 42,
         xpMultiplier: 1 + level("magnetHarness") * .1,
-        fireInterval: weapon.interval / (1 + instinct * .12 + adrenalineEffect * .12),
-        bulletDamage: weapon.damage * weaponQuality * (1 + level("armorPiercingBolt") * .12),
-        damage: weapon.damage * weaponQuality * (1 + level("armorPiercingBolt") * .12),
+        fireInterval: weapon.interval / fireRateMultiplier / (1 + instinct * .12 + adrenalineEffect * .12),
+        bulletDamage: weapon.damage * weaponQuality * (1 + (level("armorPiercingBolt") + ammoEffectBoost) * .12),
+        damage: weapon.damage * weaponQuality * (1 + (level("armorPiercingBolt") + ammoEffectBoost) * .12),
         weaponQualityMultiplier: weaponQuality,
         bulletSpeed: weapon.speed + level("armorPiercingBolt") * 28,
         bulletLife: weapon.life,
         // Discrete counts round upward so a higher quality ball changes gameplay at Lv.1.
-        pierce: Math.ceil(level("armorPiercingBolt")),
-        pellets: weapon.pellets + (level("scatterModule") ? 1 + Math.ceil(level("scatterModule")) : 0),
+        pierce: Math.ceil(level("armorPiercingBolt") + ammoEffectBoost),
+        pellets: weapon.pellets + (level("scatterModule") ? 1 + Math.ceil(level("scatterModule") + ammoEffectBoost) : 0),
         spread: weapon.spread || (level("scatterModule") ? .08 + level("scatterModule") * .018 : 0),
-        burn: level("incendiaryMagazine"),
+        burn: level("incendiaryMagazine") + ammoEffectBoost,
         arc: level("arcGenerator"),
         saw: level("sawDrone"),
-        mine: level("proximityMine")
+        mine: level("proximityMine"),
+        fireRateMultiplier,
+        ammoEffectBoost
       }
     }
 
@@ -563,6 +569,8 @@
         muzzle: 0,
         hurt: 0,
         invulnerable: 0,
+        fireRateBoost: 0,
+        ammoBoost: 0,
         sinceHit: 99,
         instinctReady: true,
         instinctFlash: 0,
@@ -614,6 +622,7 @@
         outdoorReturn: null,
         sceneCaches: new Map(),
         loot: [],
+        combatDrops: [],
         lootTimer: CONFIG.firstLootTime,
         stats: { shots: 0, hits: 0, damage: 0, peakEnemies: 0, explosions: 0 },
         camera: cameraFor(city.spawn),
@@ -744,6 +753,25 @@
       return ball
     }
 
+    function spawnCombatDrop(itemId = "random", x, y) {
+      if (!state || state.phase !== "playing" || state.paused) return null
+      // Allow debug callers to pass coordinates as the first two arguments.
+      if (typeof itemId === "number") { y = x; x = itemId; itemId = "random" }
+      if (itemId && typeof itemId === "object") {
+        const options = itemId
+        itemId = options.itemId || options.id || "random"
+        x = options.x; y = options.y
+      }
+      if (state.combatDrops.length >= CONFIG.combatDropCap) return null
+      const data = itemId === "random" ? Loot.randomCombatConsumable() : Loot.combatConsumables[itemId]
+      if (!data) return null
+      const position = findLootPosition(x, y)
+      if (!position || state.combatDrops.some(drop => distanceSquared(drop.x, drop.y, position.x, position.y) < 34 ** 2)) return null
+      const drop = { id: id(), kind: "consumable", type: "consumable", itemId: data.id, x: position.x, y: position.y, scene: state.scene, born: state.time }
+      state.combatDrops.push(drop)
+      return drop
+    }
+
     function collectLoot(ball) {
       const description = Loot.describe(ball)
       let message
@@ -775,6 +803,18 @@
       toast(message, 2.6); logEvent(message); renderSkillDock()
     }
 
+    function collectCombatDrop(drop) {
+      const details = Loot.describe(drop)
+      const effect = details.consumable
+      if (!effect) return
+      if (effect.effect === "invulnerable") state.player.invulnerable = Math.max(state.player.invulnerable, effect.duration)
+      if (effect.effect === "fireRate") state.player.fireRateBoost = Math.max(state.player.fireRateBoost, effect.duration)
+      if (effect.effect === "ammo") state.player.ammoBoost = Math.max(state.player.ammoBoost, effect.duration)
+      particle(drop.x, drop.y, details.color, 14, 125)
+      toast(`拾取 ${details.name}`, 2.2)
+      logEvent(`战斗消耗物 · ${details.name}`)
+    }
+
     function interactionTarget() {
       if (!state || state.phase !== "playing" || state.paused) return null
       if (!state.room) {
@@ -787,11 +827,11 @@
     }
 
     function switchScene(scene, room, position) {
-      state.sceneCaches.set(state.scene, { room: state.room, enemies: state.enemies, pickups: state.pickups, loot: state.loot, lootTimer: state.lootTimer, spawnBudget: state.spawnBudget, hordeTimer: state.hordeTimer })
+      state.sceneCaches.set(state.scene, { room: state.room, enemies: state.enemies, pickups: state.pickups, loot: state.loot, combatDrops: state.combatDrops, lootTimer: state.lootTimer, spawnBudget: state.spawnBudget, hordeTimer: state.hordeTimer })
       const cached = state.sceneCaches.get(scene)
       state.sceneCaches.delete(scene)
       state.scene = scene; state.room = room
-      state.enemies = cached?.enemies || []; state.pickups = cached?.pickups || []; state.loot = cached?.loot || []
+      state.enemies = cached?.enemies || []; state.pickups = cached?.pickups || []; state.loot = cached?.loot || []; state.combatDrops = cached?.combatDrops || []
       state.lootTimer = cached?.lootTimer ?? 5; state.spawnBudget = cached?.spawnBudget || 0; state.hordeTimer = cached?.hordeTimer ?? 8
       for (const property of ["projectiles", "particles", "explosions", "arcs", "mines", "floaters"]) state[property] = []
       state.player.x = position.x; state.player.y = position.y
@@ -831,9 +871,16 @@
     function tryCollectLoot(lootId) {
       if (!state || state.phase !== "playing" || state.paused) return false
       const ball = state.loot.find(item => item.id === lootId)
-      if (!ball || distanceSquared(ball.x, ball.y, state.player.x, state.player.y) > 28 ** 2) return false
-      state.loot = state.loot.filter(item => item !== ball)
-      collectLoot(ball)
+      const drop = state.combatDrops.find(item => item.id === lootId)
+      const item = ball || drop
+      if (!item || distanceSquared(item.x, item.y, state.player.x, state.player.y) > 28 ** 2) return false
+      if (ball) {
+        state.loot = state.loot.filter(candidate => candidate !== ball)
+        collectLoot(ball)
+      } else {
+        state.combatDrops = state.combatDrops.filter(candidate => candidate !== drop)
+        collectCombatDrop(drop)
+      }
       syncHud(); draw()
       return true
     }
@@ -942,7 +989,10 @@
       enemy.dead = true
       state.kills += 1
       pickup(enemy.x, enemy.y, enemy.xp)
-      if (Math.random() < .12) spawnLoot("random", undefined, enemy.x, enemy.y)
+      if (Math.random() < CONFIG.combatDropChance) {
+        const combatDrop = spawnCombatDrop("random", enemy.x, enemy.y)
+        if (combatDrop) logEvent(`感染者掉落 · ${Loot.describe(combatDrop).name}`)
+      }
       particle(enemy.x, enemy.y, enemy.type === "bloater" ? "#b6b45d" : "#b0573d", 6, 100)
       if (enemy.type === "bloater") {
         state.explosions.push({ x: enemy.x, y: enemy.y, radius: 56, life: .3, maxLife: .3, color: "#a7be54" })
@@ -1108,7 +1158,7 @@
       if (player.movingSpeed > 1) { player.walkCycle += (5 + stride * 8) * dt; player.gait = lerp(player.gait, stride, Math.min(1, dt * 16)) }
       else player.gait = Math.max(0, player.gait - dt * 8)
       player.bodyAngle = 0
-      for (const property of ["attack", "muzzle", "hurt", "invulnerable", "instinctFlash", "arcTimer"]) player[property] = Math.max(0, player[property] - dt)
+      for (const property of ["attack", "muzzle", "hurt", "invulnerable", "fireRateBoost", "ammoBoost", "instinctFlash", "arcTimer"]) player[property] = Math.max(0, player[property] - dt)
       player.recoil = Math.max(0, player.recoil - dt * 13)
       player.sinceHit += dt
       if (player.sinceHit > 4) player.hp = Math.min(player.maxHp, player.hp + stats.regen * dt)
@@ -1244,6 +1294,11 @@
       state.loot = state.loot.filter(ball => {
         if (distanceSquared(ball.x, ball.y, state.player.x, state.player.y) > 28 ** 2 || buildingHitFraction(ball.x, ball.y, state.player.x, state.player.y, 2) !== null) return true
         collectLoot(ball)
+        return false
+      })
+      state.combatDrops = state.combatDrops.filter(drop => {
+        if (distanceSquared(drop.x, drop.y, state.player.x, state.player.y) > 28 ** 2 || buildingHitFraction(drop.x, drop.y, state.player.x, state.player.y, 2) !== null) return true
+        collectCombatDrop(drop)
         return false
       })
       for (const spark of state.particles) { spark.x += spark.vx * dt; spark.y += spark.vy * dt; spark.vx *= .95; spark.vy *= .95; spark.life -= dt }
@@ -1524,6 +1579,7 @@
         }
       }
       for (const item of state.loot) Loot.draw(context, item, state.time)
+      for (const item of state.combatDrops) Loot.draw(context, item, state.time)
       for (const item of state.pickups) {
         context.save(); context.translate(item.x, item.y); context.rotate(Math.PI / 4)
         context.fillStyle = "#101f1a"; context.fillRect(-6, -6, 12, 12)
@@ -1583,9 +1639,9 @@
         runId: state.runId, phase: state.phase, result: state.result, ended: state.phase === "victory" || state.phase === "gameover", paused: state.paused, time: state.time, remainingSeconds: Math.max(0, RUN_SECONDS - state.time), wave: state.wave,
         level: state.level, xp: state.xp, nextXp: state.nextXp, kills: state.kills,
         enemies: state.enemies.length, projectiles: state.projectiles.length, pickups: state.pickups.length,
-        loot: state.loot.map(item => ({ ...item })), scene: state.scene, stage: state.scene, worldVersion: 2, weapon: { ...state.weapon }, modifiers: modifiers(),
+        loot: state.loot.map(item => ({ ...item })), combatDrops: state.combatDrops.map(item => ({ ...item })), scene: state.scene, stage: state.scene, worldVersion: 2, weapon: { ...state.weapon }, modifiers: modifiers(),
         room: state.room ? { houseId: state.room.houseId, containers: state.room.containers.map(item => ({ ...item })) } : null,
-        qualityRules: { outdoor: { common: .8, fine: .2 }, indoor: { fine: .4, rare: .45, epic: .15 } },
+        qualityRules: { outdoor: { common: .8, fine: .2 }, indoor: { fine: .4, rare: .45, epic: .15 }, combatDropChance: CONFIG.combatDropChance },
         particles: state.particles.length, mines: state.mines.length,
         spawnRate: spawnRate(), hordeTimer: state.hordeTimer, density: state.density,
         config: { ...CONFIG }, stats: { ...state.stats }, player: { ...state.player },
@@ -1688,8 +1744,8 @@
         catch { toast("浏览器未提供剪贴板权限") }
       })
       window.__LAST_NIGHT_DEBUG__ = Object.freeze({
-        snapshot, spawnLoot, tryCollectLoot, interact, enterBuilding, exitBuilding, get state() { return state }, get config() { return { ...CONFIG } }, get build() { return build }, get map() { return city },
-        get loot() { return state.loot }, get houses() { return houseSystem }, get modifiers() { return modifiers() },
+        snapshot, spawnLoot, spawnCombatDrop, tryCollectLoot, interact, enterBuilding, exitBuilding, get state() { return state }, get config() { return { ...CONFIG } }, get build() { return build }, get map() { return city },
+        get loot() { return state.loot }, get combatDrops() { return state.combatDrops }, get houses() { return houseSystem }, get modifiers() { return modifiers() },
         get artStatus() { return window.WASTELAND_CHARACTER_ART?.status || "unconfigured" },
         get atlasReady() { return !!window.WASTELAND_CHARACTER_ART?.ready },
         step(seconds = FIXED_STEP) {
