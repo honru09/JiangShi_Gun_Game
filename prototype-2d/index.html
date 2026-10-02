@@ -413,6 +413,8 @@
   </div>
 
   <script src="skills.js"></script>
+  <script src="character-atlas.js"></script>
+  <script src="character-art.js"></script>
   <script>
   (() => {
     "use strict"
@@ -780,10 +782,11 @@
     }
 
     const ENEMY_TYPES = {
-      walker: { hp: 38, speed: 38, radius: 17, damage: 10, xp: 1, color: "#7c8b66" },
-      runner: { hp: 26, speed: 72, radius: 14, damage: 8, xp: 1, color: "#b7a378" },
-      brute: { hp: 112, speed: 26, radius: 24, damage: 17, xp: 3, color: "#67715c" },
-      bloater: { hp: 70, speed: 31, radius: 21, damage: 13, xp: 2, color: "#9b9a4d" }
+      walker: { hp: 38, speed: 38, radius: 17, damage: 10, xp: 1, color: "#7c8b66", motion: "walk" },
+      runner: { hp: 26, speed: 72, radius: 14, damage: 8, xp: 1, color: "#b7a378", motion: "run" },
+      brute: { hp: 112, speed: 26, radius: 24, damage: 17, xp: 3, color: "#67715c", motion: "hop" },
+      bloater: { hp: 70, speed: 31, radius: 21, damage: 13, xp: 2, color: "#9b9a4d", motion: "walk" },
+      crawler: { hp: 48, speed: 22, radius: 18, damage: 7, xp: 2, color: "#8a9472", motion: "crawl" }
     }
 
     function spawnRate() {
@@ -794,7 +797,8 @@
       if (!state || state.enemies.length >= CONFIG.enemyCap) return null
       if (!type || !ENEMY_TYPES[type]) {
         const roll = Math.random()
-        type = state.time >= 60 && roll > .94 ? "bloater"
+        type = state.time >= 40 && roll < .12 ? "crawler"
+          : state.time >= 60 && roll > .94 ? "bloater"
           : state.time >= 45 && roll > .79 ? "brute"
           : state.time >= 30 && roll > .56 ? "runner" : "walker"
       }
@@ -818,6 +822,12 @@
         hp: template.hp * scaling, maxHp: template.hp * scaling,
         speed: template.speed * (1 + Math.min(.7, state.time / 120)),
         baseSpeed: template.speed,
+        motion: template.motion,
+        motionTime: template.motion === "hop" ? randomBetween(1.4, 2.6) : 0,
+        hopPhase: template.motion === "hop" ? "approach" : null,
+        hopHeight: 0,
+        hopDirX: 0,
+        hopDirY: 0,
         damage: template.damage, xp: template.xp, color: template.color,
         hit: 0, burn: 0, burnLevel: 0, burnTimer: 0,
         contactTimer: 0, sawTimer: 0, walkCycle: Math.random() * Math.PI * 2,
@@ -1018,6 +1028,26 @@
         const length = Math.max(1, Math.hypot(dx, dy))
         let vx = dx / length * enemy.speed
         let vy = dy / length * enemy.speed
+        enemy.motionTime = (enemy.motionTime || 0) + dt
+        if (enemy.motion === "hop") {
+          enemy.motionTime %= 2.6
+          const previousPhase = enemy.hopPhase
+          const phase = enemy.motionTime
+          enemy.hopHeight = 0
+          if (phase < .6) {
+            enemy.hopPhase = "windup"
+            vx = 0; vy = 0
+          } else if (phase < 1.05) {
+            enemy.hopPhase = "airborne"
+            if (previousPhase !== "airborne") { enemy.hopDirX = dx / length; enemy.hopDirY = dy / length }
+            vx = enemy.hopDirX * enemy.speed * 4.8
+            vy = enemy.hopDirY * enemy.speed * 4.8
+            enemy.hopHeight = Math.sin((phase - .6) / .45 * Math.PI) * 20
+          } else if (phase < 1.4) {
+            enemy.hopPhase = "recovery"
+            vx *= .4; vy *= .4
+          } else enemy.hopPhase = "approach"
+        }
         const gx = Math.floor(enemy.x / cellSize)
         const gy = Math.floor(enemy.y / cellSize)
         for (let x = gx - 1; x <= gx + 1; x += 1) for (let y = gy - 1; y <= gy + 1; y += 1) {
@@ -1043,7 +1073,7 @@
           enemy.burnTimer -= dt
           if (enemy.burnTimer <= 0) { hitEnemy(enemy, 3 + enemy.burnLevel * 3, "burn"); enemy.burnTimer = .4; particle(enemy.x, enemy.y - 9, "#ff8f3c", 2, 30) }
         }
-        if (!enemy.dead && length < enemy.radius + player.radius && enemy.contactTimer <= 0) { takeDamage(enemy.damage); enemy.contactTimer = .9 }
+        if (!enemy.dead && enemy.hopHeight <= 6 && length < enemy.radius + player.radius && enemy.contactTimer <= 0) { takeDamage(enemy.damage); enemy.contactTimer = .9 }
       }
     }
 
@@ -1173,12 +1203,15 @@
     }
 
     function drawEnemy(enemy) {
+      if (window.WASTELAND_CHARACTER_ART?.drawEnemy(context, enemy, { playerX: state.player.x })) return
+      if (enemy.motion === "crawl") { drawCrawlerFallback(enemy); return }
       context.save()
       context.translate(enemy.x, enemy.y)
       const scale = enemy.radius / 17
       context.scale(scale, scale)
       context.fillStyle = "#0007"
       context.beginPath(); context.ellipse(0, 19, 17, 7, 0, 0, Math.PI * 2); context.fill()
+      context.translate(0, -(enemy.hopHeight || 0) * 17 / enemy.radius)
       const stride = Math.sin(enemy.walkCycle) * (enemy.type === "runner" ? 6 : 4)
       // Knees lead and feet drag a little behind the step; the whole figure stays upright.
       for (let leg = 0; leg < 2; leg += 1) {
@@ -1220,30 +1253,73 @@
       context.restore()
     }
 
-    function drawWeapon(player) {
+    function drawCrawlerFallback(enemy) {
+      const facing = state.player.x >= enemy.x ? 1 : -1
+      const step = Math.sin(enemy.walkCycle) * 5
+      context.save()
+      context.translate(enemy.x, enemy.y)
+      context.scale(facing * enemy.radius / 18, enemy.radius / 18)
+      context.fillStyle = "#0007"
+      context.beginPath(); context.ellipse(0, 18, 32, 7, 0, 0, Math.PI * 2); context.fill()
+      for (let side = -1; side <= 1; side += 2) {
+        const phase = step * side
+        line(-18, 3, -25 - phase * .5, 10, "#3d4938", 8)
+        line(-25 - phase * .5, 10, -30 - phase, 18, "#6d7253", 7)
+        line(12, -4, 23 + phase * .5, 5, "#69765b", 7)
+        line(23 + phase * .5, 5, 31 + phase, 16, "#a2aa7d", 6)
+      }
+      context.fillStyle = enemy.hit > 0 ? "#e6d9ac" : "#747f60"
+      context.beginPath(); context.ellipse(-5, -2, 23, 12, -.12, 0, Math.PI * 2); context.fill()
+      context.strokeStyle = "#352820"; context.lineWidth = 3; context.stroke()
+      circle(22, -8, 12, enemy.hit > 0 ? "#fff0c9" : "#9ba578")
+      line(22, -11, 25, -11, "#e25b35", 3)
+      line(27, -4, 31, -3, "#35271e", 3)
+      if (enemy.hp < enemy.maxHp) {
+        context.fillStyle = "#070a08"; context.fillRect(-21, -28, 42, 4)
+        context.fillStyle = "#dc764c"; context.fillRect(-21, -28, 42 * Math.max(0, enemy.hp / enemy.maxHp), 4)
+      }
+      context.restore()
+    }
+
+    function drawWeapon(player, includeArms = true) {
       context.save()
       context.translate(7, -9)
       context.rotate(player.armAngle)
       context.translate(-player.recoil * 4, 0)
       // Shoulder/elbow/grip chains are the only character parts transformed by aim.
-      line(-10, -11, 10, -12, "#303b32", 9)
-      line(10, -12, 23, -3, "#c2a27b", 7)
-      line(-9, 11, 8, 15, "#46543f", 10)
-      line(8, 15, 20, 5, "#dbbd90", 7)
-      context.fillStyle = "#161f21"
-      context.fillRect(-8, -6, 35, 12)
-      context.fillStyle = "#667779"
-      context.fillRect(4, -6, 25, 5)
-      context.fillStyle = "#2f3a39"
-      context.fillRect(26, -5, 11, 9)
-      context.fillStyle = "#bcc4b3"
-      context.fillRect(35, -2, 13, 4)
-      context.fillStyle = "#111616"
-      context.fillRect(-17, -5, 12, 10)
-      context.fillRect(10, 5, 7, 12)
-      context.fillRect(20, 6, 8, 13)
-      context.fillRect(12, -11, 13, 5)
-      line(1, -8, 31, -8, "#9d9f81", 2)
+      if (includeArms) {
+        line(-10, -11, 10, -12, "#7e402f", 9)
+        line(10, -12, 23, -3, "#c2a27b", 7)
+        line(-9, 11, 8, 15, "#a55d3e", 10)
+        line(8, 15, 20, 5, "#dbbd90", 7)
+      }
+      // Warm ink outlines and inset metal/leather panels match the painted character rig.
+      // The barrel still ends at x=48; recoil and muzzle coordinates are unchanged.
+      context.strokeStyle = "#2a1913"
+      context.lineWidth = 3
+      context.fillStyle = "#47545a"
+      roundedPath(context, -8, -7, 36, 15, 3); context.fill(); context.stroke()
+      context.fillStyle = "#83928c"
+      roundedPath(context, -4, -5, 27, 5, 2); context.fill()
+      line(-2, -4, 22, -4, "#d4d4ad", 1.5)
+      context.fillStyle = "#724a2e"
+      roundedPath(context, -19, -6, 13, 13, 3); context.fill(); context.stroke()
+      line(-16, -3, -10, -3, "#b2814a", 2)
+      context.fillStyle = "#313c40"
+      roundedPath(context, 25, -6, 13, 12, 3); context.fill(); context.stroke()
+      line(28, -2, 34, -2, "#76816e", 2)
+      context.fillStyle = "#b4bca5"
+      roundedPath(context, 35, -2, 13, 4, 1); context.fill(); context.stroke()
+      line(38, -1, 47, -1, "#e4e5c5", 1)
+      context.fillStyle = "#5d432e"
+      roundedPath(context, 9, 6, 8, 12, 2); context.fill(); context.stroke()
+      context.fillStyle = "#566057"
+      context.beginPath(); context.moveTo(20, 7); context.lineTo(29, 7); context.lineTo(31, 18); context.quadraticCurveTo(26, 22, 21, 19); context.closePath(); context.fill(); context.stroke()
+      line(23, 10, 25, 17, "#9b9a73", 2)
+      context.fillStyle = "#353937"
+      roundedPath(context, 12, -12, 13, 6, 2); context.fill(); context.stroke()
+      line(15, -10, 21, -10, "#cfac68", 2)
+      circle(5, 2, 1.5, "#c8b781")
       if (player.muzzle > 0) {
         context.fillStyle = "#ffb13b"
         context.beginPath(); context.moveTo(48, -4); context.lineTo(64, -9); context.lineTo(58, 0); context.lineTo(69, 5); context.lineTo(48, 5); context.closePath(); context.fill()
@@ -1255,6 +1331,7 @@
 
     function drawPlayer() {
       const player = state.player
+      if (window.WASTELAND_CHARACTER_ART?.drawPlayer(context, player, { drawWeapon: () => drawWeapon(player, false) })) return
       context.save()
       context.translate(player.x, player.y)
       // Keep the torso/head in screen coordinates; never rotate this parent transform.
@@ -1275,25 +1352,26 @@
         const kneeY = 15 + phase * 5
         const footX = hipX + phase * 5
         const footY = 29 + phase * 8
-        line(hipX, 4, kneeX, kneeY, "#3b4b36", 10)
-        line(kneeX, kneeY, footX, footY, "#536344", 8)
-        line(footX - 3, footY + 1, footX + 4, footY + 1, "#111b19", 8)
-        line(kneeX - 2, kneeY, kneeX + 2, kneeY, "#879269", 3)
+        line(hipX, 4, kneeX, kneeY, "#3d5263", 10)
+        line(kneeX, kneeY, footX, footY, "#5d7180", 8)
+        line(footX - 3, footY + 1, footX + 4, footY + 1, "#32251e", 8)
+        line(kneeX - 2, kneeY, kneeX + 2, kneeY, "#8093a0", 2)
       }
       const rearAim = Math.sin(player.armAngle) < -.35
       if (rearAim) drawWeapon(player)
       context.translate(0, -lift * 1.6)
       roundedPath(context, -16, -20, 32, 30, 7)
-      context.fillStyle = player.hurt > 0 ? "#e5b193" : "#65704a"
+      context.fillStyle = player.hurt > 0 ? "#e5b193" : "#a55d3e"
       context.fill()
-      context.strokeStyle = "#18251c"; context.lineWidth = 3; context.stroke()
-      context.fillStyle = "#343f30"; context.fillRect(-12, -15, 24, 21)
-      context.fillStyle = "#b6bc83"; context.fillRect(-8, -12, 6, 8); context.fillRect(3, -12, 6, 8)
-      line(-14, 4, 14, 4, "#141e18", 5)
+      context.strokeStyle = "#3a241b"; context.lineWidth = 3; context.stroke()
+      line(-6, -17, 0, -13, "#dfb485", 2)
+      line(0, -13, 6, -17, "#dfb485", 2)
+      line(0, -11, 0, 3, "#7b402e", 1)
+      circle(0, -7, 1, "#d9b888"); circle(0, -1, 1, "#d9b888")
+      line(-14, 4, 14, 4, "#52362a", 4)
       circle(0, -30, 11, player.hurt > 0 ? "#f1c29d" : "#d4b88b")
-      context.fillStyle = "#35463b"
-      roundedPath(context, -13, -42, 26, 13, 7); context.fill()
-      context.fillStyle = "#aab481"; context.fillRect(-11, -33, 22, 3)
+      context.fillStyle = "#3a241b"
+      context.beginPath(); context.moveTo(-11, -31); context.lineTo(-13, -35); context.lineTo(-7, -42); context.lineTo(0, -40); context.lineTo(5, -42); context.lineTo(12, -37); context.lineTo(10, -29); context.lineTo(6, -35); context.lineTo(1, -32); context.lineTo(-5, -36); context.lineTo(-9, -29); context.closePath(); context.fill()
       line(-5, -27, -3, -27, "#151d17", 2)
       line(4, -27, 6, -27, "#151d17", 2)
       line(-4, -22, 4, -22, "#795c40", 2)
@@ -1367,7 +1445,8 @@
         particles: state.particles.length, mines: state.mines.length,
         spawnRate: spawnRate(), hordeTimer: state.hordeTimer, density: state.density,
         config: { ...CONFIG }, stats: { ...state.stats }, player: { ...state.player },
-        muzzlePosition: muzzlePosition(), build: build.snapshot(), fps: state.lastFps
+        muzzlePosition: muzzlePosition(), build: build.snapshot(), fps: state.lastFps,
+        artStatus: window.WASTELAND_CHARACTER_ART?.status || "unconfigured", atlasReady: !!window.WASTELAND_CHARACTER_ART?.ready
       }
     }
 
@@ -1466,6 +1545,8 @@
       })
       window.__LAST_NIGHT_DEBUG__ = Object.freeze({
         snapshot, get state() { return state }, get config() { return { ...CONFIG } }, get build() { return build },
+        get artStatus() { return window.WASTELAND_CHARACTER_ART?.status || "unconfigured" },
+        get atlasReady() { return !!window.WASTELAND_CHARACTER_ART?.ready },
         step(seconds = FIXED_STEP) {
           const steps = Math.ceil(clamp(Number(seconds) || FIXED_STEP, FIXED_STEP, 600) / FIXED_STEP)
           for (let tick = 0; tick < steps && state.phase === "playing"; tick += 1) update(FIXED_STEP)
