@@ -1,6 +1,7 @@
 {
   "pages": ["pages/index/index"],
   "window": {
+    "pageOrientation": "portrait",
     "navigationStyle": "custom",
     "backgroundColor": "#121a1b",
     "backgroundTextStyle": "light"
