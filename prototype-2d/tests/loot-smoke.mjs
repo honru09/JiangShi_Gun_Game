@@ -232,7 +232,24 @@ export function runLootChecks() {
   assert(!houseDebug.loot.some(ball => indoorBalls.includes(ball.id)));
   assert.equal(bootPage(false, false).debug, undefined);
   console.log("PASS pause and 180-second victory freeze room searches; restart resets rooms, collected skills and equipped guns");
-  return { checks: 7, simulated: true };
+  const deathPage = bootPage(); deathPage.start();
+  const deathDebug = deathPage.debug; deathDebug.state.godMode = false;
+  const deathHouse = deathDebug.houses.houses[0];
+  enter(deathPage, deathHouse);
+  const deathCache = deathDebug.state.room.containers[1];
+  deathDebug.state.player.x = deathCache.x; deathDebug.state.player.y = deathCache.y;
+  deathDebug.state.player.hp = 1;
+  deathDebug.state.enemies = [{ ...deathDebug.state.enemies[0], x: deathCache.x, y: deathCache.y,
+    baseSpeed: 0, speed: 0, damage: 100, attackCooldown: 0 }];
+  deathDebug.step(1 / 60);
+  assert.equal(deathDebug.state.phase, "gameover");
+  assert.equal(deathDebug.interact(), false, "death blocks searching a nearby unopened cache");
+  assert.equal(deathDebug.spawnLoot("scatterModule"), null, "death blocks new drops");
+  const deadSnapshot = immutableSimulation(deathDebug);
+  deathDebug.step(1);
+  assert.equal(immutableSimulation(deathDebug), deadSnapshot, "death freezes room loot and search state");
+  console.log("PASS death freezes nearby pickup and search actions");
+  return { checks: 8, simulated: true };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) runLootChecks();
