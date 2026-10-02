@@ -210,20 +210,21 @@
       const metadata = characters.crawler
       const armAnchors = metadata.armAnchors || { start: { x: .13, y: .2 }, end: { x: .83, y: .8 } }
       const legAnchors = metadata.legAnchors || { start: { x: .35, y: .1 }, end: { x: .68, y: .9 } }
-      function limbPair(near) {
+      function limbPair(near, drawLeg = true, drawArm = true) {
         const phase = enemy.walkCycle + (near ? 0 : Math.PI)
         const step = Math.sin(phase) * 5
         const lift = Math.max(0, Math.cos(phase)) * 3
         const side = near ? 1 : -1
-        crawlingLimb(context, backLeg, { x: -21 + side * 2, y: near ? 5 : 2 }, { x: -31 + step, y: 19 - lift + side * 2 }, legAnchors)
+        if (drawLeg) crawlingLimb(context, backLeg, { x: -21 + side * 2, y: near ? 5 : 2 }, { x: -31 + step, y: 19 - lift + side * 2 }, legAnchors)
         // Spread the two forearms at the shoulder and hand so the crawler
         // visibly supports itself on both sides instead of showing one
         // merged arm.
-        crawlingLimb(context, arm, { x: 13 + side * 4, y: near ? -3 : -7 }, { x: 31 + step + side * 5, y: 18 - lift + side * 3 }, armAnchors)
+        if (drawArm) crawlingLimb(context, arm, { x: 13 + side * 4, y: near ? -3 : -7 }, { x: 31 + step + side * 5, y: 18 - lift + side * 3 }, armAnchors)
       }
-      limbPair(false)
+      limbPair(false, true, false)
       body(context, "crawler", Math.sin(enemy.walkCycle * 2) * .8, 1)
-      limbPair(true)
+      limbPair(false, false, true)
+      limbPair(true, false, true)
       if (enemy.burn > 0) {
         context.fillStyle = "#ff983a"; context.beginPath(); context.arc(-8, -1, 3, 0, Math.PI * 2); context.fill()
       }
