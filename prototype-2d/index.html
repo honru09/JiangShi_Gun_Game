@@ -344,6 +344,7 @@
     @media (max-height: 650px) { .sheet { padding-block: 18px 15px; } .brief { margin: 12px 0; } .lead { margin-top: 11px; } .upgrade-card { min-height: 80px; padding: 9px; } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
   </style>
+  <link rel="stylesheet" href="art-theme.css">
 </head>
 <body>
   <div class="page-shell">
@@ -410,6 +411,7 @@
     </main>
   </div>
 
+  <script src="art-assets.js"></script>
   <script src="city-map.js"></script>
   <script src="skills.js"></script>
   <script src="character-atlas.js"></script>
@@ -422,6 +424,7 @@
 
     const Skills = window.WASTELAND_SKILLS
     const City = window.WASTELAND_CITY
+    const Art = window.WASTELAND_ART
     const Loot = window.WASTELAND_LOOT
     const Houses = window.WASTELAND_HOUSES
     if (!Skills || !City || !Loot || !Houses) {
@@ -512,7 +515,8 @@
       target.closePath()
     }
 
-    const city = City.create(WORLD_WIDTH, WORLD_HEIGHT)
+    const art = Art?.create()
+    const city = City.create(WORLD_WIDTH, WORLD_HEIGHT, art)
     const terrain = city.terrain
     let houseSystem = Houses.create(city)
 
@@ -1691,7 +1695,8 @@
         config: { ...CONFIG }, stats: { ...state.stats }, player: { ...state.player },
         muzzlePosition: muzzlePosition(), build: build.snapshot(), fps: state.lastFps,
         camera: cameraFor(state.player), map: { width: WORLD_WIDTH, height: WORLD_HEIGHT, areaScale: 4, buildingCount: city.buildings.length },
-        artStatus: window.WASTELAND_CHARACTER_ART?.status || "unconfigured", atlasReady: !!window.WASTELAND_CHARACTER_ART?.ready
+        artStatus: window.WASTELAND_CHARACTER_ART?.status || "unconfigured", atlasReady: !!window.WASTELAND_CHARACTER_ART?.ready,
+        environmentArt: art?.status || {}
       }
     }
 

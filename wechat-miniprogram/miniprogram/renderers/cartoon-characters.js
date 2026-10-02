@@ -192,12 +192,19 @@ function createCharacterRenderer(wxApi, manifest, onChange) {
         leg(context, source, character.leg, hip, foot, 1, side)
       }
       drawBody(context, source, character, geometry, 0, 0, 1)
-      const cosine = Math.cos(player.angle)
-      const sine = Math.sin(player.angle)
+      // Use a signed -180°…180° aim angle and place both hands along the
+      // rifle axis. The small perpendicular offsets keep the two arms from
+      // folding through each other when the player turns left.
+      const aimAngle = Math.atan2(Math.sin(player.angle), Math.cos(player.angle))
+      const cosine = Math.cos(aimAngle)
+      const sine = Math.sin(aimAngle)
       const recoil = player.recoil * 0.08
-      const point = (x, y) => ({ x: 0.04 + cosine * (x - recoil) - sine * y, y: -0.24 + sine * (x - recoil) + cosine * y })
+      const point = (distance, lateral) => ({
+        x: 0.04 + cosine * (distance - recoil) - sine * lateral,
+        y: -0.24 + sine * (distance - recoil) + cosine * lateral
+      })
       const shoulderY = geometry.bottom - geometry.height * 0.34
-      arm(context, source, character.arm, { x: -geometry.width * 0.36, y: shoulderY }, point(0.28, 0.14), 1)
+      arm(context, source, character.arm, { x: -geometry.width * 0.36, y: shoulderY }, point(0.28, -0.055), 1)
       arm(context, source, character.arm, { x: geometry.width * 0.36, y: shoulderY }, point(0.59, 0.055), 1)
       return true
     },

@@ -82,8 +82,13 @@
       const torso = parts.get("hero.body")
       const torsoScale = Math.min(74 / torso.source.height, 58 / torso.source.width)
       const shoulder = { x: (rear ? -1 : 1) * torso.source.width * torsoScale * .34, y: 6 - torso.source.height * torsoScale * .43 }
-      const cosine = Math.cos(player.armAngle)
-      const sine = Math.sin(player.armAngle)
+      // Keep the aim on a signed half-turn. Mirroring the painted arm when
+      // aiming left preserves an elbow bend instead of twisting the same
+      // right-facing limb through a full 360 degrees.
+      const aimAngle = Math.atan2(Math.sin(player.armAngle), Math.cos(player.armAngle))
+      const cosine = Math.cos(aimAngle)
+      const sine = Math.sin(aimAngle)
+      const armFacing = cosine < 0 ? -1 : 1
       const gripX = (rear ? 23 : 11) - player.recoil * 4
       const gripY = rear ? -3 : 7
       const hand = { x: 7 + cosine * gripX - sine * gripY, y: -9 + sine * gripX + cosine * gripY }
@@ -91,8 +96,8 @@
       const anchors = manifest.characters?.hero?.armAnchors || {
         shoulder: { x: .12, y: .36 }, palm: { x: .84, y: .67 }
       }
-      const sourceShoulder = { x: part.source.width * anchors.shoulder.x, y: part.source.height * anchors.shoulder.y }
-      const sourceHand = { x: part.source.width * anchors.palm.x, y: part.source.height * anchors.palm.y }
+      const sourceShoulder = { x: part.source.width * (armFacing > 0 ? anchors.shoulder.x : 1 - anchors.shoulder.x), y: part.source.height * anchors.shoulder.y }
+      const sourceHand = { x: part.source.width * (armFacing > 0 ? anchors.palm.x : 1 - anchors.palm.x), y: part.source.height * anchors.palm.y }
       const sourceSpanX = sourceHand.x - sourceShoulder.x
       const sourceSpanY = sourceHand.y - sourceShoulder.y
       const scale = Math.hypot(hand.x - shoulder.x, hand.y - shoulder.y) / Math.hypot(sourceSpanX, sourceSpanY)
@@ -100,6 +105,7 @@
       context.save()
       context.translate(shoulder.x, shoulder.y)
       context.rotate(angle)
+      context.scale(armFacing, 1)
       // Uniform scale maps the painted shoulder/palm anchors to the physical joints exactly.
       paint(context, part, -sourceShoulder.x * scale, -sourceShoulder.y * scale, part.source.width * scale, part.source.height * scale)
       context.restore()
@@ -164,7 +170,7 @@
       for (let index = 0; index < 2; index += 1) {
         const side = index ? 1 : -1
         const foot = Math.sin(enemy.walkCycle - .45 + (index ? Math.PI : 0)) * (type === "runner" ? 8 : 5)
-        leg(context, type, { x: side * 8, y: 7 }, { x: side * 10 + foot * .45, y: 31 + foot }, facing)
+        leg(context, type, { x: side * 8, y: 5.5 }, { x: side * 10 + foot * .45, y: 31 + foot }, facing)
       }
       context.translate(sway, -Math.abs(stride) * .18)
       body(context, type, 0, facing)
