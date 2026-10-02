@@ -305,6 +305,8 @@
       cursor: pointer;
     }
 
+    .pause-toggle { position: absolute; z-index: 11; top: 102px; right: 10px; min-height: 30px; padding: 5px 10px; border: 1px solid #8c998d99; background: #101712df; color: var(--bone); font-size: 10px; cursor: pointer; }
+
     .admin-panel {
       position: absolute;
       z-index: 16;
@@ -343,7 +345,7 @@
       <header class="hud" aria-live="polite">
         <div class="hud-top">
           <div class="run-mark">LAST NIGHT</div>
-          <div class="hud-clock"><div class="time" id="timeValue">00:00</div><div class="wave" id="waveValue">尸潮 01</div></div>
+          <div class="hud-clock"><div class="time" id="timeValue">03:00</div><div class="wave" id="waveValue">尸潮 01 · 等待撤离</div></div>
         </div>
         <div class="health-row"><div class="health-track"><div class="health-fill" id="healthFill"></div></div><div class="health-copy" id="healthValue">100 / 100</div></div>
         <div class="stat-row"><span>等级 <strong id="levelValue">1</strong></span><span>击倒 <strong id="killValue">0</strong></span><span>场上 <strong id="enemyValue">0</strong></span></div>
@@ -359,7 +361,7 @@
         <div class="sheet">
           <p class="eyebrow">WASTELAND SURVIVAL PROTOTYPE</p>
           <h1 class="logo">尸潮：最后一夜<span>LAST NIGHT SURVIVOR</span></h1>
-          <p class="lead">天亮前，废城区只剩一名幸存者。移动、聚怪，突击步枪会自动锁定最近的感染者。</p>
+          <p class="lead">坚持三分钟，等撤离车到达。移动、聚怪，突击步枪会自动锁定最近的感染者；尸潮从稀疏慢行逐渐变密。</p>
           <div class="brief">
             <div class="brief-item"><strong>自动瞄准</strong><span>清晰弹道</span></div>
             <div class="brief-item"><strong>密集尸潮</strong><span>四类感染者</span></div>
@@ -385,7 +387,12 @@
       </section>
 
       <section class="overlay" id="gameOverOverlay" hidden>
-        <div class="sheet"><p class="eyebrow">RUN ENDED</p><h2>黎明前倒下</h2><p class="lead" id="gameOverSummary">坚持 00:00，击倒 0 名感染者。</p><button class="primary-action" id="restartRun" type="button">重新构筑</button></div>
+        <div class="sheet"><p class="eyebrow" id="resultEyebrow">RUN ENDED</p><h2 id="resultTitle">撤离前倒下</h2><p class="lead" id="gameOverSummary">坚持 00:00，击倒 0 名感染者。</p><button class="primary-action" id="restartRun" type="button">重新构筑</button></div>
+      </section>
+
+      <button class="pause-toggle" id="pauseRun" type="button" hidden aria-label="暂停游戏">暂停 Ⅱ</button>
+      <section class="overlay" id="pauseOverlay" hidden>
+        <div class="sheet"><p class="eyebrow">PAUSED</p><h2>战斗已暂停</h2><p class="lead">喘口气，准备好再继续。</p><button class="primary-action" id="resumeRun" type="button">继续生存</button><p class="hint">P / Esc 暂停或继续</p></div>
       </section>
 
       <button class="admin-toggle" id="adminToggle" type="button" hidden>DEV</button>
@@ -398,6 +405,7 @@
           <button id="adminHorde" type="button">+20 感染者</button><button id="adminLevel" type="button">强制升级</button>
           <button id="adminClear" type="button">清场</button><button id="adminGod" type="button">无敌：关</button>
           <button id="adminHitbox" type="button">判定层：关</button><button id="adminCopy" type="button">复制快照</button>
+          <button id="adminRestart" type="button">重开构筑</button>
         </div>
         <div class="event-log" id="eventLog">调试入口已就绪</div>
       </aside>
@@ -418,25 +426,37 @@
     const WIDTH = 720
     const HEIGHT = 1280
     const FIXED_STEP = 1 / 60
+    const RUN_SECONDS = 180
     const PLAY_BOUNDS = { left: 30, right: 690, top: 108, bottom: 1162 }
     const coarsePointer = matchMedia("(pointer: coarse)").matches
     const CONFIG = {
-      enemyCap: coarsePointer ? 104 : 138,
+      enemyCap: coarsePointer ? 104 : 160,
       particleCap: coarsePointer ? 220 : 320,
       projectileCap: 120,
       pickupCap: 72,
-      baseSpawnRate: coarsePointer ? 1.72 : 1.92
+      baseSpawnRate: .8,
+      runSeconds: RUN_SECONDS,
+      waveSeconds: 15,
+      spawnGrowth: .05,
+      waveSpawnGrowth: .18,
+      maxSpawnRate: 8,
+      initialEnemies: 8,
+      firstHordeTime: 15,
+      hordeInterval: 10,
+      finalHordeInterval: 6,
+      hordeBase: 4,
+      hordeCap: 22
     }
 
     const canvas = document.getElementById("gameCanvas")
     const context = canvas.getContext("2d", { alpha: false, desynchronized: true })
     const ui = Object.fromEntries([
-      "introOverlay", "draftOverlay", "levelOverlay", "gameOverOverlay", "enterDraft", "restartRun",
+      "introOverlay", "draftOverlay", "levelOverlay", "gameOverOverlay", "pauseOverlay", "pauseRun", "resumeRun", "enterDraft", "restartRun",
       "corePicks", "boostPicks", "draftCount", "rerollDraft", "confirmDraft", "upgradeList",
       "timeValue", "waveValue", "healthFill", "healthValue", "levelValue", "killValue", "enemyValue", "xpFill",
-      "waveCallout", "toast", "skillDock", "joystick", "stick", "gameOverSummary",
+      "waveCallout", "toast", "skillDock", "joystick", "stick", "gameOverSummary", "resultTitle", "resultEyebrow",
       "adminToggle", "adminPanel", "adminClose", "adminMetrics", "densityRange", "densityValue",
-      "adminPause", "adminStep", "adminHorde", "adminLevel", "adminClear", "adminGod", "adminHitbox", "adminCopy", "eventLog"
+      "adminPause", "adminStep", "adminHorde", "adminLevel", "adminClear", "adminGod", "adminHitbox", "adminCopy", "adminRestart", "eventLog"
     ].map(id => [id, document.getElementById(id)]))
 
     const query = new URLSearchParams(location.search)
@@ -567,14 +587,15 @@
       const hpRatio = state?.player ? state.player.hp / Math.max(1, state.player.maxHp) : 1
       const instinct = hpRatio < .34 ? 1 : 0
       const adrenaline = level("adrenalineAmpule")
+      const adrenalineEffect = adrenaline * clamp(1 - hpRatio, 0, 1)
       return {
         maxHp: 112 + level("armorLining") * 18 + level("rationPack") * 10,
-        speed: 188 * (1 + level("trailBoots") * .09 + instinct * (.1 + adrenaline * .055)),
+        speed: 188 * (1 + level("trailBoots") * .09 + instinct * .1 + adrenalineEffect * .09),
         damageReduction: Math.min(.38, level("armorLining") * .085),
         regen: level("fieldBandage") * .34,
         magnet: 64 + level("magnetHarness") * 42,
         xpMultiplier: 1 + level("magnetHarness") * .1,
-        fireInterval: .39 / (1 + instinct * (.12 + adrenaline * .07)),
+        fireInterval: .24 / (1 + instinct * .12 + adrenalineEffect * .12),
         bulletDamage: 20 * (1 + level("armorPiercingBolt") * .12),
         bulletSpeed: 760 + level("armorPiercingBolt") * 28,
         pierce: level("armorPiercingBolt"),
@@ -607,7 +628,14 @@
         sinceHit: 99,
         instinctReady: true,
         instinctFlash: 0,
-        walkCycle: 0
+        walkCycle: 0,
+        gait: 0,
+        movingSpeed: 0,
+        bodyAngle: 0,
+        armAngle: -Math.PI / 2,
+        targetId: null,
+        recoil: 0,
+        arcTimer: 0
       }
     }
 
@@ -615,6 +643,8 @@
       return {
         runId: `${Date.now().toString(36)}-${testerId}`,
         phase,
+        result: null,
+        extractionAnnounced: false,
         paused: false,
         godMode: false,
         showHitboxes: false,
@@ -624,10 +654,10 @@
         previousWave: 1,
         level: 1,
         xp: 0,
-        nextXp: 8,
+        nextXp: 5,
         kills: 0,
         spawnBudget: 0,
-        hordeTimer: 10,
+        hordeTimer: CONFIG.firstHordeTime,
         cameraShake: 0,
         redFlash: 0,
         hitStop: 0,
@@ -660,7 +690,7 @@
     }
 
     function showOnlyOverlay(target) {
-      for (const element of [ui.introOverlay, ui.draftOverlay, ui.levelOverlay, ui.gameOverOverlay]) element.hidden = element !== target
+      for (const element of [ui.introOverlay, ui.draftOverlay, ui.levelOverlay, ui.gameOverOverlay, ui.pauseOverlay]) element.hidden = element !== target
     }
 
     function renderPick(skill, group, selected) {
@@ -681,6 +711,7 @@
     }
 
     function beginDraft() {
+      releaseInput()
       build.reset()
       state = createState("draft")
       renderDraft()
@@ -692,7 +723,7 @@
     function startRun() {
       if (!build.lock()) return
       state = createState("playing")
-      for (let index = 0; index < 14; index += 1) spawnEnemy(index < 9 ? "walker" : undefined)
+      for (let index = 0; index < CONFIG.initialEnemies; index += 1) spawnEnemy(index < 15 ? "walker" : undefined)
       renderSkillDock()
       showOnlyOverlay(null)
       canvas.focus({ preventScroll: true })
@@ -717,7 +748,8 @@
       if (state.phase !== "playing" || state.xp < state.nextXp) return
       state.xp -= state.nextXp
       state.level += 1
-      state.nextXp = Math.round(8 + state.level * 4.2)
+      state.player.hp = Math.min(state.player.maxHp, state.player.hp + build.level("rationPack") * 8)
+      state.nextXp = Math.round(5 + state.level * 2.1)
       const choices = build.upgradeChoices(3)
       if (!choices.length) {
         state.player.hp = Math.min(state.player.maxHp, state.player.hp + 20)
@@ -725,6 +757,7 @@
         return
       }
       state.phase = "levelup"
+      releaseInput()
       state.pendingChoices = choices
       ui.upgradeList.innerHTML = choices.map(skill => `<button class="upgrade-card ${skill.group === "boost" ? "boost" : ""}" type="button" data-upgrade-id="${skill.id}"><span class="pick-icon">${skill.icon}</span><span class="pick-copy"><strong>${skill.name}</strong><small>${skill.description}</small></span><span class="upgrade-next">Lv.${build.level(skill.id)} → ${build.level(skill.id) + 1}</span></button>`).join("")
       showOnlyOverlay(ui.levelOverlay)
@@ -739,14 +772,725 @@
       if (skillId === "rationPack") state.player.hp = Math.min(state.player.maxHp, state.player.hp + 15)
       state.phase = "playing"
       state.pendingChoices = []
-      showOnlyOverlay(null)
+      showOnlyOverlay(state.paused ? ui.pauseOverlay : null)
       renderSkillDock()
       const skill = Skills.byId(skillId)
       toast(`${skill.name} · Lv.${build.level(skillId)}`)
       logEvent(`${skill.name} 升至 Lv.${build.level(skillId)}`)
     }
 
-    /* GAME_SCRIPT_CHUNK_2 */
+    const ENEMY_TYPES = {
+      walker: { hp: 38, speed: 38, radius: 17, damage: 10, xp: 1, color: "#7c8b66" },
+      runner: { hp: 26, speed: 72, radius: 14, damage: 8, xp: 1, color: "#b7a378" },
+      brute: { hp: 112, speed: 26, radius: 24, damage: 17, xp: 3, color: "#67715c" },
+      bloater: { hp: 70, speed: 31, radius: 21, damage: 13, xp: 2, color: "#9b9a4d" }
+    }
+
+    function spawnRate() {
+      return Math.min(CONFIG.maxSpawnRate, CONFIG.baseSpawnRate + state.time * CONFIG.spawnGrowth + (state.wave - 1) * CONFIG.waveSpawnGrowth) * state.density
+    }
+
+    function spawnEnemy(type) {
+      if (!state || state.enemies.length >= CONFIG.enemyCap) return null
+      if (!type || !ENEMY_TYPES[type]) {
+        const roll = Math.random()
+        type = state.time >= 60 && roll > .94 ? "bloater"
+          : state.time >= 45 && roll > .79 ? "brute"
+          : state.time >= 30 && roll > .56 ? "runner" : "walker"
+      }
+      const template = ENEMY_TYPES[type]
+      let position = null
+      for (let attempt = 0; attempt < 24; attempt += 1) {
+        const edge = Math.floor(Math.random() * 4)
+        const candidate = edge < 2
+          ? { x: edge === 0 ? 13 : WIDTH - 13, y: randomBetween(132, HEIGHT - 135) }
+          : { x: randomBetween(24, WIDTH - 24), y: edge === 2 ? 98 : HEIGHT - 95 }
+        if (distanceSquared(candidate.x, candidate.y, state.player.x, state.player.y) < 220 * 220) continue
+        if (state.enemies.some(enemy => distanceSquared(candidate.x, candidate.y, enemy.x, enemy.y) < (template.radius + enemy.radius) ** 2)) continue
+        position = candidate
+        break
+      }
+      // A crowded edge can wait for the next spawn attempt; never place an enemy on the player.
+      if (!position) return null
+      const scaling = 1 + (state.wave - 1) * .13
+      const enemy = {
+        id: id(), type, ...position, radius: template.radius,
+        hp: template.hp * scaling, maxHp: template.hp * scaling,
+        speed: template.speed * (1 + Math.min(.7, state.time / 120)),
+        baseSpeed: template.speed,
+        damage: template.damage, xp: template.xp, color: template.color,
+        hit: 0, burn: 0, burnLevel: 0, burnTimer: 0,
+        contactTimer: 0, sawTimer: 0, walkCycle: Math.random() * Math.PI * 2,
+        dead: false
+      }
+      state.enemies.push(enemy)
+      state.stats.peakEnemies = Math.max(state.stats.peakEnemies, state.enemies.length)
+      return enemy
+    }
+
+    function particle(x, y, color, count = 5, speed = 80) {
+      for (let index = 0; index < count && state.particles.length < CONFIG.particleCap; index += 1) {
+        const angle = Math.random() * Math.PI * 2
+        const velocity = randomBetween(speed * .3, speed)
+        state.particles.push({ x, y, vx: Math.cos(angle) * velocity, vy: Math.sin(angle) * velocity, color, life: randomBetween(.14, .4), maxLife: .4, size: randomBetween(1.6, 4) })
+      }
+    }
+
+    function pickup(x, y, value) {
+      if (state.pickups.length >= CONFIG.pickupCap) {
+        const nearest = state.pickups.reduce((best, item) => distanceSquared(item.x, item.y, x, y) < distanceSquared(best.x, best.y, x, y) ? item : best)
+        nearest.value += value
+      } else state.pickups.push({ x, y, value, pulse: Math.random() * Math.PI * 2 })
+    }
+
+    function hitEnemy(enemy, amount, source = "bullet") {
+      if (!enemy || enemy.dead) return
+      state.stats.damage += Math.min(enemy.hp, amount)
+      enemy.hp -= amount
+      enemy.hit = .13
+      if (source === "bullet") state.stats.hits += 1
+      if (state.floaters.length < 32 && (source === "bullet" || source === "mine")) state.floaters.push({ x: enemy.x, y: enemy.y - 20, value: Math.round(amount), life: .5 })
+      if (enemy.hp > 0) return
+      enemy.dead = true
+      state.kills += 1
+      pickup(enemy.x, enemy.y, enemy.xp)
+      particle(enemy.x, enemy.y, enemy.type === "bloater" ? "#b6b45d" : "#b0573d", 6, 100)
+      if (enemy.type === "bloater") {
+        state.explosions.push({ x: enemy.x, y: enemy.y, radius: 56, life: .3, maxLife: .3, color: "#a7be54" })
+        for (const other of state.enemies) if (!other.dead && distanceSquared(enemy.x, enemy.y, other.x, other.y) < 56 ** 2) hitEnemy(other, 22, "blast")
+      }
+    }
+
+    function nearestEnemy(x, y, excluded = null, range = Infinity) {
+      let best = null
+      let squared = range * range
+      for (const enemy of state.enemies) {
+        if (enemy.dead || excluded?.has(enemy.id)) continue
+        const next = distanceSquared(x, y, enemy.x, enemy.y)
+        if (next < squared) { best = enemy; squared = next }
+      }
+      return best
+    }
+
+    function muzzlePosition() {
+      const player = state.player
+      const reach = 48 - player.recoil * 4
+      return { x: player.x + 7 + Math.cos(player.armAngle) * reach, y: player.y - 9 + Math.sin(player.armAngle) * reach }
+    }
+
+    function fireRifle(stats) {
+      const player = state.player
+      player.attack = .1
+      player.muzzle = .075
+      player.recoil = 1
+      const muzzle = muzzlePosition()
+      state.stats.shots += 1
+      for (let pellet = 0; pellet < stats.pellets && state.projectiles.length < CONFIG.projectileCap; pellet += 1) {
+        const offset = (pellet - (stats.pellets - 1) / 2) * stats.spread
+        const angle = player.armAngle + offset
+        state.projectiles.push({ id: id(), x: muzzle.x, y: muzzle.y, oldX: muzzle.x, oldY: muzzle.y, sweepOrigin: { x: player.x + 7, y: player.y - 9 }, vx: Math.cos(angle) * stats.bulletSpeed, vy: Math.sin(angle) * stats.bulletSpeed, life: 1.4, damage: stats.bulletDamage * (stats.pellets > 1 ? .66 : 1), remaining: stats.pierce + 1, hitIds: new Set(), burn: stats.burn, arc: stats.arc })
+      }
+      particle(muzzle.x, muzzle.y, "#ffd373", 2, 45)
+    }
+
+    function triggerArc(origin, level) {
+      if (!level || state.player.arcTimer > 0) return
+      state.player.arcTimer = .45
+      const visited = new Set([origin.id])
+      let previous = origin
+      for (let hop = 0; hop < level + 1; hop += 1) {
+        const target = nearestEnemy(previous.x, previous.y, visited, 145 + level * 12)
+        if (!target) break
+        state.arcs.push({ x: previous.x, y: previous.y, tx: target.x, ty: target.y, life: .16 })
+        visited.add(target.id)
+        hitEnemy(target, 9 + level * 5, "arc")
+        previous = target
+      }
+    }
+
+    function segmentDistanceSquared(x, y, ax, ay, bx, by) {
+      const dx = bx - ax
+      const dy = by - ay
+      const along = clamp(((x - ax) * dx + (y - ay) * dy) / Math.max(.001, dx * dx + dy * dy), 0, 1)
+      return distanceSquared(x, y, ax + dx * along, ay + dy * along)
+    }
+
+    function updateProjectiles(dt) {
+      for (const bullet of state.projectiles) {
+        bullet.oldX = bullet.x
+        bullet.oldY = bullet.y
+        bullet.x += bullet.vx * dt
+        bullet.y += bullet.vy * dt
+        bullet.life -= dt
+        // Sweep the shoulder-to-muzzle segment once so an enemy inside the rifle's reach is hittable.
+        // The rendered bullet still begins at the muzzle, then follows normal flight on later ticks.
+        const collisionOrigin = bullet.sweepOrigin || { x: bullet.oldX, y: bullet.oldY }
+        bullet.sweepOrigin = null
+        for (const enemy of state.enemies) {
+          if (enemy.dead || bullet.hitIds.has(enemy.id)) continue
+          if (segmentDistanceSquared(enemy.x, enemy.y, collisionOrigin.x, collisionOrigin.y, bullet.x, bullet.y) > (enemy.radius + 3) ** 2) continue
+          bullet.hitIds.add(enemy.id)
+          hitEnemy(enemy, bullet.damage)
+          particle(bullet.x, bullet.y, "#e7c58a", 3, 80)
+          if (bullet.burn && !enemy.dead) { enemy.burn = 2.4; enemy.burnLevel = bullet.burn }
+          triggerArc(enemy, bullet.arc)
+          bullet.remaining -= 1
+          if (bullet.remaining <= 0) { bullet.life = 0; break }
+        }
+      }
+      state.projectiles = state.projectiles.filter(bullet => bullet.life > 0 && bullet.x > -50 && bullet.x < WIDTH + 50 && bullet.y > -50 && bullet.y < HEIGHT + 50)
+    }
+
+    function takeDamage(amount) {
+      const player = state.player
+      if (state.godMode || player.invulnerable > 0 || state.phase !== "playing") return
+      player.hp = Math.max(0, player.hp - amount * (1 - modifiers().damageReduction))
+      player.hurt = .25
+      player.sinceHit = 0
+      player.invulnerable = .7
+      state.redFlash = .18
+      state.cameraShake = 5
+      if (player.hp <= 0) {
+        state.phase = "gameover"
+        state.result = "defeat"
+        releaseInput()
+        ui.resultTitle.textContent = "撤离前倒下"
+        ui.resultEyebrow.textContent = "RUN ENDED"
+        ui.gameOverSummary.textContent = `坚持 ${formatTime(state.time)}，击倒 ${state.kills} 名感染者，达到 Lv.${state.level}。`
+        showOnlyOverlay(ui.gameOverOverlay)
+        logEvent("幸存者倒下")
+      } else if (player.hp / player.maxHp < .34 && player.instinctReady) {
+        player.instinctReady = false
+        player.invulnerable = 2.8
+        player.instinctFlash = 2.8
+        toast("求生本能 · 暂时免受伤害")
+      }
+    }
+
+    function updatePlayer(dt, stats) {
+      const player = state.player
+      let dx = touchInput.x + Number(keys.has("KeyD") || keys.has("ArrowRight")) - Number(keys.has("KeyA") || keys.has("ArrowLeft"))
+      let dy = touchInput.y + Number(keys.has("KeyS") || keys.has("ArrowDown")) - Number(keys.has("KeyW") || keys.has("ArrowUp"))
+      const length = Math.hypot(dx, dy)
+      if (length > 1) { dx /= length; dy /= length }
+      const oldX = player.x
+      const oldY = player.y
+      player.x = clamp(player.x + dx * stats.speed * dt, PLAY_BOUNDS.left, PLAY_BOUNDS.right)
+      player.y = clamp(player.y + dy * stats.speed * dt, PLAY_BOUNDS.top + 32, PLAY_BOUNDS.bottom)
+      player.vx = (player.x - oldX) / dt
+      player.vy = (player.y - oldY) / dt
+      player.movingSpeed = Math.hypot(player.vx, player.vy)
+      const stride = clamp(player.movingSpeed / 188, 0, 1.5)
+      // Only real displacement advances the legs: a blocked survivor settles into standing.
+      if (player.movingSpeed > 1) { player.walkCycle += (5 + stride * 8) * dt; player.gait = lerp(player.gait, stride, Math.min(1, dt * 16)) }
+      else player.gait = Math.max(0, player.gait - dt * 8)
+      player.bodyAngle = 0
+      for (const property of ["attack", "muzzle", "hurt", "invulnerable", "instinctFlash", "arcTimer"]) player[property] = Math.max(0, player[property] - dt)
+      player.recoil = Math.max(0, player.recoil - dt * 13)
+      player.sinceHit += dt
+      if (player.sinceHit > 4) player.hp = Math.min(player.maxHp, player.hp + stats.regen * dt)
+      const target = nearestEnemy(player.x + 7, player.y - 9)
+      player.targetId = target?.id ?? null
+      if (target) {
+        player.aim = Math.atan2(target.y - (player.y - 9), target.x - (player.x + 7))
+        const difference = Math.atan2(Math.sin(player.aim - player.armAngle), Math.cos(player.aim - player.armAngle))
+        player.armAngle += difference * Math.min(1, dt * 18)
+        player.fireTimer -= dt
+        if (player.fireTimer <= 0) { fireRifle(stats); player.fireTimer = stats.fireInterval }
+      } else player.fireTimer = Math.max(0, player.fireTimer - dt)
+    }
+
+    function updateEnemies(dt) {
+      const player = state.player
+      const grid = new Map()
+      const cellSize = 58
+      for (const enemy of state.enemies) {
+        if (enemy.dead) continue
+        const key = `${Math.floor(enemy.x / cellSize)},${Math.floor(enemy.y / cellSize)}`
+        if (!grid.has(key)) grid.set(key, [])
+        grid.get(key).push(enemy)
+      }
+      for (const enemy of state.enemies) {
+        if (enemy.dead) continue
+        enemy.speed = enemy.baseSpeed * (1 + Math.min(.7, state.time / 120))
+        const dx = player.x - enemy.x
+        const dy = player.y - enemy.y
+        const length = Math.max(1, Math.hypot(dx, dy))
+        let vx = dx / length * enemy.speed
+        let vy = dy / length * enemy.speed
+        const gx = Math.floor(enemy.x / cellSize)
+        const gy = Math.floor(enemy.y / cellSize)
+        for (let x = gx - 1; x <= gx + 1; x += 1) for (let y = gy - 1; y <= gy + 1; y += 1) {
+          for (const other of grid.get(`${x},${y}`) || []) {
+            if (other === enemy || other.dead) continue
+            const gapX = enemy.x - other.x
+            const gapY = enemy.y - other.y
+            const gap = Math.hypot(gapX, gapY)
+            const spacing = (enemy.radius + other.radius) * .8
+            if (gap > 0 && gap < spacing) { vx += gapX / gap * (spacing - gap) * 3; vy += gapY / gap * (spacing - gap) * 3 }
+          }
+        }
+        const previousX = enemy.x
+        const previousY = enemy.y
+        enemy.x += vx * dt
+        enemy.y += vy * dt
+        enemy.walkCycle += Math.hypot(enemy.x - previousX, enemy.y - previousY) * .1
+        enemy.hit = Math.max(0, enemy.hit - dt)
+        enemy.sawTimer = Math.max(0, enemy.sawTimer - dt)
+        enemy.contactTimer = Math.max(0, enemy.contactTimer - dt)
+        if (enemy.burn > 0) {
+          enemy.burn -= dt
+          enemy.burnTimer -= dt
+          if (enemy.burnTimer <= 0) { hitEnemy(enemy, 3 + enemy.burnLevel * 3, "burn"); enemy.burnTimer = .4; particle(enemy.x, enemy.y - 9, "#ff8f3c", 2, 30) }
+        }
+        if (!enemy.dead && length < enemy.radius + player.radius && enemy.contactTimer <= 0) { takeDamage(enemy.damage); enemy.contactTimer = .9 }
+      }
+    }
+
+    function dronePositions(level) {
+      const positions = []
+      const count = level ? 1 + Math.floor((level - 1) / 2) : 0
+      for (let index = 0; index < count; index += 1) {
+        const angle = state.time * (2.7 + level * .15) + index * Math.PI * 2 / count
+        positions.push({ x: state.player.x + Math.cos(angle) * (80 + level * 5), y: state.player.y + Math.sin(angle) * (80 + level * 5) })
+      }
+      return positions
+    }
+
+    function updateTactics(dt, stats) {
+      for (const drone of dronePositions(stats.saw)) for (const enemy of state.enemies) {
+        if (!enemy.dead && enemy.sawTimer <= 0 && distanceSquared(drone.x, drone.y, enemy.x, enemy.y) < (enemy.radius + 16) ** 2) {
+          hitEnemy(enemy, 9 + stats.saw * 5, "saw")
+          enemy.sawTimer = .3
+          particle(drone.x, drone.y, "#d8f25a", 3, 60)
+        }
+      }
+      if (stats.mine) {
+        state.player.mineTimer -= dt
+        if (state.player.mineTimer <= 0 && state.mines.length < 14) {
+          state.mines.push({ x: state.player.x, y: state.player.y + 16, age: 0, life: 14, level: stats.mine })
+          state.player.mineTimer = Math.max(1.8, 4.2 - stats.mine * .4)
+        }
+      }
+      for (const mine of state.mines) {
+        mine.age += dt
+        mine.life -= dt
+        if (mine.age < .65 || !state.enemies.some(enemy => !enemy.dead && distanceSquared(mine.x, mine.y, enemy.x, enemy.y) < (enemy.radius + 35) ** 2)) continue
+        mine.life = 0
+        const radius = 94 + mine.level * 9
+        state.explosions.push({ x: mine.x, y: mine.y, radius, life: .45, maxLife: .45, color: "#ffc15d" })
+        state.stats.explosions += 1
+        state.cameraShake = 4
+        particle(mine.x, mine.y, "#ffc15d", 18, 190)
+        for (const enemy of state.enemies) if (!enemy.dead && distanceSquared(mine.x, mine.y, enemy.x, enemy.y) < (radius + enemy.radius) ** 2) hitEnemy(enemy, 38 + mine.level * 14, "mine")
+      }
+      state.mines = state.mines.filter(mine => mine.life > 0)
+    }
+
+    function updateEffects(dt, stats) {
+      for (const item of state.pickups) {
+        item.pulse += dt * 3
+        const dx = state.player.x - item.x
+        const dy = state.player.y - item.y
+        const length = Math.hypot(dx, dy)
+        if (length < stats.magnet) { const travel = Math.min(length, (210 + (stats.magnet - length) * 3) * dt); item.x += dx / Math.max(1, length) * travel; item.y += dy / Math.max(1, length) * travel }
+        if (length < 24) { state.xp += item.value * stats.xpMultiplier; item.value = 0 }
+      }
+      state.pickups = state.pickups.filter(item => item.value > 0)
+      for (const spark of state.particles) { spark.x += spark.vx * dt; spark.y += spark.vy * dt; spark.vx *= .95; spark.vy *= .95; spark.life -= dt }
+      state.particles = state.particles.filter(spark => spark.life > 0)
+      for (const effect of state.explosions) effect.life -= dt
+      state.explosions = state.explosions.filter(effect => effect.life > 0)
+      for (const arc of state.arcs) arc.life -= dt
+      state.arcs = state.arcs.filter(arc => arc.life > 0)
+      for (const floater of state.floaters) { floater.y -= dt * 42; floater.life -= dt }
+      state.floaters = state.floaters.filter(floater => floater.life > 0)
+      state.cameraShake = Math.max(0, state.cameraShake - dt * 24)
+      state.redFlash = Math.max(0, state.redFlash - dt)
+    }
+
+    function update(dt) {
+      if (!state || state.phase !== "playing") return
+      state.time = Math.min(RUN_SECONDS, state.time + dt)
+      if (state.time >= RUN_SECONDS - 1e-8) {
+        state.time = RUN_SECONDS
+        state.phase = "victory"
+        state.result = "victory"
+        state.paused = false
+        releaseInput()
+        ui.resultTitle.textContent = "撤离成功"
+        ui.resultEyebrow.textContent = "SURVIVED · 03:00"
+        ui.gameOverSummary.textContent = `你撑过了三分钟，击倒 ${state.kills} 名感染者，达到 Lv.${state.level}。撤离车已抵达。`
+        showOnlyOverlay(ui.gameOverOverlay)
+        logEvent("三分钟结束 · 撤离成功")
+        return
+      }
+      if (state.time >= 150 && !state.extractionAnnounced) {
+        state.extractionAnnounced = true
+        state.hordeTimer = Math.min(state.hordeTimer, CONFIG.finalHordeInterval)
+        toast("最后 30 秒 · 坚持到撤离", 4)
+        logEvent("撤离车接近 · 最后30秒")
+      }
+      state.wave = 1 + Math.floor(state.time / CONFIG.waveSeconds)
+      if (state.wave !== state.previousWave) {
+        state.previousWave = state.wave
+        ui.waveCallout.textContent = `尸潮 ${String(state.wave).padStart(2, "0")}`
+        ui.waveCallout.classList.remove("show")
+        void ui.waveCallout.offsetWidth
+        ui.waveCallout.classList.add("show")
+        logEvent(`尸潮 ${state.wave} · 刷新压力增加`)
+      }
+      state.spawnBudget = Math.min(8, state.spawnBudget + spawnRate() * dt)
+      while (state.spawnBudget >= 1) { spawnEnemy(); state.spawnBudget -= 1 }
+      state.hordeTimer -= dt
+      if (state.hordeTimer <= 0) {
+        const size = Math.min(CONFIG.hordeCap, CONFIG.hordeBase + Math.floor(state.time / CONFIG.waveSeconds) * 2)
+        for (let index = 0; index < size; index += 1) spawnEnemy()
+        state.hordeTimer += state.time >= 150 ? CONFIG.finalHordeInterval : CONFIG.hordeInterval
+        logEvent(`边缘尸潮涌入 · 当前 ${state.enemies.length}`)
+      }
+      const stats = modifiers()
+      updatePlayer(dt, stats)
+      updateEnemies(dt)
+      if (state.phase !== "playing") return
+      updateProjectiles(dt)
+      updateTactics(dt, stats)
+      updateEffects(dt, stats)
+      state.enemies = state.enemies.filter(enemy => !enemy.dead)
+      openLevelUp()
+    }
+
+    function line(ax, ay, bx, by, color, width) {
+      context.strokeStyle = color
+      context.lineWidth = width
+      context.lineCap = "round"
+      context.beginPath(); context.moveTo(ax, ay); context.lineTo(bx, by); context.stroke()
+    }
+
+    function circle(x, y, radius, color) {
+      context.fillStyle = color
+      context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill()
+    }
+
+    function drawEnemy(enemy) {
+      context.save()
+      context.translate(enemy.x, enemy.y)
+      const scale = enemy.radius / 17
+      context.scale(scale, scale)
+      context.fillStyle = "#0007"
+      context.beginPath(); context.ellipse(0, 19, 17, 7, 0, 0, Math.PI * 2); context.fill()
+      const stride = Math.sin(enemy.walkCycle) * (enemy.type === "runner" ? 6 : 4)
+      // Knees lead and feet drag a little behind the step; the whole figure stays upright.
+      for (let leg = 0; leg < 2; leg += 1) {
+        const side = leg ? 1 : -1
+        const knee = Math.sin(enemy.walkCycle + (leg ? Math.PI : 0)) * 4
+        const foot = Math.sin(enemy.walkCycle - .45 + (leg ? Math.PI : 0)) * (enemy.type === "runner" ? 8 : 5)
+        line(side * 7, 7, side * 8 + knee * .3, 18 + knee, "#3d4737", 8)
+        line(side * 8 + knee * .3, 18 + knee, side * 9 + foot * .45, 30 + foot, "#263127", 7)
+        line(side * 9 + foot * .45 - 3, 31 + foot, side * 9 + foot * .45 + 4, 31 + foot, "#141b16", 7)
+      }
+      const sway = Math.sin(enemy.walkCycle * .5) * (enemy.type === "brute" ? 1.5 : 2.3)
+      context.translate(sway, Math.abs(stride) * -.18)
+      // Bent elbows and stiff forward hands read as a shuffling infected silhouette.
+      line(-12, -14, -20, -1 + stride * .3, "#384632", 7)
+      line(-20, -1 + stride * .3, -13, 4 + stride * .3, enemy.color, 6)
+      line(12, -14, 20, -2 - stride * .3, "#384632", 7)
+      line(20, -2 - stride * .3, 14, 3 - stride * .3, enemy.color, 6)
+      roundedPath(context, -13, -22, 26, 34, 6)
+      context.fillStyle = enemy.hit > 0 ? "#e6d9ac" : enemy.color
+      context.fill()
+      context.fillStyle = "#382b24"
+      context.fillRect(-10, -5, 20, 5)
+      circle(-sway * .5, -33, 11, enemy.hit > 0 ? "#fff0c9" : enemy.color)
+      line(-5, -34, -3, -34, "#e25b35", 3)
+      line(4, -34, 6, -34, "#e25b35", 3)
+      line(-3, -26, 4, -26, "#35271e", 2)
+      if (enemy.type === "brute") { line(-13, -14, -15, 0, "#454d43", 10); line(13, -14, 15, 0, "#454d43", 10) }
+      if (enemy.type === "bloater") circle(0, 0, 9, "#b1aa54")
+      if (enemy.burn > 0) { circle(-10, 3, 3, "#ff983a"); circle(7, -7, 4, "#ef5b2f") }
+      if (enemy.hp < enemy.maxHp) {
+        context.fillStyle = "#070a08"; context.fillRect(-17, -51, 34, 4)
+        context.fillStyle = "#dc764c"; context.fillRect(-17, -51, 34 * Math.max(0, enemy.hp / enemy.maxHp), 4)
+      }
+      context.restore()
+    }
+
+    function drawWeapon(player) {
+      context.save()
+      context.translate(7, -9)
+      context.rotate(player.armAngle)
+      context.translate(-player.recoil * 4, 0)
+      // Shoulder/elbow/grip chains are the only character parts transformed by aim.
+      line(-10, -11, 10, -12, "#303b32", 9)
+      line(10, -12, 23, -3, "#c2a27b", 7)
+      line(-9, 11, 8, 15, "#46543f", 10)
+      line(8, 15, 20, 5, "#dbbd90", 7)
+      context.fillStyle = "#161f21"
+      context.fillRect(-8, -6, 35, 12)
+      context.fillStyle = "#667779"
+      context.fillRect(4, -6, 25, 5)
+      context.fillStyle = "#2f3a39"
+      context.fillRect(26, -5, 11, 9)
+      context.fillStyle = "#bcc4b3"
+      context.fillRect(35, -2, 13, 4)
+      context.fillStyle = "#111616"
+      context.fillRect(-17, -5, 12, 10)
+      context.fillRect(10, 5, 7, 12)
+      context.fillRect(20, 6, 8, 13)
+      context.fillRect(12, -11, 13, 5)
+      line(1, -8, 31, -8, "#9d9f81", 2)
+      if (player.muzzle > 0) {
+        context.fillStyle = "#ffb13b"
+        context.beginPath(); context.moveTo(48, -4); context.lineTo(64, -9); context.lineTo(58, 0); context.lineTo(69, 5); context.lineTo(48, 5); context.closePath(); context.fill()
+        context.fillStyle = "#fff5bd"
+        context.beginPath(); context.moveTo(48, -2); context.lineTo(59, 0); context.lineTo(48, 3); context.closePath(); context.fill()
+      }
+      context.restore()
+    }
+
+    function drawPlayer() {
+      const player = state.player
+      context.save()
+      context.translate(player.x, player.y)
+      // Keep the torso/head in screen coordinates; never rotate this parent transform.
+      const stride = Math.sin(player.walkCycle) * Math.min(1.25, player.gait)
+      const lift = Math.abs(Math.sin(player.walkCycle)) * Math.min(1, player.gait)
+      context.fillStyle = "#0008"
+      context.beginPath(); context.ellipse(0, 26, 22, 9, 0, 0, Math.PI * 2); context.fill()
+      if (player.invulnerable > .7) {
+        context.strokeStyle = "#d8f25aaa"; context.lineWidth = 2
+        context.beginPath(); context.ellipse(0, -3, 29, 44, 0, 0, Math.PI * 2); context.stroke()
+      }
+      // Alternating hip/knee/boot motion stretches with actual walk/run speed.
+      for (let leg = 0; leg < 2; leg += 1) {
+        const side = leg === 0 ? -1 : 1
+        const phase = stride * side
+        const hipX = side * 7
+        const kneeX = hipX + phase * 3
+        const kneeY = 15 + phase * 5
+        const footX = hipX + phase * 5
+        const footY = 29 + phase * 8
+        line(hipX, 4, kneeX, kneeY, "#3b4b36", 10)
+        line(kneeX, kneeY, footX, footY, "#536344", 8)
+        line(footX - 3, footY + 1, footX + 4, footY + 1, "#111b19", 8)
+        line(kneeX - 2, kneeY, kneeX + 2, kneeY, "#879269", 3)
+      }
+      const rearAim = Math.sin(player.armAngle) < -.35
+      if (rearAim) drawWeapon(player)
+      context.translate(0, -lift * 1.6)
+      roundedPath(context, -16, -20, 32, 30, 7)
+      context.fillStyle = player.hurt > 0 ? "#e5b193" : "#65704a"
+      context.fill()
+      context.strokeStyle = "#18251c"; context.lineWidth = 3; context.stroke()
+      context.fillStyle = "#343f30"; context.fillRect(-12, -15, 24, 21)
+      context.fillStyle = "#b6bc83"; context.fillRect(-8, -12, 6, 8); context.fillRect(3, -12, 6, 8)
+      line(-14, 4, 14, 4, "#141e18", 5)
+      circle(0, -30, 11, player.hurt > 0 ? "#f1c29d" : "#d4b88b")
+      context.fillStyle = "#35463b"
+      roundedPath(context, -13, -42, 26, 13, 7); context.fill()
+      context.fillStyle = "#aab481"; context.fillRect(-11, -33, 22, 3)
+      line(-5, -27, -3, -27, "#151d17", 2)
+      line(4, -27, 6, -27, "#151d17", 2)
+      line(-4, -22, 4, -22, "#795c40", 2)
+      context.translate(0, lift * 1.6)
+      if (!rearAim) drawWeapon(player)
+      context.restore()
+    }
+
+    function draw() {
+      context.drawImage(terrain, 0, 0)
+      if (!state) return
+      context.save()
+      if (state.cameraShake && state.phase === "playing" && !state.paused) context.translate(randomBetween(-state.cameraShake, state.cameraShake), randomBetween(-state.cameraShake, state.cameraShake))
+      for (const item of state.pickups) {
+        context.save(); context.translate(item.x, item.y); context.rotate(Math.PI / 4)
+        context.fillStyle = "#101f1a"; context.fillRect(-6, -6, 12, 12)
+        context.fillStyle = "#81dfb0"; context.fillRect(-3, -3, 6, 6); context.restore()
+      }
+      for (const mine of state.mines) {
+        circle(mine.x, mine.y, 12, "#101a16"); circle(mine.x, mine.y, 8, "#687751")
+        circle(mine.x, mine.y, 3, mine.age > .65 ? "#f09c40" : "#e6ecaa")
+      }
+      const figures = state.enemies.filter(enemy => !enemy.dead).map(enemy => ({ y: enemy.y, enemy }))
+      figures.push({ y: state.player.y, player: true })
+      figures.sort((a, b) => a.y - b.y)
+      for (const figure of figures) { if (figure.player) drawPlayer(); else drawEnemy(figure.enemy) }
+      for (const drone of dronePositions(modifiers().saw)) {
+        line(state.player.x, state.player.y, drone.x, drone.y, "#a3ad5b20", 1)
+        circle(drone.x, drone.y, 15, "#1a2927"); circle(drone.x, drone.y, 10, "#a5b7a0")
+        context.save(); context.translate(drone.x, drone.y); context.rotate(state.time * 15)
+        for (let index = 0; index < 6; index += 1) { context.rotate(Math.PI / 3); line(8, 0, 17, 0, "#d8f25a", 3) }
+        context.restore(); circle(drone.x, drone.y, 4, "#34413a")
+      }
+      for (const bullet of state.projectiles) {
+        const length = Math.hypot(bullet.vx, bullet.vy)
+        line(bullet.x - bullet.vx / length * 24, bullet.y - bullet.vy / length * 24, bullet.x, bullet.y, "#efbd5066", 6)
+        line(bullet.x - bullet.vx / length * 15, bullet.y - bullet.vy / length * 15, bullet.x, bullet.y, "#ffe599", 2.5)
+      }
+      for (const arc of state.arcs) {
+        const dx = arc.tx - arc.x
+        const dy = arc.ty - arc.y
+        line(arc.x, arc.y, arc.x + dx * .4 - dy * .08, arc.y + dy * .4 + dx * .08, "#84f1e3", 3)
+        line(arc.x + dx * .4 - dy * .08, arc.y + dy * .4 + dx * .08, arc.tx, arc.ty, "#dcfff9", 2)
+      }
+      for (const effect of state.explosions) {
+        const progress = 1 - effect.life / effect.maxLife
+        context.globalAlpha = effect.life / effect.maxLife
+        circle(effect.x, effect.y, effect.radius * progress, effect.color + "55")
+        context.strokeStyle = effect.color; context.lineWidth = 6 * (1 - progress) + 1
+        context.beginPath(); context.arc(effect.x, effect.y, effect.radius * progress, 0, Math.PI * 2); context.stroke()
+      }
+      context.globalAlpha = 1
+      for (const spark of state.particles) { context.globalAlpha = Math.min(1, spark.life * 5); circle(spark.x, spark.y, spark.size, spark.color) }
+      context.globalAlpha = 1
+      context.font = "bold 14px Bahnschrift, sans-serif"; context.textAlign = "center"
+      for (const floater of state.floaters) { context.globalAlpha = Math.min(1, floater.life * 3); context.fillStyle = "#fff0bc"; context.fillText(String(floater.value), floater.x, floater.y) }
+      context.globalAlpha = 1
+      if (state.showHitboxes) {
+        for (const object of [state.player, ...state.enemies]) { context.strokeStyle = object === state.player ? "#74e1cf" : "#ef7445"; context.lineWidth = 1; context.beginPath(); context.arc(object.x, object.y, object.radius, 0, Math.PI * 2); context.stroke() }
+        const muzzle = muzzlePosition(); circle(muzzle.x, muzzle.y, 4, "#ffffff")
+      }
+      context.restore()
+      if (state.redFlash > 0) { context.fillStyle = `rgba(168,39,26,${state.redFlash})`; context.fillRect(0, 0, WIDTH, HEIGHT) }
+    }
+
+    function snapshot() {
+      return {
+        runId: state.runId, phase: state.phase, result: state.result, ended: state.phase === "victory" || state.phase === "gameover", paused: state.paused, time: state.time, remainingSeconds: Math.max(0, RUN_SECONDS - state.time), wave: state.wave,
+        level: state.level, xp: state.xp, nextXp: state.nextXp, kills: state.kills,
+        enemies: state.enemies.length, projectiles: state.projectiles.length, pickups: state.pickups.length,
+        particles: state.particles.length, mines: state.mines.length,
+        spawnRate: spawnRate(), hordeTimer: state.hordeTimer, density: state.density,
+        config: { ...CONFIG }, stats: { ...state.stats }, player: { ...state.player },
+        muzzlePosition: muzzlePosition(), build: build.snapshot(), fps: state.lastFps
+      }
+    }
+
+    function syncHud() {
+      ui.timeValue.textContent = formatTime(Math.ceil(Math.max(0, RUN_SECONDS - state.time)))
+      ui.waveValue.textContent = `尸潮 ${String(state.wave).padStart(2, "0")} · ${state.time >= 150 ? "撤离车接近" : "三分钟撤离"}`
+      ui.healthFill.style.width = `${state.player.hp / state.player.maxHp * 100}%`
+      ui.healthValue.textContent = `${Math.ceil(state.player.hp)} / ${state.player.maxHp}`
+      ui.levelValue.textContent = state.level
+      ui.killValue.textContent = state.kills
+      ui.enemyValue.textContent = state.enemies.length
+      ui.xpFill.style.width = `${Math.min(100, state.xp / state.nextXp * 100)}%`
+      ui.pauseRun.hidden = state.phase !== "playing" || state.paused
+      ui.adminPause.textContent = state.paused ? "继续" : "暂停"
+      if (adminMode && !ui.adminPanel.hidden) {
+        ui.adminMetrics.textContent = `时间 ${formatTime(state.time)} · ${state.phase}${state.paused ? " / 暂停" : ""}\n感染者 ${state.enemies.length}/${CONFIG.enemyCap} · 峰值 ${state.stats.peakEnemies}\n刷怪 ${spawnRate().toFixed(2)}/秒 · FPS ${state.lastFps.toFixed(0)}\n射击 ${state.stats.shots} · 命中 ${state.stats.hits}\n累计伤害 ${Math.round(state.stats.damage)} · 爆炸 ${state.stats.explosions}\n弹丸 ${state.projectiles.length} · 特效 ${state.particles.length}\n玩家 ${state.player.x.toFixed(0)},${state.player.y.toFixed(0)} · ${state.player.movingSpeed.toFixed(0)}px/s`
+      }
+    }
+
+    function releaseInput() {
+      keys.clear()
+      touchInput.x = 0
+      touchInput.y = 0
+      if (joystickPointer !== null && ui.joystick.hasPointerCapture?.(joystickPointer)) ui.joystick.releasePointerCapture(joystickPointer)
+      joystickPointer = null
+      ui.stick.style.transform = "translate(0px, 0px)"
+    }
+
+    function togglePause(force) {
+      if (!state || state.phase !== "playing") return
+      state.paused = typeof force === "boolean" ? force : !state.paused
+      releaseInput()
+      accumulator = 0
+      showOnlyOverlay(state.paused ? ui.pauseOverlay : null)
+      syncHud()
+    }
+
+    ui.enterDraft.addEventListener("click", beginDraft)
+    ui.restartRun.addEventListener("click", beginDraft)
+    ui.rerollDraft.addEventListener("click", () => { if (build.reroll()) renderDraft() })
+    ui.confirmDraft.addEventListener("click", startRun)
+    for (const group of [ui.corePicks, ui.boostPicks]) group.addEventListener("click", event => {
+      const button = event.target.closest("[data-pick-id]")
+      if (button && build.toggle(button.dataset.pickGroup, button.dataset.pickId)) renderDraft()
+    })
+    ui.upgradeList.addEventListener("click", event => {
+      const button = event.target.closest("[data-upgrade-id]")
+      if (button) chooseUpgrade(button.dataset.upgradeId)
+    })
+    ui.pauseRun.addEventListener("click", () => togglePause(true))
+    ui.resumeRun.addEventListener("click", () => togglePause(false))
+    const movementKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"])
+    window.addEventListener("keydown", event => {
+      if (movementKeys.has(event.code)) { event.preventDefault(); if (state.phase === "playing" && !state.paused) keys.add(event.code) }
+      if ((event.code === "KeyP" || event.code === "Escape") && !event.repeat) { event.preventDefault(); togglePause() }
+      if (adminMode && event.code === "F1") { event.preventDefault(); state.showHitboxes = !state.showHitboxes }
+    })
+    window.addEventListener("keyup", event => { if (movementKeys.has(event.code)) { event.preventDefault(); keys.delete(event.code) } })
+    window.addEventListener("blur", () => { releaseInput(); togglePause(true) })
+    document.addEventListener("visibilitychange", () => { if (document.hidden) { releaseInput(); togglePause(true) } })
+    function moveJoystick(event) {
+      if (event.pointerId !== joystickPointer) return
+      const rect = ui.joystick.getBoundingClientRect()
+      let x = event.clientX - (rect.left + rect.width / 2)
+      let y = event.clientY - (rect.top + rect.height / 2)
+      const radius = rect.width * .36
+      const length = Math.hypot(x, y)
+      if (length > radius) { x *= radius / length; y *= radius / length }
+      touchInput.x = Math.abs(x) < 2 ? 0 : x / radius
+      touchInput.y = Math.abs(y) < 2 ? 0 : y / radius
+      ui.stick.style.transform = `translate(${x}px, ${y}px)`
+    }
+    ui.joystick.addEventListener("pointerdown", event => {
+      if (state.phase !== "playing" || state.paused || joystickPointer !== null) return
+      event.preventDefault(); joystickPointer = event.pointerId; ui.joystick.setPointerCapture(event.pointerId); moveJoystick(event)
+    })
+    ui.joystick.addEventListener("pointermove", moveJoystick)
+    for (const name of ["pointerup", "pointercancel", "lostpointercapture"]) ui.joystick.addEventListener(name, event => { if (event.pointerId === joystickPointer) releaseInput() })
+
+    if (adminMode) {
+      ui.adminToggle.hidden = false
+      ui.adminToggle.addEventListener("click", () => { ui.adminPanel.hidden = !ui.adminPanel.hidden; syncHud() })
+      ui.adminClose.addEventListener("click", () => { ui.adminPanel.hidden = true })
+      ui.adminRestart.addEventListener("click", beginDraft)
+      ui.densityRange.addEventListener("input", () => { state.density = Number(ui.densityRange.value); ui.densityValue.textContent = `${state.density.toFixed(1)}×` })
+      ui.adminPause.addEventListener("click", () => togglePause())
+      ui.adminStep.addEventListener("click", () => { togglePause(true); update(FIXED_STEP); draw(); syncHud() })
+      ui.adminHorde.addEventListener("click", () => { if (state.phase === "playing") { for (let count = 0; count < 20; count += 1) spawnEnemy(); logEvent("管理员生成感染者"); draw(); syncHud() } })
+      ui.adminLevel.addEventListener("click", () => { if (state.phase === "playing") { state.xp = Math.max(state.xp, state.nextXp); openLevelUp(); syncHud() } })
+      ui.adminClear.addEventListener("click", () => { state.enemies = []; state.projectiles = []; logEvent("管理员清场"); draw(); syncHud() })
+      ui.adminGod.addEventListener("click", () => { state.godMode = !state.godMode; ui.adminGod.textContent = `无敌：${state.godMode ? "开" : "关"}` })
+      ui.adminHitbox.addEventListener("click", () => { state.showHitboxes = !state.showHitboxes; ui.adminHitbox.textContent = `判定层：${state.showHitboxes ? "开" : "关"}`; draw() })
+      ui.adminCopy.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(JSON.stringify(snapshot(), null, 2)); toast("快照已复制") }
+        catch { toast("浏览器未提供剪贴板权限") }
+      })
+      window.__LAST_NIGHT_DEBUG__ = Object.freeze({
+        snapshot, get state() { return state }, get config() { return { ...CONFIG } }, get build() { return build },
+        step(seconds = FIXED_STEP) {
+          const steps = Math.ceil(clamp(Number(seconds) || FIXED_STEP, FIXED_STEP, 600) / FIXED_STEP)
+          for (let tick = 0; tick < steps && state.phase === "playing"; tick += 1) update(FIXED_STEP)
+          draw(); syncHud(); return snapshot()
+        }
+      })
+    }
+
+    function frame(now) {
+      const elapsed = Math.min(.1, Math.max(0, (now - lastFrame) / 1000))
+      lastFrame = now
+      frameTimes.push(elapsed)
+      if (frameTimes.length > 60) frameTimes.shift()
+      state.lastFps = frameTimes.length / Math.max(.001, frameTimes.reduce((sum, value) => sum + value, 0))
+      if (state.phase === "playing" && !state.paused) {
+        accumulator += elapsed
+        while (accumulator >= FIXED_STEP && state.phase === "playing" && !state.paused) { update(FIXED_STEP); accumulator -= FIXED_STEP }
+      } else accumulator = 0
+      if (toastTimer > 0) { toastTimer -= elapsed; if (toastTimer <= 0) ui.toast.classList.remove("show") }
+      hudTimer += elapsed
+      if (hudTimer >= .12) { syncHud(); hudTimer = 0 }
+      draw()
+      requestAnimationFrame(frame)
+    }
+
+    state = createState()
+    renderSkillDock()
+    syncHud()
+    draw()
+    requestAnimationFrame(frame)
   })()
   </script>
 </body>
