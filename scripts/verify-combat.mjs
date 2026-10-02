@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 import { join, resolve } from "node:path";
 import vm from "node:vm";
 
-const root = fileURLToPath(new URL("../", import.meta.url));
+const root = process.env.GAME_TEST_ROOT ? resolve(process.env.GAME_TEST_ROOT)
+  : fileURLToPath(new URL("../", import.meta.url));
 const evidence = join(root, "evidence/local/firearms-motion");
 mkdirSync(evidence, { recursive: true });
 const results = [];
@@ -192,8 +193,7 @@ async function browserChecks() {
       page.on("pageerror", error => errors.push(error.message));
       page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
       await page.goto(`${url}?admin=1&tester=automated`);
-      await page.locator("#enterDraft").click();
-      await page.locator("#confirmDraft").click();
+      await page.locator("#startRun").click();
       const initial = await page.evaluate(() => {
         const debug = window.__LAST_NIGHT_DEBUG__;
         debug.state.paused = true;
@@ -202,7 +202,8 @@ async function browserChecks() {
       });
       assert.equal(initial.enemies, 8);
       assert.equal(initial.cap, mobile ? 104 : 160);
-      assert.equal(initial.slots, 7);
+      assert.equal(initial.slots, 2);
+      assert.equal(await page.locator(".skill-slot").count(), 7);
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       await page.evaluate(() => { window.__LAST_NIGHT_DEBUG__.state.paused = false; });
       let touchSession;
@@ -272,16 +273,27 @@ async function browserChecks() {
           if (state.enemies.length > debug.config.enemyCap) throw new Error("enemy cap exceeded");
         }
         if (state.phase === "levelup") document.querySelector("[data-upgrade-id]").click();
-        for (let index = 0; index < 12; index += 1) document.getElementById("adminHorde").click();
         state.paused = true;
-        return { peak, atCap: state.enemies.length, cap: debug.config.enemyCap, ticks,
+        return { peak, naturalEnemies: state.enemies.length, cap: debug.config.enemyCap, ticks,
           shots: state.stats.shots, hits: state.stats.hits, kills: state.kills,
           simulatedSeconds: state.time - simulationStart, milliseconds: Math.round(performance.now() - started) };
       });
       assert(metrics.shots > 0); assert(metrics.hits > 0); assert(metrics.kills > 0);
       assert(metrics.simulatedSeconds >= 179 && metrics.simulatedSeconds < 179.3);
-      assert.equal(metrics.atCap, metrics.cap);
       await page.screenshot({ path: join(evidence, `${mobile ? "touch" : "desktop"}-pressure.png`) });
+      // Safe spawning may reject a crowded edge. Isolate the capacity gate by clearing
+      // edge positions between packs, after capturing the real pressure simulation.
+      metrics.adminCap = await page.evaluate(() => {
+        const debug = window.__LAST_NIGHT_DEBUG__;
+        for (let pack = 0; pack < 12; pack += 1) {
+          for (const enemy of debug.state.enemies) {
+            enemy.x = debug.state.player.x; enemy.y = debug.state.player.y;
+          }
+          document.getElementById("adminHorde").click();
+        }
+        return debug.state.enemies.length;
+      });
+      assert.equal(metrics.adminCap, metrics.cap);
       pass(`${mobile ? "touch" : "desktop"} browser 179-second simulated combat and horde cap`, metrics);
       const victory = await page.evaluate(() => {
         const debug = window.__LAST_NIGHT_DEBUG__;
@@ -315,10 +327,11 @@ async function browserChecks() {
 }
 
 try {
-  miniProgramChecks();
+  if (!process.argv.includes("--web-only")) miniProgramChecks();
   if (!process.argv.includes("--mini-only")) await browserChecks();
   writeFileSync(join(evidence, "results.json"), JSON.stringify({ date: "2026-10-02", results }, null, 2));
-  console.log("All combat checks passed. Mini program checks use wx stubs; simulated time is not real-device playtime.");
+  console.log(process.argv.includes("--web-only") ? "All web combat checks passed. Simulated time is not real-device playtime."
+    : "All combat checks passed. Mini program checks use wx stubs; simulated time is not real-device playtime.");
 } catch (error) {
   console.error(error.stack);
   process.exitCode = 1;

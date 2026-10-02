@@ -1,10 +1,14 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import vm from "node:vm"
+import { fileURLToPath } from "node:url"
+import { join, resolve } from "node:path"
 
 // DOM/Canvas stand-ins exercise the page's real gameplay script, not browser rendering.
-const html = readFileSync(new URL("../index.html", import.meta.url), "utf8")
-const skillSource = readFileSync(new URL("../skills.js", import.meta.url), "utf8")
+const root = process.env.GAME_TEST_ROOT ? resolve(process.env.GAME_TEST_ROOT, "prototype-2d")
+  : fileURLToPath(new URL("../", import.meta.url))
+const html = readFileSync(join(root, "index.html"), "utf8")
+const skillSource = readFileSync(join(root, "skills.js"), "utf8")
 const inline = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(match => match[1]).filter(source => source.trim())
 
 function boot(coarse = false, admin = true) {
@@ -49,7 +53,7 @@ function boot(coarse = false, admin = true) {
     blur() { windowEvents.emit("blur") },
     frame(seconds = 1 / 60) { now += seconds * 1000; animationFrame(now) },
     click(id) { elements.get(id).emit("click") },
-    start() { elements.get("enterDraft").emit("click"); elements.get("confirmDraft").emit("click") }
+    start() { elements.get("startRun").emit("click") }
   }
 }
 
@@ -58,7 +62,7 @@ page.start()
 const debug = page.debug
 assert.equal(debug.snapshot().phase, "playing")
 assert.equal(debug.snapshot().enemies, 8)
-assert.equal(debug.snapshot().build.slots.length, 7)
+assert.equal(debug.snapshot().build.slots.length, 2)
 assert.equal((page.elements.get("skillDock").innerHTML.match(/class="skill-slot /g) || []).length, 7)
 assert.equal(debug.config.runSeconds, 180)
 assert.equal(debug.snapshot().nextXp, 5)
@@ -69,7 +73,7 @@ debug.step(5)
 assert.ok(debug.snapshot().stats.shots > 0)
 assert.ok(debug.snapshot().stats.hits > 0)
 assert.ok(debug.snapshot().kills > 0)
-console.log("PASS real page script starts with seven slots, 8 slow walkers, rifle shots and hits")
+console.log("PASS real page script starts with two skills, seven dock slots, 8 slow walkers, rifle shots and hits")
 
 const beforeMove = debug.snapshot().player
 page.key("KeyD")
@@ -112,13 +116,14 @@ debug.state.xp = debug.state.nextXp
 page.click("adminLevel")
 assert.equal(debug.state.phase, "levelup")
 const choices = debug.state.pendingChoices
-assert.ok(choices.every(skill => debug.build.selectedSkills().some(selected => selected.id === skill.id)))
+assert.equal(choices.length, 3)
+assert.ok(choices.every(skill => skill.action === "acquire" && skill.level === 0 && skill.nextLevel === 1))
 const upgradeId = choices[0].id
 page.elements.get("upgradeList").emit("click", { target: { closest: () => ({ dataset: { upgradeId } }) } })
 assert.equal(debug.state.phase, "playing")
-assert.equal(debug.build.level(upgradeId), 2)
-assert.equal(debug.snapshot().build.slots.length, 7)
-console.log("PASS upgrades only affect locked build slots")
+assert.equal(debug.build.level(upgradeId), 1)
+assert.equal(debug.snapshot().build.slots.length, 3)
+console.log("PASS first level offers three new skills and acquires one at level one")
 
 const closeEnemy = { ...debug.state.enemies[0], x: debug.state.player.x, y: debug.state.player.y, radius: 17, baseSpeed: 0, hp: 100, maxHp: 100, dead: false }
 debug.state.enemies = [closeEnemy]
@@ -176,9 +181,8 @@ function pressure(coarse) {
   assert.equal(api.snapshot().stats.shots, finished.stats.shots)
   assert.equal(api.snapshot().player.walkCycle, finished.player.walkCycle)
   test.click("restartRun")
-  assert.equal(api.state.phase, "draft")
-  test.click("confirmDraft")
   assert.equal(api.state.phase, "playing")
+  assert.equal(api.snapshot().build.slots.length, 2)
   assert.equal(api.state.time, 0)
   assert.equal(api.state.enemies.length, 8)
   console.log(`PASS ${coarse ? "touch" : "desktop"} pressure: peak ${finished.stats.peakEnemies}/${api.config.enemyCap}; 179s live, 180s victory, frozen result and restart`)
