@@ -1605,15 +1605,6 @@
       if (state.room) houseSystem.drawRoom(context, state.room)
       else {
         context.drawImage(terrain, 0, 0)
-        for (const house of houseSystem.houses) {
-          const nearby = distanceSquared(house.door.x, house.door.y, state.player.x, state.player.y) < 85 ** 2
-          context.fillStyle = nearby ? "#d8f25a35" : "#ffb34018"
-          context.strokeStyle = nearby ? "#d8f25a" : "#dfb45c"
-          context.lineWidth = 2
-          context.beginPath(); context.arc(house.door.x, house.door.y, 25, 0, Math.PI * 2); context.fill(); context.stroke()
-          context.font = "bold 20px Microsoft YaHei, sans-serif"; context.textAlign = "center"; context.fillStyle = nearby ? "#e2f882" : "#dfb45c"
-          context.fillText("门", house.door.x, house.door.y + 7)
-        }
       }
       for (const item of state.loot) Loot.draw(context, item, state.time)
       for (const item of state.combatDrops) Loot.draw(context, item, state.time)
@@ -1626,10 +1617,26 @@
         circle(mine.x, mine.y, 12, "#101a16"); circle(mine.x, mine.y, 8, "#687751")
         circle(mine.x, mine.y, 3, mine.age > .65 ? "#f09c40" : "#e6ecaa")
       }
-      const figures = state.enemies.filter(enemy => !enemy.dead).map(enemy => ({ y: enemy.y, enemy }))
+      const figures = state.room ? [] : (city.scenery || []).map(item => ({ y: item.sortY, scenery: item }))
+      figures.push(...state.enemies.filter(enemy => !enemy.dead).map(enemy => ({ y: enemy.y, enemy })))
       figures.push({ y: state.player.y, player: true })
       figures.sort((a, b) => a.y - b.y)
-      for (const figure of figures) { if (figure.player) drawPlayer(); else drawEnemy(figure.enemy) }
+      for (const figure of figures) {
+        if (figure.scenery) city.drawScenery(context, figure.scenery)
+        else if (figure.player) drawPlayer()
+        else drawEnemy(figure.enemy)
+      }
+      if (!state.room) {
+        for (const house of houseSystem.houses) {
+          const nearby = distanceSquared(house.door.x, house.door.y, state.player.x, state.player.y) < 85 ** 2
+          context.fillStyle = nearby ? "#d8f25a35" : "#ffb34018"
+          context.strokeStyle = nearby ? "#d8f25a" : "#dfb45c"
+          context.lineWidth = 2
+          context.beginPath(); context.arc(house.door.x, house.door.y, 25, 0, Math.PI * 2); context.fill(); context.stroke()
+          context.font = "bold 20px Microsoft YaHei, sans-serif"; context.textAlign = "center"; context.fillStyle = nearby ? "#e2f882" : "#dfb45c"
+          context.fillText("门", house.door.x, house.door.y + 7)
+        }
+      }
       for (const drone of dronePositions(modifiers().saw)) {
         line(state.player.x, state.player.y, drone.x, drone.y, "#a3ad5b20", 1)
         circle(drone.x, drone.y, 15, "#1a2927"); circle(drone.x, drone.y, 10, "#a5b7a0")
