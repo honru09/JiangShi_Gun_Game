@@ -146,7 +146,7 @@
       group: "boost",
       tag: "生存增益",
       max: 3,
-      description: "升级时恢复生命，并缓慢提高生命上限。"
+      description: "拾取口粮时恢复生命，并提高生命上限。"
     }
   ]
 
@@ -173,6 +173,7 @@
       this.selectedCore = []
       this.selectedBoost = []
       this.levels = { assaultRifle: 1, survivalInstinct: 1 }
+      this.qualities = { assaultRifle: "common", survivalInstinct: "common" }
     }
 
     start() {
@@ -187,12 +188,33 @@
       return this.level(id) > 0
     }
 
+    quality(id) { return this.qualities[id] || "common" }
+
+    effect(id) {
+      const multiplier = { common: 1, fine: 1.2, rare: 1.5, epic: 1.9 }
+      return this.level(id) * (multiplier[this.quality(id)] || 1)
+    }
+
+    collect(id, quality = "common") {
+      const skill = SKILL_MAP.get(id)
+      if (!this.active || !skill || skill.group === "fixed") return { accepted: false, reason: "invalid" }
+      const ranks = ["common", "fine", "rare", "epic"]
+      if (!ranks.includes(quality)) quality = "common"
+      const acquired = !this.has(id)
+      const improvedQuality = !acquired && ranks.indexOf(quality) > ranks.indexOf(this.quality(id))
+      if (!this.canUpgrade(id) && !improvedQuality) return { accepted: false, reason: this.has(id) ? "max" : "capacity" }
+      if (acquired) (skill.group === "core" ? this.selectedCore : this.selectedBoost).push(id)
+      this.levels[id] = Math.min(skill.max, this.level(id) + 1)
+      if (acquired || improvedQuality) this.qualities[id] = quality
+      return { accepted: true, acquired, improvedQuality, level: this.level(id), quality: this.quality(id) }
+    }
+
     selectedSkills() {
       return [...this.selectedCore, ...this.selectedBoost].map(id => SKILL_MAP.get(id)).filter(Boolean)
     }
 
     slots() {
-      return FIXED_SKILLS.concat(this.selectedSkills()).map(skill => ({ ...skill, level: this.level(skill.id) }))
+      return FIXED_SKILLS.concat(this.selectedSkills()).map(skill => ({ ...skill, level: this.level(skill.id), quality: this.quality(skill.id), effect: this.effect(skill.id) }))
     }
 
     upgradeChoices(count = 3) {
@@ -215,14 +237,7 @@
     }
 
     upgrade(id) {
-      if (!this.canUpgrade(id)) return false
-      if (!this.has(id)) {
-        const skill = SKILL_MAP.get(id)
-        const selected = skill.group === "core" ? this.selectedCore : this.selectedBoost
-        selected.push(id)
-      }
-      this.levels[id] = this.level(id) + 1
-      return true
+      return this.collect(id).accepted
     }
 
     isComplete() {
@@ -236,12 +251,15 @@
         selectedCore: [...this.selectedCore],
         selectedBoost: [...this.selectedBoost],
         levels: { ...this.levels },
+        qualities: { ...this.qualities },
         slots: this.slots().map(skill => ({
           id: skill.id,
           name: skill.name,
           group: skill.group,
           level: skill.level,
-          max: skill.max
+          max: skill.max,
+          quality: skill.quality,
+          effect: skill.effect
         }))
       }
     }
