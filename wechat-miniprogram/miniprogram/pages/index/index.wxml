@@ -1,0 +1,79 @@
+<view class="game-shell" style="width: {{canvasWidth}}px; height: {{canvasHeight}}px;">
+  <canvas id="battleCanvas" canvas-id="battleCanvas" class="game-canvas" style="width: {{canvasWidth}}px; height: {{canvasHeight}}px;" disable-scroll="true" hidden="{{draftOpen || levelUpOpen || pauseOpen || ended}}" />
+
+  <cover-view class="hud" style="top: {{safeTop + 8}}px;" hidden="{{draftOpen || levelUpOpen || pauseOpen || ended}}">
+    <cover-view class="hud-top">
+      <cover-view class="brand">尸潮：最后一夜</cover-view>
+      <cover-view class="clock">{{timeText}}</cover-view>
+      <cover-view class="small-button" bindtap="togglePause">{{paused ? '继续' : '暂停'}}</cover-view>
+    </cover-view>
+    <cover-view class="hud-row">
+      <cover-view>生命 {{hp}} / {{maxHp}}</cover-view>
+      <cover-view>护盾 {{shield}}</cover-view>
+      <cover-view>击杀 {{kills}}</cover-view>
+    </cover-view>
+    <cover-view class="meter"><cover-view class="hp-fill" style="width: {{hpPercent}}%;" /></cover-view>
+    <cover-view class="hud-row muted"><cover-view>Lv.{{level}} · {{xpText}}</cover-view><cover-view>感染者 {{enemyCount}} · {{threatText}}</cover-view></cover-view>
+    <cover-view class="meter xp-meter"><cover-view class="xp-fill" style="width: {{xpPercent}}%;" /></cover-view>
+  </cover-view>
+
+  <cover-view wx:if="{{started &amp;&amp; !ended}}" class="controls" style="bottom: {{safeBottom + 12}}px;" hidden="{{draftOpen || levelUpOpen || pauseOpen || ended}}">
+    <cover-view class="status-line">{{statusText}}</cover-view>
+    <cover-view class="movement-row">
+      <cover-view id="joystick" class="joystick" catchtouchstart="onJoystickStart" catchtouchmove="onJoystickMove" catchtouchend="onJoystickEnd" catchtouchcancel="onJoystickEnd">
+        <cover-view class="stick-knob" style="transform: translate({{stickX}}px, {{stickY}}px);" />
+      </cover-view>
+      <cover-view class="fire-info"><cover-view class="fire-title">突击步枪</cover-view><cover-view>{{fireText}}</cover-view><cover-view class="hint">轻推行走 · 重推奔跑</cover-view></cover-view>
+    </cover-view>
+    <cover-view class="skill-slots">
+      <cover-view wx:for="{{skillSlots}}" wx:key="id" class="skill-slot {{item.tone}}"><cover-view class="slot-icon">{{item.short}}</cover-view><cover-view class="slot-level">{{item.levelText}}</cover-view></cover-view>
+    </cover-view>
+  </cover-view>
+
+  <cover-view wx:if="{{adminEnabled}}" class="admin-toggle" style="top: {{safeTop + 140}}px;" bindtap="toggleAdmin" hidden="{{draftOpen || levelUpOpen || pauseOpen || ended}}">调试</cover-view>
+  <cover-view wx:if="{{adminOpen}}" class="admin-panel" style="top: {{safeTop + 176}}px;" hidden="{{draftOpen || levelUpOpen || pauseOpen || ended}}">
+    <cover-view class="admin-title">{{admin.status}} · {{admin.fps}} FPS · Tick {{admin.tick}}</cover-view>
+    <cover-view class="admin-stat">感染者 {{enemyCount}} / {{enemyCap}} · {{admin.spawnRate}}</cover-view>
+    <cover-view class="admin-stat">弹丸 / 粒子 / 样本 {{admin.objects}}</cover-view>
+    <cover-view class="admin-stat">{{admin.weapon}} · 目标 {{admin.target}}</cover-view>
+    <cover-view class="admin-stat">位置 {{admin.position}} · {{admin.quality}}</cover-view>
+    <cover-view class="admin-buttons">
+      <cover-view class="admin-action" bindtap="adminPause">暂停 / 继续</cover-view><cover-view class="admin-action" bindtap="adminStep">单步</cover-view><cover-view class="admin-action" bindtap="adminSpawn">生成 +20</cover-view>
+      <cover-view class="admin-action" bindtap="adminForceLevel">升级</cover-view><cover-view class="admin-action" bindtap="adminGod">无敌 {{godMode ? '开' : '关'}}</cover-view><cover-view class="admin-action" bindtap="adminHeal">治疗</cover-view>
+      <cover-view class="admin-action" bindtap="adminHitboxes">判定 {{showHitboxes ? '开' : '关'}}</cover-view><cover-view class="admin-action" bindtap="adminQuality">{{lowQuality ? '标准' : '省电'}}</cover-view><cover-view class="admin-action" bindtap="copySnapshot">复制快照</cover-view>
+      <cover-view class="admin-action" bindtap="clearLog">清空日志</cover-view><cover-view class="admin-action" bindtap="startRun">重新开始</cover-view><cover-view class="admin-action" bindtap="toggleAdmin">收起</cover-view>
+    </cover-view>
+    <cover-view class="admin-log">{{admin.log}}</cover-view>
+  </cover-view>
+
+  <view wx:if="{{draftOpen}}" class="overlay">
+    <view class="modal draft-modal">
+      <text class="eyebrow">LAST NIGHT SURVIVOR</text>
+      <text class="modal-title">守住最后一夜</text>
+      <text class="modal-subtitle">身体保持直立，双臂自动瞄准。拖动摇杆移动，存活 3 分钟等待撤离。</text>
+      <view class="fixed-build"><text>突击步枪 · 自动射击</text><text>求生本能 · 护盾补给</text></view>
+      <scroll-view class="draft-options" scroll-y="true">
+        <view class="section-title">核心战术 {{selectedCoreCount}} / 3</view>
+        <view wx:for="{{draftCore}}" wx:key="id" class="draft-choice {{item.selected ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="toggleDraftCore"><text class="choice-name">{{item.selected ? '●' : '○'}} {{item.name}}</text><text class="choice-description">{{item.description}}</text></view>
+        <view class="section-title">生存增益 {{selectedBoostCount}} / 2</view>
+        <view wx:for="{{draftBoost}}" wx:key="id" class="draft-choice {{item.selected ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="toggleDraftBoost"><text class="choice-name">{{item.selected ? '●' : '○'}} {{item.name}}</text><text class="choice-description">{{item.description}}</text></view>
+      </scroll-view>
+      <view class="modal-actions"><button class="secondary" bindtap="rerollDraft">换一组</button><button class="primary" bindtap="confirmDraft" disabled="{{selectedCoreCount !== 3 || selectedBoostCount !== 2}}">锁定构筑，出发</button></view>
+    </view>
+  </view>
+
+  <view wx:if="{{levelUpOpen}}" class="overlay">
+    <view class="modal">
+      <text class="eyebrow">Lv.{{level}}</text><text class="modal-title">选择一项强化</text><text class="modal-subtitle">强化本局已锁定的技能</text>
+      <view wx:for="{{levelChoices}}" wx:key="id" class="upgrade-choice {{item.tone}}" data-id="{{item.id}}" bindtap="upgradeSkill"><text class="choice-name">{{item.name}} · Lv.{{item.level}} → {{item.nextLevel}}</text><text class="choice-description">{{item.description}}</text></view>
+    </view>
+  </view>
+
+  <view wx:if="{{pauseOpen}}" class="overlay">
+    <view class="modal compact"><text class="eyebrow">火力暂歇</text><text class="modal-title">已暂停</text><text class="modal-subtitle">撤离倒计时和战斗已停止</text><button class="primary" bindtap="resumeRun">继续生存</button><button class="secondary wide" bindtap="startRun">重新开始</button></view>
+  </view>
+
+  <view wx:if="{{ended}}" class="overlay">
+    <view class="modal compact"><text class="eyebrow">LAST NIGHT SURVIVOR</text><text class="modal-title">{{endTitle}}</text><text class="modal-subtitle">{{endText}}</text><button class="primary" bindtap="startRun">再守一夜</button></view>
+  </view>
+</view>

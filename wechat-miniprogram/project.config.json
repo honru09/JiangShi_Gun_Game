@@ -1,5 +1,5 @@
 {
-  "description": "西游八十一劫竖屏2D测试版",
+  "description": "尸潮：最后一夜竖屏2D测试版",
   "packOptions": {
     "ignore": []
   },
@@ -15,7 +15,7 @@
   "compileType": "miniprogram",
   "libVersion": "trial",
   "appid": "touristappid",
-  "projectname": "xiyou-eighty-one-calamities-test",
+  "projectname": "last-night-survivor-test",
   "miniprogramRoot": "miniprogram/",
   "condition": {}
 }
