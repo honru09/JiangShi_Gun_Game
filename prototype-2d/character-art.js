@@ -108,7 +108,11 @@
     function infectedArm(context, type, facing, rear, armBob) {
       const part = parts.get(`${type}.arm`)
       context.save()
-      context.scale(facing, 1)
+      // The atlas arm is drawn from sleeve (left) to hand (right). Mirror the
+      // far arm so it leaves the far shoulder instead of travelling through
+      // the torso and disappearing under the body. This keeps both hands
+      // visible while preserving the zombie's forward-facing pose.
+      context.scale(facing * (rear ? -1 : 1), 1)
       context.translate(rear ? -11 : 10, rear ? -17 : -11)
       context.rotate(rear ? -.035 + armBob * .01 : -.08 - armBob * .01)
       const scale = Math.min((rear ? 38 : 34) / part.source.width, 22 / part.source.height)
@@ -134,8 +138,10 @@
         const phase = stride * side
         leg(context, "hero", { x: side * 8, y: 4 }, { x: side * 8 + phase * 5, y: 30 + phase * 8 }, side)
       }
-      heroArm(context, player, true)
       body(context, "hero", -lift * 1.6)
+      // Render both arms over the torso so the far hand cannot be hidden by
+      // the large illustrated body. The rifle remains between the two hands.
+      heroArm(context, player, true)
       // A tall head would hide the unchanged upward muzzle, so keep the rifle readable in every aim direction.
       options.drawWeapon?.()
       // Keep the near arm and palm over the chest/rifle, including upward aim.
