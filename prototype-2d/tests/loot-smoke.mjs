@@ -139,6 +139,12 @@ export function runLootChecks() {
   collect(shotgunPage.debug, "shotgun", "rare");
   assert.equal(shotgunPage.debug.state.weapon.id, "shotgun");
   assert(shotgunPage.debug.modifiers.pellets > commonPage.debug.modifiers.pellets);
+  const lowerGunPage = bootPage(); lowerGunPage.start(); lowerGunPage.debug.state.godMode = true;
+  collect(lowerGunPage.debug, "shotgun", "epic");
+  lowerGunPage.debug.state.player.hp = 1;
+  collect(lowerGunPage.debug, "shotgun", "rare");
+  assert.equal(lowerGunPage.debug.state.weapon.quality, "epic", "a lower-quality duplicate firearm does not replace the current weapon");
+  assert(lowerGunPage.debug.state.player.hp > 1, "a lower-quality duplicate firearm becomes medical supplies");
   console.log("PASS skill and firearm quality affect actual combat values; picking up a shotgun changes the equipped firearm");
 
   collect(debug, "incendiaryMagazine"); collect(debug, "armorLining");
