@@ -18,16 +18,21 @@
   </cover-view>
 
   <cover-view wx:if="{{started &amp;&amp; !ended}}" class="controls" style="bottom: {{safeBottom + 12}}px;" hidden="{{draftOpen || levelUpOpen || pauseOpen || ended}}">
-    <cover-view class="status-line">{{statusText}}</cover-view>
+    <cover-view wx:if="{{statusText}}" class="status-line">{{statusText}}</cover-view>
     <cover-view wx:if="{{artFailed}}" class="art-status">{{artStatus}}</cover-view>
     <cover-view class="movement-row">
       <cover-view id="joystick" class="joystick" catchtouchstart="onJoystickStart" catchtouchmove="onJoystickMove" catchtouchend="onJoystickEnd" catchtouchcancel="onJoystickEnd">
         <cover-view class="stick-knob" style="transform: translate({{stickX}}px, {{stickY}}px);" />
       </cover-view>
-      <cover-view class="fire-info"><cover-view class="fire-title">突击步枪</cover-view><cover-view>{{fireText}}</cover-view><cover-view class="hint">轻推行走 · 重推奔跑</cover-view></cover-view>
+      <cover-view class="movement-hint">拖动移动</cover-view>
     </cover-view>
-    <cover-view class="skill-slots">
-      <cover-view wx:for="{{skillSlots}}" wx:key="id" class="skill-slot {{item.tone}}"><cover-view class="slot-icon">{{item.short}}</cover-view><cover-view class="slot-level">{{item.levelText}}</cover-view></cover-view>
+    <cover-view class="skill-groups">
+      <cover-view wx:for="{{skillGroups}}" wx:for-item="group" wx:key="id" class="skill-group {{group.id}}">
+        <cover-view class="group-label">{{group.label}}</cover-view>
+        <cover-view class="skill-slots">
+          <cover-view wx:for="{{group.slots}}" wx:for-item="slot" wx:key="id" class="skill-slot {{slot.tone}} {{slot.empty ? 'empty' : ''}}"><cover-view class="slot-icon">{{slot.short}}</cover-view><cover-view class="slot-level">{{slot.levelText}}</cover-view></cover-view>
+        </cover-view>
+      </cover-view>
     </cover-view>
   </cover-view>
 
@@ -49,25 +54,23 @@
   </cover-view>
 
   <view wx:if="{{draftOpen}}" class="overlay">
-    <view class="modal draft-modal">
+    <view class="modal start-modal">
       <text class="eyebrow">LAST NIGHT SURVIVOR</text>
       <text class="modal-title">守住最后一夜</text>
-      <text class="modal-subtitle">身体保持直立，双臂自动瞄准。拖动摇杆移动，存活 3 分钟等待撤离。</text>
-      <view class="fixed-build"><text>突击步枪 · 自动射击</text><text>求生本能 · 护盾补给</text></view>
-      <scroll-view class="draft-options" scroll-y="true">
-        <view class="section-title">核心战术 {{selectedCoreCount}} / 3</view>
-        <view wx:for="{{draftCore}}" wx:key="id" class="draft-choice {{item.selected ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="toggleDraftCore"><text class="choice-name">{{item.selected ? '●' : '○'}} {{item.name}}</text><text class="choice-description">{{item.description}}</text></view>
-        <view class="section-title">生存增益 {{selectedBoostCount}} / 2</view>
-        <view wx:for="{{draftBoost}}" wx:key="id" class="draft-choice {{item.selected ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="toggleDraftBoost"><text class="choice-name">{{item.selected ? '●' : '○'}} {{item.name}}</text><text class="choice-description">{{item.description}}</text></view>
-      </scroll-view>
-      <view class="modal-actions"><button class="secondary" bindtap="rerollDraft">换一组</button><button class="primary" bindtap="confirmDraft" disabled="{{selectedCoreCount !== 3 || selectedBoostCount !== 2}}">锁定构筑，出发</button></view>
+      <text class="modal-subtitle">拖动摇杆移动，自动射击。存活 3 分钟，等待撤离。</text>
+      <view class="fixed-build"><text>突击步枪</text><text>求生本能</text></view>
+      <view class="start-rule"><text class="rule-title">升级时随机三选一</text><text class="choice-description">收集样本获得技能，逐步填满 3 个战术槽与 2 个增益槽；重复选择提升星级。</text></view>
+      <button class="primary wide" bindtap="confirmDraft">开始生存</button>
     </view>
   </view>
 
   <view wx:if="{{levelUpOpen}}" class="overlay">
     <view class="modal">
-      <text class="eyebrow">Lv.{{level}}</text><text class="modal-title">选择一项强化</text><text class="modal-subtitle">强化本局已锁定的技能</text>
-      <view wx:for="{{levelChoices}}" wx:key="id" class="upgrade-choice {{item.tone}}" data-id="{{item.id}}" bindtap="upgradeSkill"><text class="choice-name">{{item.name}} · Lv.{{item.level}} → {{item.nextLevel}}</text><text class="choice-description">{{item.description}}</text></view>
+      <text class="eyebrow">Lv.{{level}} · 战斗已暂停</text><text class="modal-title">选择一项技能</text><text class="modal-subtitle">战术 {{selectedCoreCount}} / 3 · 增益 {{selectedBoostCount}} / 2</text>
+      <view wx:for="{{levelChoices}}" wx:key="id" class="upgrade-choice {{item.tone}}" data-id="{{item.id}}" bindtap="upgradeSkill">
+        <view class="choice-meta"><text class="choice-action {{item.level === 0 ? 'new' : ''}}">{{item.actionText}} · {{item.tone === 'core' ? '战术' : '增益'}}</text><text class="choice-stars">{{item.starsText}}</text></view>
+        <text class="choice-name">{{item.name}}</text><text class="choice-description">{{item.description}}</text>
+      </view>
     </view>
   </view>
 
