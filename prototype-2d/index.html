@@ -443,6 +443,8 @@
       worldWidth: WORLD_WIDTH,
       worldHeight: WORLD_HEIGHT,
       worldMargin: 24,
+      cameraTopGutter: 260,
+      cameraBottomGutter: 310,
       mapAreaScale: 4,
       firstHordeTime: 15,
       hordeInterval: 10,
@@ -783,7 +785,7 @@
     }
 
     function cameraFor(player) {
-      return { x: clamp(player.x - WIDTH / 2, 0, WORLD_WIDTH - WIDTH), y: clamp(player.y - HEIGHT * .54, 0, WORLD_HEIGHT - HEIGHT) }
+      return { x: clamp(player.x - WIDTH / 2, 0, WORLD_WIDTH - WIDTH), y: clamp(player.y - HEIGHT * .54, -CONFIG.cameraTopGutter, WORLD_HEIGHT - HEIGHT + CONFIG.cameraBottomGutter) }
     }
 
     function buildingHitFraction(ax, ay, bx, by, padding = 0) {

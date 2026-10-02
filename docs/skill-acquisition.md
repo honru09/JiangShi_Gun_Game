@@ -32,7 +32,21 @@
 - `node scripts/verify-combat.mjs --web-only`
 - 浏览器手机视口检查新技能卡、分组技能栏及暂停技能说明。
 
-实际执行结果与局限在完成验证后补充。仓库验证包含小程序既有的竖屏声明检查；该端暂停更新时需如实记录其基线失败项。
+## 实际验证结果（2026-10-02）
+
+| 检查 | 结果 |
+| --- | --- |
+| `node scripts/validate.mjs` | 失败 1 项：小程序既有 `app.json` 未声明 `window.pageOrientation=portrait`；其余 JavaScript、JSON 和项目目录检查通过。按用户要求不修改该端，仓库总门禁未通过。 |
+| `node --check prototype-2d/city-map.js` | 通过。 |
+| `node scripts/verify-skills.mjs` | 网页模型与浏览器通过：仅两项基础技能、随机三选一、获取/升星、类别容量、满星与少量候选、非法选择、连续六次升级冻结、医疗补给、重开；390×844 和 320×568 界面通过。 |
+| `node prototype-2d/tests/city-map-smoke.mjs` | 地图模型与浏览器通过：四倍面积、48 栋建筑、中央出生、碰撞/贴墙滑动、感染者绕房和墙边恢复、视窗跟随与四角限制、附近安全刷怪、墙体阻挡索敌/弹丸；手机四角人物均避开 HUD、摇杆和技能栏。 |
+| `node scripts/verify-combat.mjs --web-only` | 桌面及触控浏览器通过：启动/移动/停止/暂停、贴身射击、179 秒模拟尸潮压力、160/104 感染者上限、180 秒撤离与结算冻结；普通入口隐藏调试工具。 |
+| `node prototype-2d/tests/combat-smoke.mjs` | 集成后再运行通过：真实页面脚本的移动、墙体/世界边界、暂停、获取技能、贴身射击、死亡冻结、160/104 峰值、三分钟撤离及重开。 |
+| `git diff --check` | 通过；小程序目录相对基线 `f243d22` 的差异为空。 |
+
+城市模块另经独立模拟验证：可走网格连通、24 条绕行追击路线、184 个房侧玩家接近场景通过。静态地形只绘制一次。
+
+浏览器检查使用本机已有 Playwright 和 Edge，测试时指定 `PLAYWRIGHT_MODULE_PATH`。截图与结果保存在工作树的忽略目录 `evidence/local/skill-acquisition/`、`evidence/local/city-map/` 和 `evidence/local/firearms-motion/`，不作为发布或真人试玩证据。
 
 ## 保留边界
 
