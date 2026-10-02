@@ -533,8 +533,9 @@
         weaponQualityMultiplier: weaponQuality,
         bulletSpeed: weapon.speed + level("armorPiercingBolt") * 28,
         bulletLife: weapon.life,
-        pierce: Math.floor(level("armorPiercingBolt")),
-        pellets: weapon.pellets + (level("scatterModule") ? 1 + Math.floor(level("scatterModule")) : 0),
+        // Discrete counts round upward so a higher quality ball changes gameplay at Lv.1.
+        pierce: Math.ceil(level("armorPiercingBolt")),
+        pellets: weapon.pellets + (level("scatterModule") ? 1 + Math.ceil(level("scatterModule")) : 0),
         spread: weapon.spread || (level("scatterModule") ? .08 + level("scatterModule") * .018 : 0),
         burn: level("incendiaryMagazine"),
         arc: level("arcGenerator"),
@@ -1003,7 +1004,7 @@
       state.player.arcTimer = .45
       const visited = new Set([origin.id])
       let previous = origin
-      for (let hop = 0; hop < Math.floor(level) + 1; hop += 1) {
+      for (let hop = 0; hop < Math.ceil(level) + 1; hop += 1) {
         const target = nearestEnemy(previous.x, previous.y, visited, 145 + level * 12)
         if (!target) break
         state.arcs.push({ x: previous.x, y: previous.y, tx: target.x, ty: target.y, life: .16 })
