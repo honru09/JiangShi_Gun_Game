@@ -14,6 +14,7 @@
 .xp-fill { height: 100%; background: #7aafb0; }
 .controls { position: absolute; left: 16px; right: 16px; z-index: 2; }
 .status-line { font-size: 11px; text-align: center; color: #b7c5b2; margin-bottom: 10px; }
+.art-status { font-size: 10px; text-align: center; color: #e2b586; margin-bottom: 6px; }
 .movement-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .joystick { width: 108px; height: 108px; border-radius: 54px; border: 1px solid #71847b; background: rgba(35, 50, 47, .8); display: flex; justify-content: center; align-items: center; overflow: visible; }
 .stick-knob { width: 40px; height: 40px; border-radius: 20px; background: #788d7b; border: 2px solid #b6c5a9; }

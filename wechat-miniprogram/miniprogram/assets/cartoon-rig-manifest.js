@@ -1,0 +1,131 @@
+module.exports = {
+  "version": "cartoon-rig-v2",
+  "image": "cartoon-rig-v1.png",
+  "width": 1619,
+  "height": 971,
+  "characters": {
+    "hero": {
+      "body": {
+        "x": 29,
+        "y": 18,
+        "width": 288,
+        "height": 386
+      },
+      "arm": {
+        "x": 36,
+        "y": 432,
+        "width": 268,
+        "height": 174
+      },
+      "leg": {
+        "x": 55,
+        "y": 606,
+        "width": 222,
+        "height": 348
+      }
+    },
+    "walker": {
+      "body": {
+        "x": 338,
+        "y": 18,
+        "width": 275,
+        "height": 393
+      },
+      "arm": {
+        "x": 348,
+        "y": 430,
+        "width": 286,
+        "height": 184
+      },
+      "leg": {
+        "x": 389,
+        "y": 609,
+        "width": 223,
+        "height": 346
+      }
+    },
+    "runner": {
+      "body": {
+        "x": 644,
+        "y": 19,
+        "width": 282,
+        "height": 393
+      },
+      "arm": {
+        "x": 660,
+        "y": 428,
+        "width": 285,
+        "height": 186
+      },
+      "leg": {
+        "x": 704,
+        "y": 609,
+        "width": 215,
+        "height": 345
+      }
+    },
+    "brute": {
+      "body": {
+        "x": 904,
+        "y": 24,
+        "width": 388,
+        "height": 396
+      },
+      "arm": {
+        "x": 949,
+        "y": 420,
+        "width": 332,
+        "height": 203
+      },
+      "leg": {
+        "x": 997,
+        "y": 605,
+        "width": 267,
+        "height": 349
+      }
+    },
+    "bloater": {
+      "body": {
+        "x": 1288,
+        "y": 30,
+        "width": 322,
+        "height": 398
+      },
+      "arm": {
+        "x": 1312,
+        "y": 423,
+        "width": 287,
+        "height": 196
+      },
+      "leg": {
+        "x": 1356,
+        "y": 611,
+        "width": 228,
+        "height": 343
+      }
+    },
+    "crawler": {
+      "image": "cartoon-crawler-v1.png",
+      "imageWidth": 2172,
+      "imageHeight": 724,
+      "body": {
+        "x": 37,
+        "y": 57,
+        "width": 914,
+        "height": 556
+      },
+      "arm": {
+        "x": 1018,
+        "y": 120,
+        "width": 608,
+        "height": 531
+      },
+      "leg": {
+        "x": 1666,
+        "y": 112,
+        "width": 459,
+        "height": 541
+      }
+    }
+  }
+};

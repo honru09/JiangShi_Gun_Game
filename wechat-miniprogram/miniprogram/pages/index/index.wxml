@@ -19,6 +19,7 @@
 
   <cover-view wx:if="{{started &amp;&amp; !ended}}" class="controls" style="bottom: {{safeBottom + 12}}px;" hidden="{{draftOpen || levelUpOpen || pauseOpen || ended}}">
     <cover-view class="status-line">{{statusText}}</cover-view>
+    <cover-view wx:if="{{artFailed}}" class="art-status">{{artStatus}}</cover-view>
     <cover-view class="movement-row">
       <cover-view id="joystick" class="joystick" catchtouchstart="onJoystickStart" catchtouchmove="onJoystickMove" catchtouchend="onJoystickEnd" catchtouchcancel="onJoystickEnd">
         <cover-view class="stick-knob" style="transform: translate({{stickX}}px, {{stickY}}px);" />
@@ -37,6 +38,7 @@
     <cover-view class="admin-stat">弹丸 / 粒子 / 样本 {{admin.objects}}</cover-view>
     <cover-view class="admin-stat">{{admin.weapon}} · 目标 {{admin.target}}</cover-view>
     <cover-view class="admin-stat">位置 {{admin.position}} · {{admin.quality}}</cover-view>
+    <cover-view class="admin-stat">{{artStatus}}</cover-view>
     <cover-view class="admin-buttons">
       <cover-view class="admin-action" bindtap="adminPause">暂停 / 继续</cover-view><cover-view class="admin-action" bindtap="adminStep">单步</cover-view><cover-view class="admin-action" bindtap="adminSpawn">生成 +20</cover-view>
       <cover-view class="admin-action" bindtap="adminForceLevel">升级</cover-view><cover-view class="admin-action" bindtap="adminGod">无敌 {{godMode ? '开' : '关'}}</cover-view><cover-view class="admin-action" bindtap="adminHeal">治疗</cover-view>

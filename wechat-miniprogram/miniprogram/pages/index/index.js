@@ -1,3 +1,6 @@
+const { createCharacterRenderer, drawCartoonRifle } = require('../../renderers/cartoon-characters')
+const characterManifest = require('../../assets/cartoon-rig-manifest.js')
+
 const TICK_MS = 33
 const TICK_SECONDS = TICK_MS / 1000
 const VIEW_WIDTH = 15.5
@@ -165,6 +168,16 @@ const INFECTED_TYPES = {
     xp: 3,
     body: '#707d43',
     accent: '#d6dd58'
+  },
+  crawler: {
+    name: '爬行感染者',
+    hp: 48,
+    speed: 0.44,
+    damage: 7,
+    radius: 0.36,
+    xp: 2,
+    body: '#967044',
+    accent: '#dbc172'
   }
 }
 
@@ -185,6 +198,8 @@ Page({
     godMode: false,
     showHitboxes: false,
     lowQuality: false,
+    artStatus: '角色素材载入中',
+    artFailed: false,
     hp: 100,
     maxHp: 100,
     hpPercent: 100,
@@ -238,6 +253,8 @@ Page({
     this._joystickRect = null
     this._timer = null
     this._context = null
+    this._unloaded = false
+    this._characterArt = null
     this._uiClock = 0
     this._perf = {
       frames: 0,
@@ -257,6 +274,12 @@ Page({
 
   onReady() {
     this._context = wx.createCanvasContext('battleCanvas', this)
+    this._characterArt = createCharacterRenderer(wx, characterManifest, art => {
+      if (this._unloaded) return
+      this.setData({ artStatus: art.statusText, artFailed: art.status === 'failed' })
+      this.draw()
+    })
+    this._characterArt.load()
     this.measureJoystick()
     this.startRun()
     this._timer = setInterval(() => this.frame(), TICK_MS)
@@ -275,6 +298,7 @@ Page({
   },
 
   onUnload() {
+    this._unloaded = true
     if (this._timer) clearInterval(this._timer)
     this._timer = null
   },
@@ -904,6 +928,7 @@ Page({
     }
     const healthScale = 1 + state.elapsed / 260
     const speedScale = 1 + Math.min(0.7, state.elapsed / 120)
+    const motion = type === 'runner' ? 'run' : type === 'brute' ? 'hop' : type === 'crawler' ? 'crawl' : 'walk'
     state.enemies.push({
       id: state.nextEnemyId,
       type,
@@ -915,6 +940,12 @@ Page({
       maxHp: definition.hp * healthScale,
       speed: definition.speed * speedScale,
       baseSpeed: definition.speed,
+      motion,
+      motionTime: 0,
+      hopPhase: 0,
+      hopHeight: 0,
+      hopDirX: 0,
+      hopDirY: 0,
       damage: definition.damage * (1 + state.elapsed / 620),
       xp: definition.xp,
       phase: this.random() * Math.PI * 2,
@@ -935,6 +966,7 @@ Page({
     const roll = this.random()
     if (elapsed >= 60 && roll < 0.08) return 'bloater'
     if (elapsed >= 45 && roll < 0.17) return 'brute'
+    if (elapsed >= 40 && roll >= 0.43 && roll < 0.55) return 'crawler'
     if (elapsed >= 30 && roll < 0.43) return 'runner'
     return 'shambler'
   },
@@ -953,22 +985,51 @@ Page({
       const deltaX = player.x - enemy.x
       const deltaY = player.y - enemy.y
       const distance = Math.max(0.001, Math.hypot(deltaX, deltaY))
-      const wobble = Math.sin(state.elapsed * 3.2 + enemy.phase) * 0.11
+      const wobble = enemy.motion === 'crawl' ? Math.sin(state.elapsed * 2.4 + enemy.phase) * 0.055 : Math.sin(state.elapsed * 3.2 + enemy.phase) * 0.11
       const directionX = deltaX / distance
       const directionY = deltaY / distance
       const sideX = -directionY * wobble
       const sideY = directionX * wobble
       const slowMultiplier = 1 - enemy.slowPower
+      let moveMultiplier = 1
+      enemy.motionTime = (enemy.motionTime + deltaTime) % (enemy.motion === 'hop' ? 2.6 : 2)
+      enemy.hopPhase = enemy.motionTime
+      if (enemy.motion === 'hop') {
+        const phase = enemy.motionTime
+        if (phase < 0.6) {
+          moveMultiplier = 0
+          enemy.hopHeight = 0
+        } else if (phase < 1.05) {
+          if (enemy.hopPhase - deltaTime < 0.6) {
+            enemy.hopDirX = directionX
+            enemy.hopDirY = directionY
+          }
+          moveMultiplier = 4.8
+          enemy.hopHeight = 0.4 * Math.sin((phase - 0.6) / 0.45 * Math.PI)
+        } else if (phase < 1.4) {
+          moveMultiplier = 0.4
+          enemy.hopHeight = 0.4 * (1 - (phase - 1.05) / 0.35)
+        } else {
+          moveMultiplier = 1
+          enemy.hopHeight = 0
+        }
+      } else {
+        enemy.hopHeight = 0
+      }
       const previousX = enemy.x
       const previousY = enemy.y
-      enemy.x += (directionX + sideX) * enemy.speed * slowMultiplier * deltaTime
-      enemy.y += (directionY + sideY) * enemy.speed * slowMultiplier * deltaTime
+      const motionX = enemy.motion === 'hop' && enemy.hopHeight > 0 ? enemy.hopDirX : directionX
+      const motionY = enemy.motion === 'hop' && enemy.hopHeight > 0 ? enemy.hopDirY : directionY
+      enemy.x += (motionX + sideX) * enemy.speed * slowMultiplier * moveMultiplier * deltaTime
+      enemy.y += (motionY + sideY) * enemy.speed * slowMultiplier * moveMultiplier * deltaTime
       const moved = Math.hypot(enemy.x - previousX, enemy.y - previousY)
       enemy.moveAmount = this.clamp(moved / Math.max(0.001, enemy.speed * deltaTime), 0, 1)
-      enemy.gaitPhase += moved * (enemy.type === 'runner' ? 7.2 : enemy.type === 'brute' ? 3.4 : 4.8)
-      if (Math.abs(deltaX) > 0.15) enemy.facing = deltaX > 0 ? 1 : -1
-      enemy.angle = Math.atan2(directionY, directionX)
-      if (distance <= enemy.radius + player.radius + 0.08 && enemy.attackCooldown <= 0) {
+      enemy.gaitPhase += moved * (enemy.type === 'runner' ? 7.2 : enemy.type === 'brute' ? 3.4 : enemy.type === 'crawler' ? 6.2 : 4.8)
+      const facingDirection = enemy.motion === 'hop' && enemy.hopHeight > 0.12 ? enemy.hopDirX : deltaX
+      if (Math.abs(facingDirection) > 0.15) enemy.facing = facingDirection > 0 ? 1 : -1
+      enemy.angle = Math.atan2(motionY, motionX)
+      const airborne = enemy.motion === 'hop' && enemy.hopHeight > 0.12
+      if (!airborne && distance <= enemy.radius + player.radius + 0.08 && enemy.attackCooldown <= 0) {
         enemy.attackCooldown = enemy.type === 'runner' ? 0.72 : 1.02
         this.hurtPlayer(enemy)
         enemy.x -= directionX * 0.34
@@ -1476,6 +1537,7 @@ Page({
       time: Number(state.elapsed.toFixed(2)),
       duration: RUN_SECONDS,
       remaining: Number(Math.max(0, RUN_SECONDS - state.elapsed).toFixed(2)),
+      art: { version: characterManifest.version, status: this._characterArt ? this._characterArt.status : 'loading', source: characterManifest.image },
       level: state.level,
       hp: Number(state.player.hp.toFixed(1)),
       shield: state.player.shield,
@@ -1544,6 +1606,7 @@ Page({
         spawnRate: `${state.spawnRate.toFixed(1)}/s · 第 ${state.hordeWave} 波`,
         quality: `${state.lowQuality ? '省电' : '标准'} · ${cap}`,
         build: state.selectedCore.length ? '3 战术 + 2 增益' : '未锁定',
+        art: this.data.artStatus,
         log: state.logs.join('\n') || '等待事件…'
       }
     })
@@ -1664,34 +1727,34 @@ Page({
     context.translate(player.x, player.y)
     if (player.invuln > 0 && Math.floor(player.invuln * 16) % 2) context.setGlobalAlpha(0.55)
     this.ellipse(0, 0.68, 0.42, 0.16, '#0a1011')
-    const stride = Math.sin(player.gaitPhase) * player.moveAmount
-    const strideSize = 0.11 + player.moveAmount * 0.2
-    // Screen-up torso and head stay upright; only the limbs and rifle articulate.
-    for (let side = -1; side <= 1; side += 2) {
-      const legStride = stride * side * strideSize
-      const hipX = side * 0.13
-      const kneeX = hipX + legStride * 0.28
-      const kneeY = 0.39 - Math.abs(legStride) * 0.1
-      const footX = hipX + legStride * 0.48
-      const footY = 0.65 + legStride
-      this.line(hipX, 0.11, kneeX, kneeY, '#536353', 0.17)
-      this.line(kneeX, kneeY, footX, footY, '#435449', 0.15)
-      this.line(footX - 0.055, footY + 0.015, footX + 0.065, footY + 0.015, '#0e171b', 0.17)
+    const illustrated = this._characterArt && this._characterArt.drawHero(context, player)
+    if (!illustrated) {
+      const stride = Math.sin(player.gaitPhase) * player.moveAmount
+      const strideSize = 0.11 + player.moveAmount * 0.2
+      // Screen-up torso and head stay upright; only the limbs and rifle articulate.
+      for (let side = -1; side <= 1; side += 2) {
+        const legStride = stride * side * strideSize
+        const hipX = side * 0.13
+        const kneeX = hipX + legStride * 0.28
+        const kneeY = 0.39 - Math.abs(legStride) * 0.1
+        const footX = hipX + legStride * 0.48
+        const footY = 0.65 + legStride
+        this.line(hipX, 0.11, kneeX, kneeY, '#756859', 0.17)
+        this.line(kneeX, kneeY, footX, footY, '#655649', 0.15)
+        this.line(footX - 0.055, footY + 0.015, footX + 0.065, footY + 0.015, '#382b25', 0.17)
+      }
+      context.setFillStyle('#bf7750')
+      context.fillRect(-0.28, -0.47, 0.56, 0.61)
+      context.setFillStyle('#98553e')
+      context.fillRect(-0.28, -0.37, 0.09, 0.5)
+      context.setFillStyle('#584332')
+      context.fillRect(-0.28, 0.07, 0.56, 0.09)
+      this.circle(0, -0.66, 0.24, '#dfb992', '#382a23', 0.04)
+      this.ellipse(0, -0.81, 0.23, 0.105, '#4a3327')
+      this.circle(-0.17, -0.74, 0.07, '#4a3327')
+      this.circle(-0.085, -0.64, 0.025, '#33251f')
+      this.circle(0.085, -0.64, 0.025, '#33251f')
     }
-    context.setFillStyle('#78856b')
-    context.fillRect(-0.28, -0.47, 0.56, 0.61)
-    context.setFillStyle('#34473f')
-    context.fillRect(-0.23, -0.42, 0.46, 0.46)
-    context.setFillStyle('#a4a287')
-    context.fillRect(-0.2, -0.2, 0.15, 0.18)
-    context.fillRect(0.05, -0.2, 0.15, 0.18)
-    context.setFillStyle('#1c2a2c')
-    context.fillRect(-0.28, 0.07, 0.56, 0.09)
-    this.circle(0, -0.66, 0.24, '#ccad83')
-    this.ellipse(0, -0.77, 0.27, 0.17, '#566a5f')
-    context.setFillStyle('#283735')
-    context.fillRect(-0.27, -0.77, 0.54, 0.08)
-    this.line(-0.11, -0.64, 0.11, -0.64, '#192728', 0.065)
     const angle = player.angle
     const recoil = player.recoil * 0.08
     const localPoint = (x, y) => ({
@@ -1702,50 +1765,34 @@ Page({
     const foregrip = localPoint(0.59, 0.055)
     const elbow = localPoint(0.05, 0.28)
     const supportElbow = localPoint(0.37, 0.28)
-    this.line(-0.23, -0.31, elbow.x, elbow.y, '#7b8c72', 0.17)
-    this.line(elbow.x, elbow.y, grip.x, grip.y, '#7b8c72', 0.15)
-    this.line(0.23, -0.31, supportElbow.x, supportElbow.y, '#7b8c72', 0.17)
-    this.line(supportElbow.x, supportElbow.y, foregrip.x, foregrip.y, '#7b8c72', 0.15)
+    if (!illustrated && enemy.type === 'crawler') {
+      context.save()
+      context.scale(enemy.facing || 1, 1)
+      const crawlGait = Math.sin(enemy.gaitPhase) * enemy.moveAmount
+      this.ellipse(0, 0.05, radius * 1.08, radius * 0.46, '#644b3b')
+      for (let side = -1; side <= 1; side += 2) {
+        const offset = crawlGait * side * radius * 0.18
+        this.line(-radius * 0.35, 0.02 + side * 0.03, -radius * 0.78 - offset, radius * 0.39 + side * 0.06, '#4c3d34', radius * 0.28)
+        this.line(radius * 0.36, 0.02 + side * 0.03, radius * 0.82 + offset, radius * 0.39 + side * 0.06, '#4c3d34', radius * 0.25)
+      }
+      this.circle(radius * 0.75, -0.04, radius * 0.35, '#967044')
+      context.restore()
+    } else if (!illustrated) {
+      this.line(-0.23, -0.31, elbow.x, elbow.y, '#bf7750', 0.17)
+      this.line(elbow.x, elbow.y, grip.x, grip.y, '#bf7750', 0.15)
+      this.line(0.23, -0.31, supportElbow.x, supportElbow.y, '#bf7750', 0.17)
+      this.line(supportElbow.x, supportElbow.y, foregrip.x, foregrip.y, '#bf7750', 0.15)
+    }
     context.save()
     context.translate(0.04, -0.24)
     context.rotate(angle)
     context.translate(-recoil, 0)
-    context.setFillStyle('#394c4e')
-    context.fillRect(-0.18, -0.09, 0.25, 0.18)
-    context.setFillStyle('#1b272c')
-    context.fillRect(-0.2, -0.12, 0.07, 0.24)
-    context.setFillStyle('#83958c')
-    context.fillRect(0.03, -0.11, 0.48, 0.2)
-    context.setFillStyle('#27393e')
-    context.fillRect(0.45, -0.075, 0.3, 0.14)
-    context.setFillStyle('#afbeb2')
-    context.fillRect(0.72, -0.038, 0.21, 0.07)
-    context.setFillStyle('#14242a')
-    context.fillRect(0.91, -0.07, 0.065, 0.13)
-    context.fillRect(0.22, 0.08, 0.08, 0.16)
-    context.fillRect(0.34, 0.07, 0.14, 0.22)
-    context.fillRect(0.22, -0.18, 0.16, 0.09)
-    context.setFillStyle('#c5d1b3')
-    context.fillRect(0.27, -0.175, 0.07, 0.035)
-    this.line(0.48, -0.025, 0.7, -0.025, '#9ca69b', 0.025)
-    if (state.muzzleFlash > 0) {
-      context.setGlobalAlpha(state.muzzleFlash)
-      context.setFillStyle('#ffb35b')
-      context.beginPath()
-      context.moveTo(0.96, -0.1)
-      context.lineTo(1.19, -0.17)
-      context.lineTo(1.1, -0.03)
-      context.lineTo(1.32, 0)
-      context.lineTo(1.09, 0.05)
-      context.lineTo(1.17, 0.17)
-      context.lineTo(0.96, 0.08)
-      context.closePath()
-      context.fill()
-      this.circle(1, 0, 0.075, '#fffbd0')
-    }
+    drawCartoonRifle(context, state.muzzleFlash)
     context.restore()
-    this.circle(grip.x, grip.y, 0.075, '#d4b38a')
-    this.circle(foregrip.x, foregrip.y, 0.075, '#d4b38a')
+    if (!illustrated) {
+      this.circle(grip.x, grip.y, 0.075, '#d4b38a')
+      this.circle(foregrip.x, foregrip.y, 0.075, '#d4b38a')
+    }
     if (player.shield > 0) this.circle(0, -0.05, 0.95, null, '#74b9aa', 0.025)
     context.restore()
   },
@@ -1762,42 +1809,49 @@ Page({
     context.save()
     context.translate(enemy.x, enemy.y)
     this.ellipse(0, radius * 0.75, radius, radius * 0.3, '#0c1314')
-    for (let side = -1; side <= 1; side += 2) {
-      const step = stride * side
-      const hipX = side * radius * 0.28
-      const kneeX = hipX + enemy.facing * radius * 0.16 + step * 0.4
-      const kneeY = radius * 0.44 - Math.abs(step) * 0.2
-      const footX = hipX + enemy.facing * radius * 0.04 + step * 0.75
-      const footY = radius * 0.81 + step * 0.45
-      this.line(hipX, radius * 0.08, kneeX, kneeY, '#43513f', radius * 0.28)
-      this.line(kneeX, kneeY, footX, footY, '#354239', radius * 0.26)
-      this.line(footX - radius * 0.08, footY, footX + enemy.facing * radius * 0.17, footY, '#182420', radius * 0.26)
-    }
-    context.translate(sway, -Math.abs(gait) * radius * 0.03)
-    this.ellipse(0, -radius * 0.08, radius * 0.65, radius * 0.7, color)
-    for (let side = -1; side <= 1; side += 2) {
-      const shoulderX = side * radius * 0.48
-      const elbowX = shoulderX + enemy.facing * radius * 0.32
-      const handX = shoulderX + enemy.facing * radius * 0.67
-      const handY = -radius * 0.21 + gait * radius * 0.045
-      this.line(shoulderX, -radius * 0.37, elbowX, -radius * 0.11, color, radius * 0.24)
-      this.line(elbowX, -radius * 0.11, handX, handY, color, radius * 0.22)
-      this.circle(handX, handY, radius * 0.14, definition.accent)
-    }
-    this.circle(0, -radius * 0.91, radius * 0.42, definition.accent)
-    this.circle(-radius * 0.13, -radius * 0.98, radius * 0.055, '#d55942')
-    this.circle(radius * 0.13, -radius * 0.98, radius * 0.055, '#d55942')
-    if (enemy.type === 'bloater') this.circle(0, -radius * 0.05, radius * 0.38, '#a5bf4a')
-    if (enemy.type === 'brute') {
-      context.setFillStyle('#344a49')
-      context.fillRect(-radius * 0.57, -radius * 0.5, radius * 1.14, radius * 0.61)
+    const illustrated = this._characterArt && this._characterArt.drawInfected(context, enemy)
+    if (!illustrated) {
+      for (let side = -1; side <= 1; side += 2) {
+        const step = stride * side
+        const hipX = side * radius * 0.28
+        const kneeX = hipX + enemy.facing * radius * 0.16 + step * 0.4
+        const kneeY = radius * 0.44 - Math.abs(step) * 0.2
+        const footX = hipX + enemy.facing * radius * 0.04 + step * 0.75
+        const footY = radius * 0.81 + step * 0.45
+        this.line(hipX, radius * 0.08, kneeX, kneeY, '#43513f', radius * 0.28)
+        this.line(kneeX, kneeY, footX, footY, '#354239', radius * 0.26)
+        this.line(footX - radius * 0.08, footY, footX + enemy.facing * radius * 0.17, footY, '#182420', radius * 0.26)
+      }
+      context.translate(sway, -Math.abs(gait) * radius * 0.03)
+      this.ellipse(0, -radius * 0.08, radius * 0.65, radius * 0.7, color)
+      for (let side = -1; side <= 1; side += 2) {
+        const shoulderX = side * radius * 0.48
+        const elbowX = shoulderX + enemy.facing * radius * 0.32
+        const handX = shoulderX + enemy.facing * radius * 0.67
+        const handY = -radius * 0.21 + gait * radius * 0.045
+        this.line(shoulderX, -radius * 0.37, elbowX, -radius * 0.11, color, radius * 0.24)
+        this.line(elbowX, -radius * 0.11, handX, handY, color, radius * 0.22)
+        this.circle(handX, handY, radius * 0.14, definition.accent)
+      }
+      this.circle(0, -radius * 0.91, radius * 0.42, definition.accent)
+      this.circle(-radius * 0.13, -radius * 0.98, radius * 0.055, '#d55942')
+      this.circle(radius * 0.13, -radius * 0.98, radius * 0.055, '#d55942')
+      if (enemy.type === 'bloater') this.circle(0, -radius * 0.05, radius * 0.38, '#a5bf4a')
+      if (enemy.type === 'brute') {
+        context.setFillStyle('#344a49')
+        context.fillRect(-radius * 0.57, -radius * 0.5, radius * 1.14, radius * 0.61)
+      }
     }
     if (enemy.slowTime > 0) this.circle(0, 0, radius + 0.09, null, '#85d9e0', 0.045)
     if (!state.lowQuality && enemy.hp < enemy.maxHp) {
+      const artBounds = illustrated ? this._characterArt.infectedBodyBounds(enemy) : null
+      const barWidth = artBounds ? Math.max(radius * 2, artBounds.width * 0.65) : radius * 2
+      const barX = artBounds ? artBounds.centerX - barWidth / 2 : -radius
+      const barY = artBounds ? artBounds.top - 0.17 : -radius * 1.6
       context.setFillStyle('#14201b')
-      context.fillRect(-radius, -radius * 1.6, radius * 2, 0.09)
+      context.fillRect(barX, barY, barWidth, 0.09)
       context.setFillStyle('#b2bc74')
-      context.fillRect(-radius, -radius * 1.6, radius * 2 * Math.max(0, enemy.hp / enemy.maxHp), 0.09)
+      context.fillRect(barX, barY, barWidth * Math.max(0, enemy.hp / enemy.maxHp), 0.09)
     }
     context.restore()
   },
