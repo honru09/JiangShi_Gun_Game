@@ -33,9 +33,9 @@
         blocks.push({ x: left * sx, y: top * sy, width: (right - left) * sx, height: (bottom - top) * sy })
         const shortBlock = row === 0 || row === rows.length - 1
         const houseWidth = 98
-        const houseHeight = shortBlock ? 126 : 98
+        const houseHeight = shortBlock ? 104 : 98
         const xs = [left + 18, right - 18 - houseWidth]
-        const ys = shortBlock ? [top + 28] : [top + 18, bottom - 18 - houseHeight]
+        const ys = shortBlock ? [row === 0 ? 108 : 2452 - houseHeight] : [top + 18, bottom - 18 - houseHeight]
         ys.forEach((y, side) => xs.forEach((x, part) => {
           const variant = row + col + side + part
           const kind = variant % 5 === 0 ? "shop" : variant % 3 === 0 ? "apartment" : "residential"
@@ -44,8 +44,9 @@
       })
       // Outer blocks leave open parklets between the shops and the main roads.
       if (row % 3 !== 1) {
-        const houseHeight = Math.min(166, bottom - top - 56)
-        const y = (top + bottom - houseHeight) / 2
+        let houseHeight = Math.min(166, bottom - top - 56)
+        const y = Math.max(108, (top + bottom - houseHeight) / 2)
+        houseHeight = Math.min(houseHeight, bottom - 24 - y, 2452 - y)
         addBuilding(56, y, 72, houseHeight, row % 2 ? "apartment" : "shop")
         addBuilding(1312, y + 8, 72, houseHeight - 16, row % 2 ? "residential" : "shop")
       }
@@ -204,8 +205,19 @@
       }
     }
 
-    function steer(x, y, targetX, targetY) {
-      if (lineIsFree(x, y, targetX, targetY)) return { x: targetX, y: targetY }
+    function steer(x, y, targetX, targetY, radius = NAV_RADIUS) {
+      radius = Number.isFinite(radius) ? Math.max(0, radius) : NAV_RADIUS
+      if (lineIsFree(x, y, targetX, targetY, radius)) return { x: targetX, y: targetY }
+      if (!isFree(targetX, targetY, radius)) {
+        // A larger infected can reach contact range even when the survivor is
+        // standing closer to a wall than that infected's own collision radius.
+        const length = Math.hypot(x - targetX, y - targetY)
+        const stop = Math.min(length, radius * 1.5)
+        if (length > 0) {
+          const approach = { x: targetX + (x - targetX) / length * stop, y: targetY + (y - targetY) / length * stop }
+          if (lineIsFree(x, y, approach.x, approach.y, radius)) return approach
+        }
+      }
       updateNavigation(targetX, targetY)
       const center = cell(x, y)
       const centerCol = center % gridWidth
@@ -221,7 +233,7 @@
             const p = point(index)
             const distance = Math.hypot(p.x - x, p.y - y)
             const score = flow[index] * GRID + distance * .7
-            if (score >= bestScore || !lineIsFree(x, y, p.x, p.y)) continue
+            if (score >= bestScore || !lineIsFree(x, y, p.x, p.y, radius)) continue
             bestScore = score
             bestPoint = p
           }
