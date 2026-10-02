@@ -2,9 +2,9 @@
 
 **LAST NIGHT SURVIVOR**
 
-《尸潮：最后一夜》是一个直接在现有版本上改造的竖屏 2D 僵尸肉鸽生存原型，工作目录为 `D:\Projects\Xiyou_EightyOne_Calamities`。项目同时维护网页版本与原生微信小程序版本，优先验证感染者围攻、自动战斗、局内随机构筑和移动端操作手感。
+《尸潮：最后一夜》是一个直接在现有版本上改造的竖屏 2D 僵尸肉鸽生存原型，当前工作目录为 `F:\Project\Xiyou_EightyOne_Calamities`。每局坚持三分钟后撤离，感染者从少量慢速逐步增加。项目同时维护网页版本与原生微信小程序版本。
 
-> 项目定位已经切换；现有代码是可运行的战斗基线，主题、美术、感染者密度和战术特效仍需按 `docs/ZOMBIE-SURVIVAL-DESIGN.md` 逐项改造与验收。唯一状态入口是 `STATUS.md`。
+> 本轮已补齐战斗运行代码，实现直立持枪、僵尸蹒跚步态与三分钟结算。网页浏览器回归与小程序逻辑回归已执行；微信开发者工具与真机尚未验证。唯一状态入口是 `STATUS.md`。
 
 ## 核心体验
 
@@ -35,7 +35,7 @@
 网页版本不需要 Unity 或 npm。推荐使用静态服务器，避免浏览器对本地文件的限制：
 
 ```powershell
-Set-Location D:\Projects\Xiyou_EightyOne_Calamities\prototype-2d
+Set-Location F:\Project\Xiyou_EightyOne_Calamities\prototype-2d
 py -m http.server 8080
 ```
 
@@ -51,10 +51,10 @@ py -m http.server 8080
 
 ## 本地运行微信小程序
 
-微信开发者工具已安装在 `D:\Tools\微信开发者工具`。可从界面导入 `wechat-miniprogram/`，也可使用 CLI：
+在微信开发者工具中导入 `wechat-miniprogram/`。CLI 请替换为本机实际安装路径；以下示例假定工具位于 `D:\Tools\微信开发者工具`，本轮未验证该安装：
 
 ```powershell
-& 'D:\Tools\微信开发者工具\cli.bat' open --project 'D:\Projects\Xiyou_EightyOne_Calamities\wechat-miniprogram'
+& 'D:\Tools\微信开发者工具\cli.bat' open --project 'F:\Project\Xiyou_EightyOne_Calamities\wechat-miniprogram'
 ```
 
 检查登录状态：
