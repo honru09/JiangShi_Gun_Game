@@ -366,10 +366,10 @@
         <div class="sheet">
           <p class="eyebrow">WASTELAND SURVIVAL PROTOTYPE</p>
           <h1 class="logo">尸潮：最后一夜<span>LAST NIGHT SURVIVOR</span></h1>
-          <p class="lead">坚持三分钟，等撤离车到达。移动、聚怪，突击步枪会自动锁定最近的感染者；尸潮从稀疏慢行逐渐变密。</p>
+          <p class="lead">在城市街区坚持三分钟，等撤离车到达。沿街道移动、绕过房屋，突击步枪会自动锁定视野中的感染者。</p>
           <div class="brief">
             <div class="brief-item"><strong>自动瞄准</strong><span>清晰弹道</span></div>
-            <div class="brief-item"><strong>密集尸潮</strong><span>四类感染者</span></div>
+            <div class="brief-item"><strong>城市街区</strong><span>四倍地图 · 镜头跟随</span></div>
             <div class="brief-item"><strong>升级三选一</strong><span>获取技能 · 逐步升星</span></div>
           </div>
           <button class="primary-action" id="startRun" type="button">开始生存</button>
@@ -408,22 +408,25 @@
     </main>
   </div>
 
+  <script src="city-map.js"></script>
   <script src="skills.js"></script>
   <script>
   (() => {
     "use strict"
 
     const Skills = window.WASTELAND_SKILLS
-    if (!Skills) {
-      document.getElementById("introOverlay").innerHTML = '<div class="sheet"><h2>技能配置未加载</h2><p class="lead">请将 skills.js 与 index.html 放在同一目录后重新打开。</p></div>'
+    const City = window.WASTELAND_CITY
+    if (!Skills || !City) {
+      document.getElementById("introOverlay").innerHTML = '<div class="sheet"><h2>游戏配置未加载</h2><p class="lead">请将 city-map.js、skills.js 与 index.html 放在同一目录后重新打开。</p></div>'
       return
     }
 
     const WIDTH = 720
     const HEIGHT = 1280
+    const WORLD_WIDTH = WIDTH * 2
+    const WORLD_HEIGHT = HEIGHT * 2
     const FIXED_STEP = 1 / 60
     const RUN_SECONDS = 180
-    const PLAY_BOUNDS = { left: 30, right: 690, top: 108, bottom: 1162 }
     const coarsePointer = matchMedia("(pointer: coarse)").matches
     const CONFIG = {
       enemyCap: coarsePointer ? 104 : 160,
@@ -437,6 +440,10 @@
       waveSpawnGrowth: .18,
       maxSpawnRate: 8,
       initialEnemies: 8,
+      worldWidth: WORLD_WIDTH,
+      worldHeight: WORLD_HEIGHT,
+      worldMargin: 24,
+      mapAreaScale: 4,
       firstHordeTime: 15,
       hordeInterval: 10,
       finalHordeInterval: 6,
@@ -478,17 +485,6 @@
     function formatTime(totalSeconds) { const value = Math.max(0, Math.floor(totalSeconds)); return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}` }
     function id() { entityId += 1; return entityId }
 
-    function seededRandom(seed) {
-      let value = seed >>> 0
-      return () => {
-        value += 0x6d2b79f5
-        let result = value
-        result = Math.imul(result ^ result >>> 15, result | 1)
-        result ^= result + Math.imul(result ^ result >>> 7, result | 61)
-        return ((result ^ result >>> 14) >>> 0) / 4294967296
-      }
-    }
-
     function roundedPath(target, x, y, width, height, radius) {
       const limited = Math.min(radius, width / 2, height / 2)
       target.beginPath()
@@ -500,83 +496,8 @@
       target.closePath()
     }
 
-    function makeTerrain() {
-      const surface = document.createElement("canvas")
-      surface.width = WIDTH
-      surface.height = HEIGHT
-      const target = surface.getContext("2d")
-      const random = seededRandom(81427)
-      const base = target.createLinearGradient(0, 0, WIDTH, HEIGHT)
-      base.addColorStop(0, "#263129")
-      base.addColorStop(.52, "#1a231e")
-      base.addColorStop(1, "#111814")
-      target.fillStyle = base
-      target.fillRect(0, 0, WIDTH, HEIGHT)
-
-      target.save()
-      target.translate(WIDTH * .57, HEIGHT * .49)
-      target.rotate(-.08)
-      target.fillStyle = "#2b302c"
-      target.fillRect(-160, -760, 320, 1520)
-      target.fillStyle = "#b6a45a1f"
-      for (let y = -720; y < 720; y += 130) target.fillRect(-5, y, 10, 64)
-      target.strokeStyle = "#0d110e99"
-      target.lineWidth = 4
-      for (let index = 0; index < 18; index += 1) {
-        const x = randomBetween.call({ random }, -130, 130)
-        const y = -700 + random() * 1400
-        target.beginPath()
-        target.moveTo(x, y)
-        target.lineTo(x + (random() - .5) * 35, y + 20 + random() * 40)
-        target.lineTo(x + (random() - .5) * 55, y + 52 + random() * 55)
-        target.stroke()
-      }
-      target.restore()
-
-      for (let index = 0; index < 180; index += 1) {
-        const x = random() * WIDTH
-        const y = random() * HEIGHT
-        const size = 1 + random() * 4
-        target.fillStyle = random() > .72 ? "#8b744429" : "#070b0833"
-        target.fillRect(x, y, size * 1.7, size)
-      }
-
-      target.lineCap = "round"
-      for (let index = 0; index < 34; index += 1) {
-        const x = random() * WIDTH
-        const y = 95 + random() * (HEIGHT - 170)
-        target.strokeStyle = "#090d0a88"
-        target.lineWidth = 2 + random() * 2
-        target.beginPath()
-        target.moveTo(x, y)
-        for (let part = 1; part <= 3; part += 1) target.lineTo(x + (random() - .5) * 32, y + part * (9 + random() * 8))
-        target.stroke()
-      }
-
-      const wrecks = [[86, 305, -.18], [622, 880, .2], [112, 1042, -.08]]
-      for (const [x, y, rotation] of wrecks) {
-        target.save()
-        target.translate(x, y)
-        target.rotate(rotation)
-        target.fillStyle = "#0a0e0bdd"
-        roundedPath(target, -45, -22, 90, 44, 10)
-        target.fill()
-        target.fillStyle = "#5c4835"
-        target.fillRect(-26, -17, 45, 22)
-        target.fillStyle = "#111713"
-        target.fillRect(-18, -14, 28, 12)
-        target.fillStyle = "#070a08"
-        target.beginPath(); target.arc(-31, 23, 11, 0, Math.PI * 2); target.arc(31, 23, 11, 0, Math.PI * 2); target.fill()
-        target.restore()
-      }
-
-      target.strokeStyle = "#5b6b5b35"
-      target.lineWidth = 2
-      target.strokeRect(18, 90, WIDTH - 36, HEIGHT - 120)
-      return surface
-    }
-
-    const terrain = makeTerrain()
+    const city = City.create(WORLD_WIDTH, WORLD_HEIGHT)
+    const terrain = city.terrain
 
     function modifiers() {
       const level = skillId => build.level(skillId)
@@ -607,8 +528,8 @@
     function createPlayer() {
       const stats = modifiers()
       return {
-        x: WIDTH / 2,
-        y: HEIGHT * .54,
+        x: city.spawn.x,
+        y: city.spawn.y,
         radius: 19,
         hp: stats.maxHp,
         maxHp: stats.maxHp,
@@ -668,6 +589,7 @@
         floaters: [],
         stats: { shots: 0, hits: 0, damage: 0, peakEnemies: 0, explosions: 0 },
         pendingChoices: [],
+        camera: cameraFor(city.spawn),
         lastFps: 60
       }
     }
@@ -794,11 +716,16 @@
       }
       const template = ENEMY_TYPES[type]
       let position = null
-      for (let attempt = 0; attempt < 24; attempt += 1) {
+      const camera = cameraFor(state.player)
+      for (let attempt = 0; attempt < 80; attempt += 1) {
         const edge = Math.floor(Math.random() * 4)
         const candidate = edge < 2
-          ? { x: edge === 0 ? 13 : WIDTH - 13, y: randomBetween(132, HEIGHT - 135) }
-          : { x: randomBetween(24, WIDTH - 24), y: edge === 2 ? 98 : HEIGHT - 95 }
+          ? { x: camera.x + (edge === 0 ? -64 : WIDTH + 64), y: randomBetween(camera.y - 32, camera.y + HEIGHT + 32) }
+          : { x: randomBetween(camera.x - 32, camera.x + WIDTH + 32), y: camera.y + (edge === 2 ? -64 : HEIGHT + 64) }
+        const inset = CONFIG.worldMargin + template.radius + 4
+        candidate.x = clamp(candidate.x, inset, WORLD_WIDTH - inset)
+        candidate.y = clamp(candidate.y, inset, WORLD_HEIGHT - inset)
+        if (!city.isFree(candidate.x, candidate.y, template.radius + 4)) continue
         if (distanceSquared(candidate.x, candidate.y, state.player.x, state.player.y) < 220 * 220) continue
         if (state.enemies.some(enemy => distanceSquared(candidate.x, candidate.y, enemy.x, enemy.y) < (template.radius + enemy.radius) ** 2)) continue
         position = candidate
@@ -855,11 +782,36 @@
       }
     }
 
-    function nearestEnemy(x, y, excluded = null, range = Infinity) {
+    function cameraFor(player) {
+      return { x: clamp(player.x - WIDTH / 2, 0, WORLD_WIDTH - WIDTH), y: clamp(player.y - HEIGHT * .54, 0, WORLD_HEIGHT - HEIGHT) }
+    }
+
+    function buildingHitFraction(ax, ay, bx, by, padding = 0) {
+      let closest = null
+      for (const building of city.buildings) {
+        let near = 0, far = 1
+        for (const [origin, delta, minimum, maximum] of [[ax, bx - ax, building.x - padding, building.x + building.width + padding], [ay, by - ay, building.y - padding, building.y + building.height + padding]]) {
+          if (Math.abs(delta) < .00001) {
+            if (origin < minimum || origin > maximum) { near = 2; break }
+          } else {
+            const first = (minimum - origin) / delta
+            const second = (maximum - origin) / delta
+            near = Math.max(near, Math.min(first, second))
+            far = Math.min(far, Math.max(first, second))
+          }
+        }
+        if (near <= far && (closest === null || near < closest)) closest = near
+      }
+      return closest
+    }
+
+    function nearestEnemy(x, y, excluded = null, range = Infinity, visibleOnly = false) {
       let best = null
       let squared = range * range
+      const camera = cameraFor(state.player)
       for (const enemy of state.enemies) {
         if (enemy.dead || excluded?.has(enemy.id)) continue
+        if (visibleOnly && (enemy.x < camera.x - 40 || enemy.x > camera.x + WIDTH + 40 || enemy.y < camera.y - 40 || enemy.y > camera.y + HEIGHT + 40 || buildingHitFraction(x, y, enemy.x, enemy.y) !== null)) continue
         const next = distanceSquared(x, y, enemy.x, enemy.y)
         if (next < squared) { best = enemy; squared = next }
       }
@@ -920,6 +872,13 @@
         // The rendered bullet still begins at the muzzle, then follows normal flight on later ticks.
         const collisionOrigin = bullet.sweepOrigin || { x: bullet.oldX, y: bullet.oldY }
         bullet.sweepOrigin = null
+        const wallHit = buildingHitFraction(collisionOrigin.x, collisionOrigin.y, bullet.x, bullet.y, 2)
+        if (wallHit !== null) {
+          bullet.x = lerp(collisionOrigin.x, bullet.x, wallHit)
+          bullet.y = lerp(collisionOrigin.y, bullet.y, wallHit)
+          bullet.life = 0
+          particle(bullet.x, bullet.y, "#abafa3", 2, 30)
+        }
         for (const enemy of state.enemies) {
           if (enemy.dead || bullet.hitIds.has(enemy.id)) continue
           if (segmentDistanceSquared(enemy.x, enemy.y, collisionOrigin.x, collisionOrigin.y, bullet.x, bullet.y) > (enemy.radius + 3) ** 2) continue
@@ -932,7 +891,7 @@
           if (bullet.remaining <= 0) { bullet.life = 0; break }
         }
       }
-      state.projectiles = state.projectiles.filter(bullet => bullet.life > 0 && bullet.x > -50 && bullet.x < WIDTH + 50 && bullet.y > -50 && bullet.y < HEIGHT + 50)
+      state.projectiles = state.projectiles.filter(bullet => bullet.life > 0 && bullet.x > -50 && bullet.x < WORLD_WIDTH + 50 && bullet.y > -50 && bullet.y < WORLD_HEIGHT + 50)
     }
 
     function takeDamage(amount) {
@@ -969,8 +928,7 @@
       if (length > 1) { dx /= length; dy /= length }
       const oldX = player.x
       const oldY = player.y
-      player.x = clamp(player.x + dx * stats.speed * dt, PLAY_BOUNDS.left, PLAY_BOUNDS.right)
-      player.y = clamp(player.y + dy * stats.speed * dt, PLAY_BOUNDS.top + 32, PLAY_BOUNDS.bottom)
+      city.move(player, dx * stats.speed * dt, dy * stats.speed * dt)
       player.vx = (player.x - oldX) / dt
       player.vy = (player.y - oldY) / dt
       player.movingSpeed = Math.hypot(player.vx, player.vy)
@@ -983,7 +941,7 @@
       player.recoil = Math.max(0, player.recoil - dt * 13)
       player.sinceHit += dt
       if (player.sinceHit > 4) player.hp = Math.min(player.maxHp, player.hp + stats.regen * dt)
-      const target = nearestEnemy(player.x + 7, player.y - 9)
+      const target = nearestEnemy(player.x + 7, player.y - 9, null, WIDTH * 1.1, true)
       player.targetId = target?.id ?? null
       if (target) {
         player.aim = Math.atan2(target.y - (player.y - 9), target.x - (player.x + 7))
@@ -996,6 +954,7 @@
 
     function updateEnemies(dt) {
       const player = state.player
+      city.updateNavigation(player.x, player.y)
       const grid = new Map()
       const cellSize = 58
       for (const enemy of state.enemies) {
@@ -1007,8 +966,9 @@
       for (const enemy of state.enemies) {
         if (enemy.dead) continue
         enemy.speed = enemy.baseSpeed * (1 + Math.min(.7, state.time / 120))
-        const dx = player.x - enemy.x
-        const dy = player.y - enemy.y
+        const waypoint = city.steer(enemy.x, enemy.y, player.x, player.y, enemy.radius)
+        const dx = waypoint.x - enemy.x
+        const dy = waypoint.y - enemy.y
         const length = Math.max(1, Math.hypot(dx, dy))
         let vx = dx / length * enemy.speed
         let vy = dy / length * enemy.speed
@@ -1026,8 +986,7 @@
         }
         const previousX = enemy.x
         const previousY = enemy.y
-        enemy.x += vx * dt
-        enemy.y += vy * dt
+        city.move(enemy, vx * dt, vy * dt)
         enemy.walkCycle += Math.hypot(enemy.x - previousX, enemy.y - previousY) * .1
         enemy.hit = Math.max(0, enemy.hit - dt)
         enemy.sawTimer = Math.max(0, enemy.sawTimer - dt)
@@ -1037,7 +996,7 @@
           enemy.burnTimer -= dt
           if (enemy.burnTimer <= 0) { hitEnemy(enemy, 3 + enemy.burnLevel * 3, "burn"); enemy.burnTimer = .4; particle(enemy.x, enemy.y - 9, "#ff8f3c", 2, 30) }
         }
-        if (!enemy.dead && length < enemy.radius + player.radius && enemy.contactTimer <= 0) { takeDamage(enemy.damage); enemy.contactTimer = .9 }
+        if (!enemy.dead && Math.hypot(enemy.x - player.x, enemy.y - player.y) < enemy.radius + player.radius && enemy.contactTimer <= 0) { takeDamage(enemy.damage); enemy.contactTimer = .9 }
       }
     }
 
@@ -1292,10 +1251,14 @@
     }
 
     function draw() {
-      context.drawImage(terrain, 0, 0)
+      context.fillStyle = "#20292b"
+      context.fillRect(0, 0, WIDTH, HEIGHT)
       if (!state) return
+      state.camera = cameraFor(state.player)
       context.save()
+      context.translate(-state.camera.x, -state.camera.y)
       if (state.cameraShake && state.phase === "playing" && !state.paused) context.translate(randomBetween(-state.cameraShake, state.cameraShake), randomBetween(-state.cameraShake, state.cameraShake))
+      context.drawImage(terrain, 0, 0)
       for (const item of state.pickups) {
         context.save(); context.translate(item.x, item.y); context.rotate(Math.PI / 4)
         context.fillStyle = "#101f1a"; context.fillRect(-6, -6, 12, 12)
@@ -1341,6 +1304,8 @@
       for (const floater of state.floaters) { context.globalAlpha = Math.min(1, floater.life * 3); context.fillStyle = "#fff0bc"; context.fillText(String(floater.value), floater.x, floater.y) }
       context.globalAlpha = 1
       if (state.showHitboxes) {
+        context.strokeStyle = "#74e1cf"; context.lineWidth = 2
+        for (const building of city.buildings) context.strokeRect(building.x, building.y, building.width, building.height)
         for (const object of [state.player, ...state.enemies]) { context.strokeStyle = object === state.player ? "#74e1cf" : "#ef7445"; context.lineWidth = 1; context.beginPath(); context.arc(object.x, object.y, object.radius, 0, Math.PI * 2); context.stroke() }
         const muzzle = muzzlePosition(); circle(muzzle.x, muzzle.y, 4, "#ffffff")
       }
@@ -1356,6 +1321,7 @@
         particles: state.particles.length, mines: state.mines.length,
         spawnRate: spawnRate(), hordeTimer: state.hordeTimer, density: state.density,
         config: { ...CONFIG }, stats: { ...state.stats }, player: { ...state.player },
+        camera: cameraFor(state.player), map: { width: WORLD_WIDTH, height: WORLD_HEIGHT, areaScale: 4, buildingCount: city.buildings.length },
         muzzlePosition: muzzlePosition(), build: build.snapshot(), fps: state.lastFps
       }
     }
@@ -1448,7 +1414,7 @@
         catch { toast("浏览器未提供剪贴板权限") }
       })
       window.__LAST_NIGHT_DEBUG__ = Object.freeze({
-        snapshot, get state() { return state }, get config() { return { ...CONFIG } }, get build() { return build },
+        snapshot, get state() { return state }, get config() { return { ...CONFIG } }, get build() { return build }, get map() { return city },
         step(seconds = FIXED_STEP) {
           const steps = Math.ceil(clamp(Number(seconds) || FIXED_STEP, FIXED_STEP, 600) / FIXED_STEP)
           for (let tick = 0; tick < steps && state.phase === "playing"; tick += 1) update(FIXED_STEP)
