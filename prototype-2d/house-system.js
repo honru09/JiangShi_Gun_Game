@@ -16,7 +16,7 @@
     }
 
     const houses = city.buildings.map((building, index) => {
-      const { x, y, width, height, kind } = building
+      const { x, y, width, height, kind, houseType = "bungalow", floors = 1, ruined = false } = building
       // South is the drawn front door. Side entrances remain available if another
       // building or the map boundary blocks that approach on a smaller layout.
       const candidates = [
@@ -30,7 +30,7 @@
       const label = kind === "shop" ? "物资商店" : kind === "apartment" ? "公寓" : "民居"
       const serial = Number.isFinite(building.variant) ? building.variant : index
       return Object.freeze({
-        id: `house-${serial}`, kind, name: `${label} ${String(serial + 1).padStart(2, "0")}`,
+        id: `house-${serial}`, kind, houseType, floors, ruined, building: Object.freeze({ x, y, width, height }), name: `${label} ${String(serial + 1).padStart(2, "0")}`,
         door: Object.freeze(door)
       })
     })
@@ -50,15 +50,19 @@
       const known = houses.find(candidate => candidate.id === house?.id)
       if (!known) throw new TypeError("Unknown house")
       // Keep containers mutable. Gameplay owns one cached room per house per run.
+      const courtyard = known.houseType === "courtyard"
+      const bungalow = known.houseType === "bungalow"
+      const bounds = bungalow ? { minX: 130, minY: 330, maxX: 590, maxY: 1045 } : courtyard ? { minX: 75, minY: 300, maxX: 645, maxY: 1080 } : { minX: 55, minY: 300, maxX: 665, maxY: 1105 }
+      const containers = bungalow
+        ? [{ x: 235, y: 440 }, { x: 485, y: 440 }, { x: 360, y: 700 }]
+        : courtyard
+          ? [{ x: 190, y: 420 }, { x: 530, y: 420 }, { x: 360, y: 730 }]
+          : [{ x: 210, y: 400 }, { x: 510, y: 400 }, { x: 360, y: 670 }]
       return {
-        houseId: known.id, name: known.name, kind: known.kind, width: WIDTH, height: HEIGHT,
+        houseId: known.id, name: known.name, kind: known.kind, houseType: known.houseType, floors: known.floors, ruined: known.ruined, width: WIDTH, height: HEIGHT,
         entry: { x: 360, y: 1020 }, exit: { x: 360, y: 1110 },
-        bounds: { minX: 55, minY: 300, maxX: 665, maxY: 1105 },
-        containers: [
-          { id: `${known.id}-cache-1`, x: 210, y: 400, searched: false },
-          { id: `${known.id}-cache-2`, x: 510, y: 400, searched: false },
-          { id: `${known.id}-cache-3`, x: 360, y: 670, searched: false }
-        ]
+        bounds,
+        containers: containers.map((container, index) => ({ id: `${known.id}-cache-${index + 1}`, ...container, searched: false }))
       }
     }
 
@@ -95,7 +99,8 @@
     function drawRoom(ctx, room) {
       const shop = room.kind === "shop"
       const apartment = room.kind === "apartment"
-      const floor = shop ? "#807b68" : apartment ? "#737976" : "#82715e"
+      const courtyard = room.houseType === "courtyard"
+      const floor = shop ? "#807b68" : apartment ? "#737976" : courtyard ? "#718b6b" : "#82715e"
       const { minX, minY, maxX, maxY } = room.bounds
       ctx.save()
       ctx.fillStyle = "#263330"
@@ -106,6 +111,18 @@
       ctx.fillRect(minX - 16, minY - 12, maxX - minX + 32, maxY - minY + 28)
       ctx.fillStyle = floor
       ctx.fillRect(minX, minY, maxX - minX, maxY - minY)
+      if (courtyard) {
+        ctx.fillStyle = "#9aae72"
+        ctx.fillRect((minX + maxX) / 2 - 88, minY + 220, 176, 155)
+        ctx.strokeStyle = "#d0c28a"
+        ctx.lineWidth = 5
+        ctx.strokeRect((minX + maxX) / 2 - 88, minY + 220, 176, 155)
+      }
+      if (room.floors > 1) {
+        ctx.fillStyle = "#bfc7b22a"
+        ctx.fillRect(minX + 18, minY + 45, maxX - minX - 36, 16)
+        ctx.fillRect(minX + 18, minY + 82, maxX - minX - 36, 8)
+      }
 
       ctx.strokeStyle = shop ? "#b3b09439" : "#c0aa832b"
       ctx.lineWidth = 2
@@ -171,6 +188,11 @@
       ctx.fillText(room.name, 360, 330)
       ctx.font = "17px sans-serif"; ctx.fillStyle = "#c7d7aa"
       ctx.fillText("室内物资 · 精良 / 稀有 / 史诗", 360, 355)
+      if (room.ruined) {
+        ctx.fillStyle = "#f0c47755"
+        ctx.beginPath(); ctx.moveTo(minX + 22, minY + 15); ctx.lineTo(maxX - 40, minY + 90); ctx.lineTo(maxX - 120, minY + 110); ctx.closePath(); ctx.fill()
+        ctx.fillStyle = "#e4c17b"; ctx.font = "bold 16px sans-serif"; ctx.fillText("破损建筑 · 仍可搜索", 360, 382)
+      }
       ctx.restore()
     }
 

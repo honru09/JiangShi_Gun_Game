@@ -24,31 +24,36 @@
     const columns = [[332, 628], [812, 1108]]
     let serial = 0
 
-    function addBuilding(x, y, w, h, kind) {
-      buildings.push(Object.freeze({ x: x * sx, y: y * sy, width: w * sx, height: h * sy, kind, variant: serial++ }))
+    function addBuilding(x, y, w, h, kind, houseType = "bungalow", floors = 1, ruined = false) {
+      buildings.push(Object.freeze({ x: x * sx, y: y * sy, width: w * sx, height: h * sy, kind, houseType, floors, ruined, variant: serial++ }))
     }
 
     rows.forEach(([top, bottom], row) => {
       columns.forEach(([left, right], col) => {
         blocks.push({ x: left * sx, y: top * sy, width: (right - left) * sx, height: (bottom - top) * sy })
         const shortBlock = row === 0 || row === rows.length - 1
-        const houseWidth = 98
-        const houseHeight = shortBlock ? 104 : 98
+        const layoutSeed = row * 7 + col * 3
+        const houseType = layoutSeed % 3 === 0 ? "courtyard" : layoutSeed % 3 === 1 ? "floor" : "bungalow"
+        const houseWidth = houseType === "courtyard" ? 122 : houseType === "floor" ? 108 : 88
+        const houseHeight = shortBlock ? (houseType === "floor" ? 132 : 108) : (houseType === "courtyard" ? 122 : houseType === "floor" ? 146 : 96)
         const xs = [left + 18, right - 18 - houseWidth]
         const ys = shortBlock ? [row === 0 ? 108 : 2452 - houseHeight] : [top + 18, bottom - 18 - houseHeight]
         ys.forEach((y, side) => xs.forEach((x, part) => {
+          // Leave larger gaps between blocks and keep the street edges readable.
+          if ((row * 11 + col * 5 + side * 3 + part) % 3 === 0) return
           const variant = row + col + side + part
           const kind = variant % 5 === 0 ? "shop" : variant % 3 === 0 ? "apartment" : "residential"
-          addBuilding(x, y, houseWidth, houseHeight, kind)
+          const ruined = (row * 13 + col * 7 + side * 5 + part) % 7 === 0
+          addBuilding(x, y, houseWidth, houseHeight, kind, houseType, houseType === "floor" ? 2 + (variant % 2) : 1, ruined)
         }))
       })
       // Outer blocks leave open parklets between the shops and the main roads.
-      if (row % 3 !== 1) {
+      if (row % 3 === 0) {
         let houseHeight = Math.min(166, bottom - top - 56)
         const y = Math.max(108, (top + bottom - houseHeight) / 2)
         houseHeight = Math.min(houseHeight, bottom - 24 - y, 2452 - y)
-        addBuilding(56, y, 72, houseHeight, row % 2 ? "apartment" : "shop")
-        addBuilding(1312, y + 8, 72, houseHeight - 16, row % 2 ? "residential" : "shop")
+        addBuilding(56, y, 72, houseHeight, row % 2 ? "apartment" : "shop", row % 2 ? "floor" : "courtyard", row % 2 ? 2 : 1, row === 3)
+        if (row !== 3) addBuilding(1312, y + 8, 72, houseHeight - 16, row % 2 ? "residential" : "shop", "bungalow", 1, row === 0)
       }
     })
 
@@ -306,6 +311,38 @@
     for (const x of vertical) ctx.fillRect(x - roadX / 2, 0, roadX, height)
     for (const y of horizontal) ctx.fillRect(0, y - roadY / 2, width, roadY)
 
+    // Keep the main avenues connected but give their centre lines a slight
+    // drift so the city reads as an old, settled street grid instead of a
+    // perfect spreadsheet. Buildings and navigation still use their real
+    // collision rectangles, so this is a visual road deformation only.
+    const bend = (distance, index, amplitude) => Math.sin(distance * .0042 + index * 1.7) * amplitude
+    for (let index = 0; index < vertical.length; index += 1) {
+      const x = vertical[index]
+      for (let y = 0; y < height; y += 96 * sy) {
+        const y2 = Math.min(height, y + 100 * sy)
+        const a = x + bend(y / sy, index, 18 * sx)
+        const b = x + bend(y2 / sy, index, 18 * sx)
+        ctx.fillStyle = "#46565a"
+        ctx.beginPath(); ctx.moveTo(a - roadX / 2, y); ctx.lineTo(a + roadX / 2, y); ctx.lineTo(b + roadX / 2, y2); ctx.lineTo(b - roadX / 2, y2); ctx.closePath(); ctx.fill()
+        ctx.fillStyle = "#acb5ae55"
+        ctx.beginPath(); ctx.moveTo(a - roadX / 2 - sidewalkX, y); ctx.lineTo(a - roadX / 2, y); ctx.lineTo(b - roadX / 2, y2); ctx.lineTo(b - roadX / 2 - sidewalkX, y2); ctx.closePath(); ctx.fill()
+        ctx.beginPath(); ctx.moveTo(a + roadX / 2, y); ctx.lineTo(a + roadX / 2 + sidewalkX, y); ctx.lineTo(b + roadX / 2 + sidewalkX, y2); ctx.lineTo(b + roadX / 2, y2); ctx.closePath(); ctx.fill()
+      }
+    }
+    for (let index = 0; index < horizontal.length; index += 1) {
+      const y = horizontal[index]
+      for (let x = 0; x < width; x += 96 * sx) {
+        const x2 = Math.min(width, x + 100 * sx)
+        const a = y + bend(x / sx, index + 4, 14 * sy)
+        const b = y + bend(x2 / sx, index + 4, 14 * sy)
+        ctx.fillStyle = "#46565a"
+        ctx.beginPath(); ctx.moveTo(x, a - roadY / 2); ctx.lineTo(x2, b - roadY / 2); ctx.lineTo(x2, b + roadY / 2); ctx.lineTo(x, a + roadY / 2); ctx.closePath(); ctx.fill()
+        ctx.fillStyle = "#acb5ae55"
+        ctx.beginPath(); ctx.moveTo(x, a - roadY / 2 - sidewalkY); ctx.lineTo(x2, b - roadY / 2 - sidewalkY); ctx.lineTo(x2, b - roadY / 2); ctx.lineTo(x, a - roadY / 2); ctx.closePath(); ctx.fill()
+        ctx.beginPath(); ctx.moveTo(x, a + roadY / 2); ctx.lineTo(x2, b + roadY / 2); ctx.lineTo(x2, b + roadY / 2 + sidewalkY); ctx.lineTo(x, a + roadY / 2 + sidewalkY); ctx.closePath(); ctx.fill()
+      }
+    }
+
     for (const x of vertical) {
       for (let y = 26; y < height - 26; y += 48 * sy) {
         if (horizontal.some(cross => Math.abs(cross - y) < roadY / 2 + 44 * sy)) continue
@@ -346,13 +383,22 @@
     }
 
     function drawBuilding(building) {
-      const { x, y, width: w, height: h, kind, variant } = building
+      const { x, y, width: w, height: h, kind, variant, houseType = "bungalow", floors = 1, ruined = false } = building
       const roofColors = ["#76838b", "#8f7762", "#6b848d", "#8b917f", "#7c858c"]
       const roof = roofColors[variant % roofColors.length]
       ctx.fillStyle = "#27393170"; ctx.fillRect(x + 7, y + 10, w + 3, h + 3)
       ctx.fillStyle = "#34484b"; ctx.fillRect(x - 2, y - 2, w + 4, h + 4)
-      ctx.fillStyle = "#879692"; ctx.fillRect(x, y, w, h)
-      ctx.fillStyle = roof; ctx.fillRect(x + 4, y + 4, w - 8, h - 24)
+      ctx.fillStyle = ruined ? "#69716b" : "#879692"; ctx.fillRect(x, y, w, h)
+      ctx.fillStyle = ruined ? "#4f5a56" : roof; ctx.fillRect(x + 4, y + 4, w - 8, h - 24)
+      if (houseType === "courtyard") {
+        ctx.strokeStyle = ruined ? "#84715b" : "#b7a878"; ctx.lineWidth = 4
+        ctx.strokeRect(x + 7, y + 10, w - 14, h - 30)
+        ctx.fillStyle = ruined ? "#4e5b4d" : "#78906d"; ctx.fillRect(x + w * .28, y + h * .28, w * .44, h * .36)
+      }
+      if (floors > 1) {
+        ctx.strokeStyle = "#c0c5b433"; ctx.lineWidth = 2
+        for (let floor = 1; floor < floors; floor += 1) ctx.beginPath(), ctx.moveTo(x + 7, y + h * floor / floors), ctx.lineTo(x + w - 7, y + h * floor / floors), ctx.stroke()
+      }
       line(x + 5, y + 4, x + w - 5, y + 4, "#b8c3b4", 3)
       line(x + 4, y + 5, x + 4, y + h - 23, "#a5b4ab", 2)
       line(x + 5, y + h - 21, x + w - 5, y + h - 21, "#3e5356", 3)
@@ -389,6 +435,11 @@
         ctx.fillStyle = "#d6d8bf"; ctx.font = `bold ${9 * Math.min(sx, sy)}px sans-serif`; ctx.textAlign = "center"
         ctx.fillText(["MART", "CAFE", "CLINIC"][variant % 3], x + w / 2, y + h - 30 * sy)
       }
+      if (ruined) {
+        ctx.strokeStyle = "#2c373455"; ctx.lineWidth = 3
+        ctx.beginPath(); ctx.moveTo(x + 12, y + 18); ctx.lineTo(x + w * .42, y + h * .55); ctx.lineTo(x + w - 10, y + h * .34); ctx.stroke()
+        ctx.fillStyle = "#a38c6c"; ctx.fillRect(x + w * .2, y + h - 11, 9, 6); ctx.fillRect(x + w * .72, y + h - 16, 12, 7)
+      }
     }
 
     for (const building of buildings) drawBuilding(building)
@@ -417,7 +468,7 @@
 
     const spawn = Object.freeze({ x: width / 2, y: height / 2 })
     updateNavigation(spawn.x, spawn.y)
-    return Object.freeze({ width, height, terrain, buildings: Object.freeze(buildings), spawn, isFree, move, steer, updateNavigation })
+    return Object.freeze({ width, height, terrain, buildings: Object.freeze(buildings), spawn, roads: { vertical: [...vertical], horizontal: [...horizontal], bendAmplitude: { x: 18 * sx, y: 14 * sy } }, isFree, move, steer, updateNavigation })
   }
 
   global.WASTELAND_CITY = Object.freeze({ create })

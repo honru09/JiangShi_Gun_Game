@@ -51,6 +51,9 @@ try {
 }
 
 checkJavaScript("prototype-2d/skills.js");
+checkJavaScript("prototype-2d/city-map.js");
+checkJavaScript("prototype-2d/house-system.js");
+checkJavaScript("prototype-2d/loot-system.js");
 checkJavaScript("wechat-miniprogram/miniprogram/app.js");
 checkJavaScript("wechat-miniprogram/miniprogram/pages/index/index.js");
 
