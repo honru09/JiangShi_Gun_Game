@@ -1191,11 +1191,12 @@
       }
       const sway = Math.sin(enemy.walkCycle * .5) * (enemy.type === "brute" ? 1.5 : 2.3)
       context.translate(sway, Math.abs(stride) * -.18)
-      // Bent elbows and stiff forward hands read as a shuffling infected silhouette.
-      line(-12, -14, -20, -1 + stride * .3, "#384632", 7)
-      line(-20, -1 + stride * .3, -13, 4 + stride * .3, enemy.color, 6)
-      line(12, -14, 20, -2 - stride * .3, "#384632", 7)
-      line(20, -2 - stride * .3, 14, 3 - stride * .3, enemy.color, 6)
+      const facing = state.player.x >= enemy.x ? 1 : -1
+      const armBob = stride * .15
+      // The rear arm crosses behind the chest; both wrists reach past the facing side.
+      line(-facing * 11, -16, facing * 7, -15 + armBob, "#384632", 7)
+      line(facing * 7, -15 + armBob, facing * 24, -14 + armBob, enemy.color, 6)
+      line(facing * 24, -14 + armBob, facing * 28, -16 + armBob, enemy.color, 3)
       roundedPath(context, -13, -22, 26, 34, 6)
       context.fillStyle = enemy.hit > 0 ? "#e6d9ac" : enemy.color
       context.fill()
@@ -1207,6 +1208,10 @@
       line(-3, -26, 4, -26, "#35271e", 2)
       if (enemy.type === "brute") { line(-13, -14, -15, 0, "#454d43", 10); line(13, -14, 15, 0, "#454d43", 10) }
       if (enemy.type === "bloater") circle(0, 0, 9, "#b1aa54")
+      // Draw the near arm over the torso: shoulder, slightly bent elbow, rigid outstretched hand.
+      line(facing * 11, -12, facing * 24, -10 - armBob, "#384632", 8)
+      line(facing * 24, -10 - armBob, facing * 38, -12 - armBob, enemy.color, 6)
+      line(facing * 38, -12 - armBob, facing * 42, -15 - armBob, enemy.color, 3)
       if (enemy.burn > 0) { circle(-10, 3, 3, "#ff983a"); circle(7, -7, 4, "#ef5b2f") }
       if (enemy.hp < enemy.maxHp) {
         context.fillStyle = "#070a08"; context.fillRect(-17, -51, 34, 4)
