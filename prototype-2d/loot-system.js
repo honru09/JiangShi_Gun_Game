@@ -65,7 +65,12 @@
     context.fillStyle = "#152623"
     context.strokeStyle = color
     context.lineWidth = 3
-    context.beginPath(); context.arc(0, 0, 18, 0, Math.PI * 2); context.fill(); context.stroke()
+    if (item.kind === "consumable") {
+      context.fillRect(-18, -18, 36, 36)
+      context.strokeRect(-18, -18, 36, 36)
+    } else {
+      context.beginPath(); context.arc(0, 0, 18, 0, Math.PI * 2); context.fill(); context.stroke()
+    }
     context.shadowBlur = 0
     context.fillStyle = color
     context.textAlign = "center"
