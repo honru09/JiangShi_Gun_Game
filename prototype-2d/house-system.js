@@ -53,7 +53,7 @@
       return {
         houseId: known.id, name: known.name, kind: known.kind, width: WIDTH, height: HEIGHT,
         entry: { x: 360, y: 1020 }, exit: { x: 360, y: 1110 },
-        bounds: { minX: 55, minY: 200, maxX: 665, maxY: 1105 },
+        bounds: { minX: 55, minY: 300, maxX: 665, maxY: 1105 },
         containers: [
           { id: `${known.id}-cache-1`, x: 210, y: 400, searched: false },
           { id: `${known.id}-cache-2`, x: 510, y: 400, searched: false },
@@ -125,12 +125,12 @@
       }
 
       // Wall furniture is decorative; searchable caches remain clearly outlined.
-      ctx.fillStyle = "#25373270"; ctx.fillRect(84, 233, 558, 81)
-      ctx.fillStyle = shop ? "#546159" : "#5d5548"; ctx.fillRect(83, 225, 554, 75)
-      ctx.fillStyle = "#a5a88d"; ctx.fillRect(89, 231, 542, 8)
+      ctx.fillStyle = "#25373270"; ctx.fillRect(84, 513, 558, 81)
+      ctx.fillStyle = shop ? "#546159" : "#5d5548"; ctx.fillRect(83, 505, 554, 75)
+      ctx.fillStyle = "#a5a88d"; ctx.fillRect(89, 511, 542, 8)
       for (let index = 0; index < 9; index += 1) {
         ctx.fillStyle = ["#bd9d65", "#658d91", "#a9b58e"][index % 3]
-        ctx.fillRect(106 + index * 58, 253, 24, 27)
+        ctx.fillRect(106 + index * 58, 533, 24, 27)
       }
       ctx.fillStyle = "#273b3466"; ctx.fillRect(106, 831, 132, 145)
       ctx.fillStyle = apartment ? "#697c7b" : shop ? "#5b6c57" : "#736b55"; ctx.fillRect(98, 821, 130, 141)
@@ -168,9 +168,9 @@
       ctx.font = "bold 21px sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "#d2dfb4"
       ctx.fillText("返回街区", 360, 1167)
       ctx.font = "bold 23px sans-serif"; ctx.fillStyle = "#eff0d5"
-      ctx.fillText(room.name, 360, 164)
+      ctx.fillText(room.name, 360, 330)
       ctx.font = "17px sans-serif"; ctx.fillStyle = "#c7d7aa"
-      ctx.fillText("室内物资 · 精良 / 稀有 / 史诗", 360, 186)
+      ctx.fillText("室内物资 · 精良 / 稀有 / 史诗", 360, 355)
       ctx.restore()
     }
 
