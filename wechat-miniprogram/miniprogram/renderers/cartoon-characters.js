@@ -116,8 +116,10 @@ function drawCrawler(context, source, character, enemy) {
     const hand = { x: 0.65 + step, y: 0.42 + side * 0.055 - Math.max(0, step) * 0.35 }
     crawlLimb(context, source, character.arm, shoulder, hand, 1)
   }
-  front(-1)
   drawBody(context, source, character, geometry, 0, bob, 1)
+  // Keep both forearms over the torso; drawing one behind the body made the
+  // low crawler look one-armed at the game's small scale.
+  front(-1)
   front(1)
   context.restore()
 }

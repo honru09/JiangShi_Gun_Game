@@ -255,7 +255,32 @@ export function runLootChecks() {
   deathDebug.step(1);
   assert.equal(immutableSimulation(deathDebug), deadSnapshot, "death freezes room loot and search state");
   console.log("PASS death freezes nearby pickup and search actions");
-  return { checks: 8, simulated: true };
+
+  const consumablePage = bootPage(); consumablePage.start();
+  const consumableDebug = consumablePage.debug; consumableDebug.state.godMode = true;
+  assert.equal(consumableDebug.config.combatDropChance, .005, "combat consumable drop chance is 0.5%");
+  for (const [id, field, minimum] of [["invulnerableBurst", "invulnerable", 2], ["fireRateOverdrive", "fireRateBoost", 5], ["ammoOvercharge", "ammoBoost", 5]]) {
+    const drop = consumableDebug.spawnCombatDrop(id, consumableDebug.state.player.x, consumableDebug.state.player.y);
+    assert(drop && drop.kind === "consumable", `${id} creates a one-time combat item`);
+    consumableDebug.step(1 / 60);
+    assert(consumableDebug.state.player[field] >= minimum - 1 / 60, `${id} applies its temporary effect`);
+    assert.equal(consumableDebug.combatDrops.length, 0, `${id} is consumed on contact`);
+    consumableDebug.step(6);
+    assert(consumableDebug.state.player[field] <= 0, `${id} expires without changing permanent build levels`);
+  }
+  const killPage = bootPage(); killPage.start();
+  const killDebug = killPage.debug; killDebug.state.godMode = true; killDebug.state.density = 0;
+  killDebug.state.lootTimer = Infinity; killDebug.state.hordeTimer = Infinity; killDebug.state.spawnBudget = 0; killDebug.state.loot = []; killDebug.state.combatDrops = [];
+  const target = { ...killDebug.state.enemies[0], x: killDebug.state.player.x + 110, y: killDebug.state.player.y, hp: 1, maxHp: 1, xp: 100, speed: 0, baseSpeed: 0, contactTimer: Infinity, dead: false };
+  killDebug.state.enemies = [target]; killDebug.step(1);
+  assert(killDebug.state.kills >= 1, "the kill fixture is defeated");
+  assert(killDebug.loot.every(item => item.kind !== "gun" && item.kind !== "skill"), "kills never create weapons or permanent upgrade balls");
+  assert(killDebug.combatDrops.every(item => item.kind === "consumable"), "every kill drop is a temporary combat consumable");
+  const rooms = consumableDebug.houses.houses.map(house => consumableDebug.houses.createRoom(house));
+  assert(rooms.every(room => room.width > 720 && room.height >= 1280 && room.rooms.length >= 3 && room.obstacles.length >= 3), "large rooms expose normal interior structure and furniture collision");
+  assert(new Set(consumableDebug.houses.houses.map(house => house.kind)).size >= 5, "city exposes varied building categories");
+  console.log("PASS rare combat consumables apply temporary effects once; large categorized rooms expose furniture and collision");
+  return { checks: 9, simulated: true };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) runLootChecks();

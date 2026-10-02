@@ -24,28 +24,32 @@
     const columns = [[332, 628], [812, 1108]]
     let serial = 0
 
-    function addBuilding(x, y, w, h, kind) {
+    function addBuilding(x, y, w, h, kind, houseType = "bungalow", floors = 1, ruined = false) {
       const variant = serial++
       // Keep the visual map's varied footprints aligned with the house and
       // loot systems, which use these fields for room layouts and acceptance.
-      const houseType = kind === "apartment" ? "floor" : variant % 4 === 0 ? "courtyard" : "bungalow"
-      const floors = kind === "apartment" || variant % 7 === 0 ? 2 : 1
-      const ruined = variant % 9 === 0
-      buildings.push(Object.freeze({ x: x * sx, y: y * sy, width: w * sx, height: h * sy, kind, variant, houseType, floors, ruined }))
+      buildings.push(Object.freeze({ x: x * sx, y: y * sy, width: w * sx, height: h * sy, kind, category: kind, variant, houseType, floors, ruined }))
     }
 
     rows.forEach(([top, bottom], row) => {
       columns.forEach(([left, right], col) => {
         blocks.push({ x: left * sx, y: top * sy, width: (right - left) * sx, height: (bottom - top) * sy })
         const shortBlock = row === 0 || row === rows.length - 1
-        const houseWidth = 98
-        const houseHeight = shortBlock ? 104 : 98
+        const layoutSeed = row * 7 + col * 3
+        const houseType = layoutSeed % 3 === 0 ? "courtyard" : layoutSeed % 3 === 1 ? "floor" : "bungalow"
+        const houseWidth = houseType === "courtyard" ? 122 : houseType === "floor" ? 108 : 88
+        const houseHeight = shortBlock ? (houseType === "floor" ? 132 : 108) : (houseType === "courtyard" ? 122 : houseType === "floor" ? 146 : 96)
         const xs = [left + 18, right - 18 - houseWidth]
         const ys = shortBlock ? [row === 0 ? 108 : 2452 - houseHeight] : [top + 18, bottom - 18 - houseHeight]
         ys.forEach((y, side) => xs.forEach((x, part) => {
           const variant = row + col + side + part
-          const kind = variant % 5 === 0 ? "shop" : variant % 3 === 0 ? "apartment" : "residential"
-          addBuilding(x, y, houseWidth, houseHeight, kind)
+          const kindRoll = (row * 17 + col * 11 + side * 5 + part * 3) % 11
+          const kind = kindRoll === 0 ? "clinic"
+            : kindRoll === 1 ? "market"
+              : kindRoll === 2 ? "warehouse"
+                : kindRoll === 3 ? "garage"
+                  : variant % 5 === 0 ? "shop" : variant % 3 === 0 ? "apartment" : "residential"
+          addBuilding(x, y, houseWidth, houseHeight, kind, houseType, houseType === "floor" ? 2 + (variant % 2) : 1, (row * 13 + col * 7 + side * 5 + part) % 7 === 0)
         }))
       })
       // Outer blocks leave open parklets between the shops and the main roads.
@@ -54,7 +58,7 @@
         const y = Math.max(108, (top + bottom - houseHeight) / 2)
         houseHeight = Math.min(houseHeight, bottom - 24 - y, 2452 - y)
         addBuilding(56, y, 72, houseHeight, row % 2 ? "apartment" : "shop")
-        addBuilding(1312, y + 8, 72, houseHeight - 16, row % 2 ? "residential" : "shop")
+        addBuilding(1312, y + 8, 72, houseHeight - 16, row % 2 ? "residential" : row === 0 ? "clinic" : "shop", "bungalow", 1, row === 0)
       }
     })
 
@@ -519,10 +523,10 @@
       line(context, x + w / 2 - 8 * u, ledge + 21 * v, x + w / 2 + 8 * u, ledge + 17 * v, "#a38856", 3 * scale)
       oval(context, x + w / 2 + 4 * u, ledge + 28 * v, 1.3 * u, 1.3 * v, "#d1bc79")
       rect(context, x + w / 2 - 13 * u, y + h, 26 * u, 3 * v, "#c4b17e", ink, 1 * scale)
-      if (kind === "shop") {
+      if (["shop", "market", "clinic", "warehouse", "garage"].includes(kind)) {
         rect(context, x + 5 * u, ledge - 12 * v, w - 10 * u, 13 * v, variant % 3 ? "#6d8170" : "#937049", ink, 2 * scale)
         context.fillStyle = "#e8dbac"; context.font = `bold ${8 * scale}px sans-serif`; context.textAlign = "center"
-        context.fillText(["MART", "CLINIC", "GARAGE"][variant % 3], x + w / 2, ledge - 3 * v)
+        context.fillText(({ shop: "MART", market: "MARKET", clinic: "CLINIC", warehouse: "DEPOT", garage: "GARAGE" }[kind] || "STORE"), x + w / 2, ledge - 3 * v)
         for (let stripe = 0; stripe < Math.floor((w - 10 * u) / (8 * u)); stripe += 1) rect(context, x + 5 * u + stripe * 8 * u, ledge + 2 * v, 8 * u, 5 * v, stripe % 2 ? "#c3b488" : "#738168")
       }
       line(context, x + w - 8 * u, ledge + 7 * v, x + w - 11 * u, ledge + 15 * v, "#695938", 1 * scale)

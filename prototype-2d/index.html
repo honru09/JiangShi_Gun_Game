@@ -372,14 +372,14 @@
         <div class="sheet">
           <p class="eyebrow">WASTELAND SURVIVAL PROTOTYPE</p>
           <h1 class="logo">尸潮：最后一夜<span>LAST NIGHT SURVIVOR</span></h1>
-          <p class="lead">在城市街区坚持三分钟，等撤离车到达。武器自动射击，移动拾取道具球；进入房屋搜索更高品质的道具与枪械。</p>
+          <p class="lead">在城市街区坚持三分钟，等撤离车到达。武器自动射击，移动拾取道具球；进入商店、住宅等房屋搜索更高品质的道具与枪械。</p>
           <div class="brief">
             <div class="brief-item"><strong>自动瞄准</strong><span>清晰弹道</span></div>
             <div class="brief-item"><strong>城市街区</strong><span>四倍地图 · 镜头跟随</span></div>
             <div class="brief-item"><strong>拾取升级</strong><span>同类道具 · 等级叠加</span></div>
           </div>
           <button class="primary-action" id="startRun" type="button">开始生存</button>
-          <p class="hint">开局步枪与求生本能，拾取道具填入 3 项战术与 2 项增益；重复拾取强化效果。房屋品质更高，也有感染者。</p>
+          <p class="hint">开局步枪与求生本能，拾取道具填入 3 项战术与 2 项增益；重复拾取强化效果。击杀感染者有 0.5% 概率掉落一次性战斗物。</p>
           <p class="hint">WASD / 方向键移动 · E 进入 / 搜索 / 离开 · 手机用摇杆与右下按钮</p>
         </div>
       </section>
@@ -672,7 +672,7 @@
       ui.waveCallout.classList.remove("show")
       void ui.waveCallout.offsetWidth
       ui.waveCallout.classList.add("show")
-      toast("道具球即将掉落 · 靠近房门按 E 搜索高品质物资", 3)
+      toast("道具球即将掉落 · 击杀感染者有极低概率掉落战斗物 · 靠近房门按 E", 3)
       logEvent("尸潮开始 · 移动拾取道具球")
     }
 
@@ -692,8 +692,7 @@
         state.level += 1
         state.player.hp = Math.min(state.player.maxHp, state.player.hp + build.effect("rationPack") * 8)
         state.nextXp = Math.round(5 + state.level * 2.1)
-        spawnLoot()
-        toast(`生存等级 Lv.${state.level} · 额外物资掉落`)
+        toast(`生存等级 Lv.${state.level} · 永久升级请搜索场景道具球`)
         logEvent(`生存等级 Lv.${state.level} · 战斗继续`)
       }
     }
@@ -1001,12 +1000,50 @@
     }
 
     function cameraFor(player) {
-      if (state?.room) return { x: 0, y: 0 }
+      if (state?.room) {
+        // Rooms live in the same running world and use the same camera as the
+        // street. Larger interiors therefore scroll as a top-down map.
+        const roomWidth = Math.max(WIDTH, Number(state.room.width) || WIDTH)
+        const roomHeight = Math.max(HEIGHT, Number(state.room.height) || HEIGHT)
+        return {
+          x: clamp(player.x - WIDTH / 2, 0, roomWidth - WIDTH),
+          y: clamp(player.y - HEIGHT * .54, 0, roomHeight - HEIGHT)
+        }
+      }
       return { x: clamp(player.x - WIDTH / 2, 0, WORLD_WIDTH - WIDTH), y: clamp(player.y - HEIGHT * .54, -CONFIG.cameraTopGutter, WORLD_HEIGHT - HEIGHT + CONFIG.cameraBottomGutter) }
     }
 
+    function segmentRectFraction(ax, ay, bx, by, rect, padding = 0) {
+      let near = 0
+      let far = 1
+      const minX = rect.x - padding
+      const maxX = rect.x + rect.width + padding
+      const minY = rect.y - padding
+      const maxY = rect.y + rect.height + padding
+      for (const [origin, delta, minimum, maximum] of [[ax, bx - ax, minX, maxX], [ay, by - ay, minY, maxY]]) {
+        if (Math.abs(delta) < .00001) {
+          if (origin < minimum || origin > maximum) return null
+          continue
+        }
+        const first = (minimum - origin) / delta
+        const second = (maximum - origin) / delta
+        near = Math.max(near, Math.min(first, second))
+        far = Math.min(far, Math.max(first, second))
+        if (near > far) return null
+      }
+      return near >= 0 && near <= 1 ? clamp(near, 0, 1) : null
+    }
+
     function buildingHitFraction(ax, ay, bx, by, padding = 0) {
-      if (state?.room) return null
+      if (state?.room) {
+        if (typeof houseSystem.segmentHitFraction === "function") return houseSystem.segmentHitFraction(state.room, ax, ay, bx, by, padding)
+        let closest = null
+        for (const obstacle of state.room.obstacles || []) {
+          const hit = segmentRectFraction(ax, ay, bx, by, obstacle, padding)
+          if (hit !== null && (closest === null || hit < closest)) closest = hit
+        }
+        return closest
+      }
       let closest = null
       for (const building of city.buildings) {
         let near = 0, far = 1
@@ -1640,7 +1677,7 @@
         level: state.level, xp: state.xp, nextXp: state.nextXp, kills: state.kills,
         enemies: state.enemies.length, projectiles: state.projectiles.length, pickups: state.pickups.length,
         loot: state.loot.map(item => ({ ...item })), combatDrops: state.combatDrops.map(item => ({ ...item })), scene: state.scene, stage: state.scene, worldVersion: 2, weapon: { ...state.weapon }, modifiers: modifiers(),
-        room: state.room ? { houseId: state.room.houseId, containers: state.room.containers.map(item => ({ ...item })) } : null,
+        room: state.room ? { houseId: state.room.houseId, kind: state.room.kind, category: state.room.category, houseType: state.room.houseType, width: state.room.width, height: state.room.height, floor: state.room.floor, floorCount: state.room.floorCount, rooms: (state.room.rooms || []).map(area => ({ name: area.name, x: area.x, y: area.y, width: area.width, height: area.height })), obstacles: (state.room.obstacles || []).length, containers: state.room.containers.map(item => ({ ...item })) } : null,
         qualityRules: { outdoor: { common: .8, fine: .2 }, indoor: { fine: .4, rare: .45, epic: .15 }, combatDropChance: CONFIG.combatDropChance },
         particles: state.particles.length, mines: state.mines.length,
         spawnRate: spawnRate(), hordeTimer: state.hordeTimer, density: state.density,

@@ -221,7 +221,10 @@
         // merged arm.
         if (drawArm) crawlingLimb(context, arm, { x: 13 + side * 4, y: near ? -3 : -7 }, { x: 31 + step + side * 5, y: 18 - lift + side * 3 }, armAnchors)
       }
+      // Draw both support legs behind the torso, then bring both forearms
+      // forward so the low crawler reads as a four-limbed body.
       limbPair(false, true, false)
+      limbPair(true, true, false)
       body(context, "crawler", Math.sin(enemy.walkCycle * 2) * .8, 1)
       limbPair(false, false, true)
       limbPair(true, false, true)
