@@ -95,6 +95,27 @@ function unitChecks() {
   assert.equal(debug.snapshot().map.areaScale, 4);
   assert.equal(debug.snapshot().map.buildingCount, map.buildings.length);
   assert(map.isFree(map.spawn.x, map.spawn.y, 24));
+  const houses = debug.houses?.houses || [];
+  assert.equal(houses.length, map.buildings.length, "every city building has one enterable house record");
+  assert(new Set(map.buildings.map(building => building.houseType)).size >= 2, "city mixes house footprints");
+  assert(map.buildings.some(building => building.floors > 1), "city includes a multi-floor building");
+  assert(map.buildings.some(building => building.ruined), "city includes a ruined building");
+  for (const house of houses) {
+    assert(map.isFree(house.door.x, house.door.y, 20), `${house.id} has a walkable entrance`);
+    const actor = { x: map.spawn.x, y: map.spawn.y, radius: 19 };
+    let steps = 0;
+    while (Math.hypot(actor.x - house.door.x, actor.y - house.door.y) > 65 && steps < 1600) {
+      const waypoint = map.steer(actor.x, actor.y, house.door.x, house.door.y, actor.radius);
+      const distance = Math.hypot(waypoint.x - actor.x, waypoint.y - actor.y);
+      assert(distance > 0 && Number.isFinite(distance), `${house.id} has a navigation waypoint`);
+      map.move(actor, (waypoint.x - actor.x) / distance * Math.min(4, distance),
+        (waypoint.y - actor.y) / distance * Math.min(4, distance));
+      assert(map.isFree(actor.x, actor.y, actor.radius), `${house.id} navigation avoids buildings`);
+      steps += 1;
+    }
+    assert(Math.hypot(actor.x - house.door.x, actor.y - house.door.y) <= 65,
+      `${house.id} remained unreachable after ${steps} navigation steps`);
+  }
   assert.deepEqual(plain(map.buildings), plain(game.city.create(1440, 2560).buildings), "layout is reproducible");
   for (const building of map.buildings) {
     assert(building.width > 0 && building.height > 0);
@@ -115,7 +136,7 @@ function unitChecks() {
   }
   assert.equal(map.isFree(-1, map.spawn.y, 20), false);
   assert.equal(map.isFree(map.width + 1, map.spawn.y, 20), false);
-  pass("city map has four times the original area, deterministic buildings, and a clear central spawn", { buildings: map.buildings.length });
+  pass("city map exposes varied buildings with walkable entrances and deterministic layout", { buildings: map.buildings.length, houseTypes: [...new Set(map.buildings.map(building => building.houseType))] });
 
   const fixture = wallFixture(map);
   const actor = { ...fixture.left };
