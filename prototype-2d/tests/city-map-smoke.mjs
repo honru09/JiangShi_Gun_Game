@@ -280,16 +280,20 @@ async function browserChecks() {
     assert(moved.camera.x > initial.camera.x && moved.camera.y > initial.camera.y);
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.screenshot({ path: join(evidence, "mobile-city-southeast.png") });
-    await page.evaluate(() => { document.getElementById("adminLevel").click(); });
-    const cards = await page.locator("[data-upgrade-id]").all();
-    assert.equal(cards.length, 3);
-    for (const card of cards) {
-      const rect = await card.boundingBox();
-      assert(rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= 391 && rect.y + rect.height <= 845);
-    }
-    await page.screenshot({ path: join(evidence, "mobile-city-skill-choice.png") });
+    const spawned = await page.evaluate(() => {
+      const debug = window.__LAST_NIGHT_DEBUG__;
+      const before = debug.loot.length;
+      document.getElementById("adminLevel").click();
+      return { added: debug.loot.length - before, phase: debug.state.phase,
+        reachable: debug.loot.every(ball => debug.map.isFree(ball.x, ball.y, 19)) };
+    });
+    assert.equal(spawned.added, 1);
+    assert.equal(spawned.phase, "playing");
+    assert(spawned.reachable, "scene balls appear at walkable locations");
+    assert.equal(await page.locator("[data-upgrade-id]").count(), 0);
+    await page.screenshot({ path: join(evidence, "mobile-city-item-ball.png") });
     assert.deepEqual(errors, []);
-    pass("mobile city camera keeps the full player clear of HUD at every corner and preserves three skill cards", { viewport: "390×844" });
+    pass("mobile city camera keeps the full player clear of HUD at every corner and spawns reachable balls without a dialog", { viewport: "390×844" });
   } finally {
     await browser?.close();
     await new Promise(resolve => server.close(resolve));

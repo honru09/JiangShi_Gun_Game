@@ -8,16 +8,14 @@ import { join, resolve } from "node:path"
 const root = process.env.GAME_TEST_ROOT ? resolve(process.env.GAME_TEST_ROOT, "prototype-2d")
   : fileURLToPath(new URL("../", import.meta.url))
 const html = readFileSync(join(root, "index.html"), "utf8")
-const citySource = readFileSync(join(root, "city-map.js"), "utf8")
-const skillSource = readFileSync(join(root, "skills.js"), "utf8")
-const inline = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(match => match[1]).filter(source => source.trim())
 
 function boot(coarse = false, admin = true) {
   let now = 0
   let animationFrame = null
   const noop = () => {}
   const drawing = new Proxy({}, { get(target, key) {
-    if (key === "createLinearGradient") return () => ({ addColorStop: noop })
+    if (key === "createLinearGradient" || key === "createRadialGradient") return () => ({ addColorStop: noop })
+    if (key === "measureText") return text => ({ width: String(text).length * 8 })
     return target[key] || noop
   }, set(target, key, value) { target[key] = value; return true } })
   class Element {
@@ -46,9 +44,11 @@ function boot(coarse = false, admin = true) {
   }
   sandbox.window = sandbox
   const runtime = vm.createContext(sandbox)
-  vm.runInContext(citySource, runtime)
-  vm.runInContext(skillSource, runtime)
-  inline.forEach(source => vm.runInContext(source, runtime))
+  for (const script of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    const filename = /src="([^"]+)"/.exec(script[1])?.[1]
+    const source = filename ? readFileSync(join(root, filename), "utf8") : script[2]
+    if (source.trim()) vm.runInContext(source, runtime, { filename: filename || "index.html#inline" })
+  }
   return {
     debug: sandbox.__LAST_NIGHT_DEBUG__, elements,
     key(code, down = true) { windowEvents.emit(down ? "keydown" : "keyup", { code, repeat: false }) },
@@ -115,18 +115,18 @@ debug.step(.1)
 assert.equal(debug.state.player.x, stoppedX)
 console.log("PASS normal pause and focus loss freeze action and release held movement")
 
-debug.state.xp = debug.state.nextXp
+const lootBefore = debug.loot.length
 page.click("adminLevel")
-assert.equal(debug.state.phase, "levelup")
-const choices = debug.state.pendingChoices
-assert.equal(choices.length, 3)
-assert.ok(choices.every(skill => skill.action === "acquire" && skill.level === 0 && skill.nextLevel === 1))
-const upgradeId = choices[0].id
-page.elements.get("upgradeList").emit("click", { target: { closest: () => ({ dataset: { upgradeId } }) } })
 assert.equal(debug.state.phase, "playing")
+assert.equal(debug.loot.length, lootBefore + 1)
+const upgradeId = "scatterModule"
+const ball = debug.spawnLoot(upgradeId, "common", debug.state.player.x, debug.state.player.y)
+debug.state.player.x = ball.x; debug.state.player.y = ball.y
+debug.step(1 / 60)
 assert.equal(debug.build.level(upgradeId), 1)
 assert.equal(debug.snapshot().build.slots.length, 3)
-console.log("PASS first level offers three new skills and acquires one at level one")
+assert.equal(page.elements.has("upgradeList"), false)
+console.log("PASS administrator creates a scene ball; touching a new skill acquires level one without an upgrade dialog")
 
 const closeEnemy = { ...debug.state.enemies[0], x: debug.state.player.x, y: debug.state.player.y, radius: 17, baseSpeed: 0, hp: 100, maxHp: 100, dead: false }
 debug.state.enemies = [closeEnemy]

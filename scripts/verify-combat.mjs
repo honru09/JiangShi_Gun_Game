@@ -264,15 +264,13 @@ async function browserChecks() {
         const simulationStart = state.time;
         let ticks = 0;
         while (state.time - simulationStart < 179 && ticks < 12000) {
-          if (state.phase === "levelup") {
-            document.querySelector("[data-upgrade-id]").click();
-          }
+          if (state.phase !== "playing") throw new Error(`combat unexpectedly stopped: ${state.phase}`);
           debug.step(.25);
           ticks += 1;
           peak = Math.max(peak, state.enemies.length);
           if (state.enemies.length > debug.config.enemyCap) throw new Error("enemy cap exceeded");
         }
-        if (state.phase === "levelup") document.querySelector("[data-upgrade-id]").click();
+        if (document.querySelector("[data-upgrade-id]")) throw new Error("obsolete upgrade card remains in the page");
         state.paused = true;
         return { peak, naturalEnemies: state.enemies.length, cap: debug.config.enemyCap, ticks,
           shots: state.stats.shots, hits: state.stats.hits, kills: state.kills,
