@@ -736,7 +736,7 @@
       if (!position) return null
       // Explicit quality is a development override; live drops always use the scene's quality table.
       const itemQuality = Loot.qualities[quality] ? quality : Loot.rollQuality(Boolean(state.room))
-      const ball = { id: id(), ...item, ...position, quality: itemQuality, scene: state.scene, born: state.time }
+      const ball = { id: id(), ...item, type: item.kind, ...position, quality: itemQuality, rarity: itemQuality, scene: state.scene, born: state.time }
       state.loot.push(ball)
       return ball
     }
