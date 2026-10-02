@@ -394,11 +394,11 @@
         tree((left + 16) * sx, (top + 16) * sy, 11 * sx)
         tree((right - 12) * sx, (bottom - 11) * sy, 12 * sx)
       }
-      if (row % 2 === 0) {
-        const parkY = (bottom - 65) * sy
+      if (row % 3 === 1) {
+        const parkY = middle - 34 * sy
         ctx.strokeStyle = "#cad0b866"; ctx.lineWidth = 2
-        ctx.strokeRect(82 * sx, parkY, 41 * sx, 67 * sy)
-        parkedCar(88 * sx, parkY + 5 * sy, ["#9b7760", "#768d95", "#a1a18b"][row % 3])
+        ctx.strokeRect(106 * sx, parkY, 41 * sx, 67 * sy)
+        parkedCar(112 * sx, parkY + 5 * sy, row === 1 ? "#768d95" : "#a1a18b")
       }
     })
     ctx.strokeStyle = "#425e51"; ctx.lineWidth = 3; ctx.strokeRect(MARGIN, MARGIN, width - MARGIN * 2, height - MARGIN * 2)
