@@ -1,4 +1,4 @@
-// The city is drawn once; gameplay only reads its collision and navigation data.
+// Ground textures are baked once. Tall scenery shares the actors' depth order.
 (function (global) {
   "use strict"
 
@@ -7,7 +7,7 @@
   const NAV_RADIUS = 24
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 
-  function create(width = 1440, height = 2560) {
+  function create(width = 1440, height = 2560, art = null) {
     width = Math.max(720, Number.isFinite(width) ? width : 1440)
     height = Math.max(1280, Number.isFinite(height) ? height : 2560)
     const sx = width / 1440
@@ -24,36 +24,31 @@
     const columns = [[332, 628], [812, 1108]]
     let serial = 0
 
-    function addBuilding(x, y, w, h, kind, houseType = "bungalow", floors = 1, ruined = false) {
-      buildings.push(Object.freeze({ x: x * sx, y: y * sy, width: w * sx, height: h * sy, kind, houseType, floors, ruined, variant: serial++ }))
+    function addBuilding(x, y, w, h, kind) {
+      buildings.push(Object.freeze({ x: x * sx, y: y * sy, width: w * sx, height: h * sy, kind, variant: serial++ }))
     }
 
     rows.forEach(([top, bottom], row) => {
       columns.forEach(([left, right], col) => {
         blocks.push({ x: left * sx, y: top * sy, width: (right - left) * sx, height: (bottom - top) * sy })
         const shortBlock = row === 0 || row === rows.length - 1
-        const layoutSeed = row * 7 + col * 3
-        const houseType = layoutSeed % 3 === 0 ? "courtyard" : layoutSeed % 3 === 1 ? "floor" : "bungalow"
-        const houseWidth = houseType === "courtyard" ? 122 : houseType === "floor" ? 108 : 88
-        const houseHeight = shortBlock ? (houseType === "floor" ? 132 : 108) : (houseType === "courtyard" ? 122 : houseType === "floor" ? 146 : 96)
+        const houseWidth = 98
+        const houseHeight = shortBlock ? 104 : 98
         const xs = [left + 18, right - 18 - houseWidth]
         const ys = shortBlock ? [row === 0 ? 108 : 2452 - houseHeight] : [top + 18, bottom - 18 - houseHeight]
         ys.forEach((y, side) => xs.forEach((x, part) => {
-          // Leave larger gaps between blocks and keep the street edges readable.
-          if ((row * 11 + col * 5 + side * 3 + part) % 3 === 0) return
           const variant = row + col + side + part
           const kind = variant % 5 === 0 ? "shop" : variant % 3 === 0 ? "apartment" : "residential"
-          const ruined = (row * 13 + col * 7 + side * 5 + part) % 7 === 0
-          addBuilding(x, y, houseWidth, houseHeight, kind, houseType, houseType === "floor" ? 2 + (variant % 2) : 1, ruined)
+          addBuilding(x, y, houseWidth, houseHeight, kind)
         }))
       })
       // Outer blocks leave open parklets between the shops and the main roads.
-      if (row % 3 === 0) {
+      if (row % 3 !== 1) {
         let houseHeight = Math.min(166, bottom - top - 56)
         const y = Math.max(108, (top + bottom - houseHeight) / 2)
         houseHeight = Math.min(houseHeight, bottom - 24 - y, 2452 - y)
-        addBuilding(56, y, 72, houseHeight, row % 2 ? "apartment" : "shop", row % 2 ? "floor" : "courtyard", row % 2 ? 2 : 1, row === 3)
-        if (row !== 3) addBuilding(1312, y + 8, 72, houseHeight - 16, row % 2 ? "residential" : "shop", "bungalow", 1, row === 0)
+        addBuilding(56, y, 72, houseHeight, row % 2 ? "apartment" : "shop")
+        addBuilding(1312, y + 8, 72, houseHeight - 16, row % 2 ? "residential" : "shop")
       }
     })
 
@@ -251,224 +246,351 @@
     terrain.width = width
     terrain.height = height
     const ctx = terrain.getContext("2d")
+    const scenery = []
+    const scale = Math.min(sx, sy)
     let seed = 81427
     const random = () => {
       seed = Math.imul(seed, 1664525) + 1013904223 | 0
       return (seed >>> 0) / 4294967296
     }
+    const ink = "#483c28"
 
-    function line(ax, ay, bx, by, color, thickness = 2) {
-      ctx.strokeStyle = color
-      ctx.lineWidth = thickness
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke()
+    function polygon(context, points, fill, stroke = null, thickness = 2) {
+      context.beginPath()
+      points.forEach(([x, y], index) => index ? context.lineTo(x, y) : context.moveTo(x, y))
+      context.closePath()
+      if (fill) { context.fillStyle = fill; context.fill() }
+      if (stroke) { context.strokeStyle = stroke; context.lineWidth = thickness; context.stroke() }
     }
 
-    function circle(x, y, radius, color) {
-      ctx.fillStyle = color
-      ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill()
+    function line(context, ax, ay, bx, by, color, thickness = 2) {
+      context.strokeStyle = color
+      context.lineWidth = thickness
+      context.lineCap = "round"
+      context.beginPath(); context.moveTo(ax, ay); context.lineTo(bx, by); context.stroke()
     }
 
-    function tree(x, y, size = 17) {
-      circle(x + 5, y + 7, size + 2, "#283c354a")
-      ctx.fillStyle = "#6d624e"; ctx.fillRect(x - 3, y - 1, 6, 12)
-      circle(x, y, size, "#456452")
-      circle(x - size * .3, y - size * .3, size * .68, "#67815c")
-      circle(x + size * .35, y, size * .5, "#527353")
+    function oval(context, x, y, rx, ry, fill, stroke = null, thickness = 2) {
+      context.beginPath(); context.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2)
+      if (fill) { context.fillStyle = fill; context.fill() }
+      if (stroke) { context.strokeStyle = stroke; context.lineWidth = thickness; context.stroke() }
     }
 
-    function lamp(x, y) {
-      line(x + 2, y + 3, x + 16, y + 16, "#2b3b3545", 5)
-      circle(x, y, 4, "#52635e")
-      line(x, y, x + 11, y - 7, "#3f5155", 3)
-      ctx.fillStyle = "#c9c8a1"; ctx.fillRect(x + 7, y - 12, 11, 6)
+    function rect(context, x, y, w, h, fill, stroke = null, thickness = 2) {
+      context.fillStyle = fill; context.fillRect(x, y, w, h)
+      if (stroke) { context.strokeStyle = stroke; context.lineWidth = thickness; context.strokeRect(x, y, w, h) }
     }
 
-    function parkedCar(x, y, color) {
-      ctx.fillStyle = "#24373155"; ctx.fillRect(x + 4, y + 5, 30, 59)
-      ctx.fillStyle = "#263439"; ctx.fillRect(x - 2, y + 9, 34, 10); ctx.fillRect(x - 2, y + 40, 34, 10)
-      ctx.fillStyle = color; ctx.fillRect(x, y, 30, 58)
-      ctx.fillStyle = "#344c58"; ctx.fillRect(x + 4, y + 12, 22, 11); ctx.fillRect(x + 4, y + 38, 22, 10)
-      ctx.fillStyle = "#c9c8a1"; ctx.fillRect(x + 3, y + 2, 7, 3); ctx.fillRect(x + 20, y + 2, 7, 3)
-      ctx.fillStyle = "#a36153"; ctx.fillRect(x + 3, y + 53, 6, 3); ctx.fillRect(x + 21, y + 53, 6, 3)
+    function grass(x, y, size = 5, dark = false) {
+      const green = dark ? "#667735" : "#829536"
+      polygon(ctx, [[x - size, y + 3], [x - size * .7, y - size], [x - 1, y], [x + 1, y - size * 1.2], [x + 3, y], [x + size, y - size * .4], [x + size, y + 3]], green)
+      line(ctx, x - size, y + 4, x + size, y + 3, "#637233", 1)
     }
 
-    ctx.fillStyle = "#788477"
-    ctx.fillRect(0, 0, width, height)
-    for (const block of blocks) {
-      ctx.fillStyle = "#9aa59a"; ctx.fillRect(block.x, block.y, block.width, block.height)
-      for (let x = block.x + 24; x < block.x + block.width; x += 40 * sx) line(x, block.y, x, block.y + block.height, "#7c8d8055", 1)
-      for (let y = block.y + 24; y < block.y + block.height; y += 40 * sy) line(block.x, y, block.x + block.width, y, "#7c8d8055", 1)
+    // Warm dirt covers most of the old streets. Tarmac survives in irregular
+    // islands, like worn paint, rather than a flat grey city grid.
+    rect(ctx, 0, 0, width, height, "#c2b16c")
+    for (let i = 0; i < 2100; i += 1) {
+      const x = random() * width
+      const y = random() * height
+      oval(ctx, x, y, 4 + random() * 13, 2 + random() * 8, i % 3 ? "#e0cd8d35" : "#9e8a4b25")
     }
 
-    // Draw the sidewalks before joining the continuous asphalt at intersections.
-    ctx.fillStyle = "#acb5ae"
-    for (const x of vertical) ctx.fillRect(x - roadX / 2 - sidewalkX, 0, roadX + sidewalkX * 2, height)
-    for (const y of horizontal) ctx.fillRect(0, y - roadY / 2 - sidewalkY, width, roadY + sidewalkY * 2)
-    ctx.fillStyle = "#3f4e53"
-    for (const x of vertical) ctx.fillRect(x - roadX / 2 - 3, 0, roadX + 6, height)
-    for (const y of horizontal) ctx.fillRect(0, y - roadY / 2 - 3, width, roadY + 6)
-    ctx.fillStyle = "#4a575c"
-    for (const x of vertical) ctx.fillRect(x - roadX / 2, 0, roadX, height)
-    for (const y of horizontal) ctx.fillRect(0, y - roadY / 2, width, roadY)
-
-    // Keep the main avenues connected but give their centre lines a slight
-    // drift so the city reads as an old, settled street grid instead of a
-    // perfect spreadsheet. Buildings and navigation still use their real
-    // collision rectangles, so this is a visual road deformation only.
-    const bend = (distance, index, amplitude) => Math.sin(distance * .0042 + index * 1.7) * amplitude
-    for (let index = 0; index < vertical.length; index += 1) {
-      const x = vertical[index]
-      for (let y = 0; y < height; y += 96 * sy) {
-        const y2 = Math.min(height, y + 100 * sy)
-        const a = x + bend(y / sy, index, 18 * sx)
-        const b = x + bend(y2 / sy, index, 18 * sx)
-        ctx.fillStyle = "#46565a"
-        ctx.beginPath(); ctx.moveTo(a - roadX / 2, y); ctx.lineTo(a + roadX / 2, y); ctx.lineTo(b + roadX / 2, y2); ctx.lineTo(b - roadX / 2, y2); ctx.closePath(); ctx.fill()
-        ctx.fillStyle = "#acb5ae55"
-        ctx.beginPath(); ctx.moveTo(a - roadX / 2 - sidewalkX, y); ctx.lineTo(a - roadX / 2, y); ctx.lineTo(b - roadX / 2, y2); ctx.lineTo(b - roadX / 2 - sidewalkX, y2); ctx.closePath(); ctx.fill()
-        ctx.beginPath(); ctx.moveTo(a + roadX / 2, y); ctx.lineTo(a + roadX / 2 + sidewalkX, y); ctx.lineTo(b + roadX / 2 + sidewalkX, y2); ctx.lineTo(b + roadX / 2, y2); ctx.closePath(); ctx.fill()
+    const allGreen = [...blocks]
+    rows.forEach(([top, bottom]) => {
+      allGreen.push({ x: 28 * sx, y: top * sy, width: 123 * sx, height: (bottom - top) * sy })
+      allGreen.push({ x: 1290 * sx, y: top * sy, width: 122 * sx, height: (bottom - top) * sy })
+    })
+    for (const block of allGreen) {
+      const points = []
+      const jitter = 5 * scale
+      for (let x = block.x; x < block.x + block.width; x += 12 * sx) points.push([x, block.y + (random() - .5) * jitter])
+      for (let y = block.y; y < block.y + block.height; y += 12 * sy) points.push([block.x + block.width + (random() - .5) * jitter, y])
+      for (let x = block.x + block.width; x > block.x; x -= 12 * sx) points.push([x, block.y + block.height + (random() - .5) * jitter])
+      for (let y = block.y + block.height; y > block.y; y -= 12 * sy) points.push([block.x + (random() - .5) * jitter, y])
+      polygon(ctx, points, "#98a748", "#687632", 3 * scale)
+      // Broad, faint brush strokes; there is no rectangular tile grid.
+      for (let i = 0; i < 15; i += 1) {
+        oval(ctx, block.x + 8 + random() * Math.max(1, block.width - 16), block.y + 8 + random() * Math.max(1, block.height - 16), 9 + random() * 17, 4 + random() * 8, "#b9bd563d")
       }
-    }
-    for (let index = 0; index < horizontal.length; index += 1) {
-      const y = horizontal[index]
-      for (let x = 0; x < width; x += 96 * sx) {
-        const x2 = Math.min(width, x + 100 * sx)
-        const a = y + bend(x / sx, index + 4, 14 * sy)
-        const b = y + bend(x2 / sx, index + 4, 14 * sy)
-        ctx.fillStyle = "#46565a"
-        ctx.beginPath(); ctx.moveTo(x, a - roadY / 2); ctx.lineTo(x2, b - roadY / 2); ctx.lineTo(x2, b + roadY / 2); ctx.lineTo(x, a + roadY / 2); ctx.closePath(); ctx.fill()
-        ctx.fillStyle = "#acb5ae55"
-        ctx.beginPath(); ctx.moveTo(x, a - roadY / 2 - sidewalkY); ctx.lineTo(x2, b - roadY / 2 - sidewalkY); ctx.lineTo(x2, b - roadY / 2); ctx.lineTo(x, a - roadY / 2); ctx.closePath(); ctx.fill()
-        ctx.beginPath(); ctx.moveTo(x, a + roadY / 2); ctx.lineTo(x2, b + roadY / 2); ctx.lineTo(x2, b + roadY / 2 + sidewalkY); ctx.lineTo(x, a + roadY / 2 + sidewalkY); ctx.closePath(); ctx.fill()
+      for (let x = block.x + 4; x < block.x + block.width; x += 15 * sx) {
+        grass(x + (random() - .5) * 4, block.y - 1, 3 * scale)
+        grass(x, block.y + block.height + 1, 3 * scale)
+      }
+      for (let y = block.y + 7; y < block.y + block.height; y += 16 * sy) {
+        grass(block.x, y, 3 * scale)
+        grass(block.x + block.width, y, 3 * scale)
       }
     }
 
+    // Wide cracked sandstone pavements join continuously at each intersection.
+    for (const x of vertical) rect(ctx, x - roadX / 2 - sidewalkX, 0, roadX + sidewalkX * 2, height, "#dac780")
+    for (const y of horizontal) rect(ctx, 0, y - roadY / 2 - sidewalkY, width, roadY + sidewalkY * 2, "#dac780")
+    for (const x of vertical) rect(ctx, x - roadX / 2 - 3 * sx, 0, roadX + 6 * sx, height, "#a28e55")
+    for (const y of horizontal) rect(ctx, 0, y - roadY / 2 - 3 * sy, width, roadY + 6 * sy, "#a28e55")
+    for (const x of vertical) rect(ctx, x - roadX / 2, 0, roadX, height, "#c7b777")
+    for (const y of horizontal) rect(ctx, 0, y - roadY / 2, width, roadY, "#c7b777")
+    function wornRoadPatch(x, y, rx, ry, fill) {
+      const points = []
+      for (let edge = 0; edge < 14; edge += 1) {
+        const angle = edge / 14 * Math.PI * 2
+        const roughness = .74 + random() * .28
+        points.push([x + Math.cos(angle) * rx * roughness, y + Math.sin(angle) * ry * roughness])
+      }
+      polygon(ctx, points, fill)
+    }
     for (const x of vertical) {
-      for (let y = 26; y < height - 26; y += 48 * sy) {
-        if (horizontal.some(cross => Math.abs(cross - y) < roadY / 2 + 44 * sy)) continue
-        ctx.fillStyle = "#d1ba74"; ctx.fillRect(x - 5 * sx, y, 2 * sx, 30 * sy); ctx.fillRect(x + 3 * sx, y, 2 * sx, 30 * sy)
-        ctx.fillStyle = "#c5cdc3a8"; ctx.fillRect(x - 43 * sx, y, 3 * sx, 24 * sy); ctx.fillRect(x + 40 * sx, y, 3 * sx, 24 * sy)
+      for (let y = 42; y < height; y += 116 * sy) {
+        const patchX = x + (random() - .5) * 65 * sx
+        wornRoadPatch(patchX, y, (12 + random() * 18) * sx, (18 + random() * 25) * sy, "#8c816353")
+        wornRoadPatch(x + (random() - .5) * 85 * sx, y + 55 * sy, (17 + random() * 15) * sx, (7 + random() * 8) * sy, "#e2ce903d")
       }
     }
     for (const y of horizontal) {
-      for (let x = 26; x < width - 26; x += 48 * sx) {
+      for (let x = 55; x < width; x += 143 * sx) {
+        wornRoadPatch(x, y + (random() - .5) * 60 * sy, (21 + random() * 20) * sx, (10 + random() * 13) * sy, "#8c81634b")
+        wornRoadPatch(x + 71 * sx, y + (random() - .5) * 90 * sy, (15 + random() * 15) * sx, (8 + random() * 7) * sy, "#e9d39436")
+      }
+    }
+    // Weathered shoulders erase the perfectly straight road edge in little chips.
+    for (const x of vertical) {
+      for (let y = 8; y < height; y += 22 * sy) {
+        for (const side of [-1, 1]) {
+          if (horizontal.some(cross => Math.abs(cross - y) < roadY / 2 + sidewalkY)) continue
+          const edge = x + side * roadX / 2
+          polygon(ctx, [[edge - side * (3 + random() * 6) * sx, y], [edge + side * 2 * sx, y - 4 * sy], [edge + side * 6 * sx, y + 8 * sy], [edge - side * 3 * sx, y + 14 * sy]], "#dbc77e")
+          line(ctx, edge + side * 11 * sx, y + 3 * sy, edge + side * 15 * sx, y + 8 * sy, "#aa945c", 1.4 * scale)
+        }
+      }
+    }
+    for (const y of horizontal) {
+      for (let x = 8; x < width; x += 24 * sx) {
+        for (const side of [-1, 1]) {
+          if (vertical.some(cross => Math.abs(cross - x) < roadX / 2 + sidewalkX)) continue
+          const edge = y + side * roadY / 2
+          polygon(ctx, [[x, edge - side * 4 * sy], [x - 4 * sx, edge + side * 2 * sy], [x + 11 * sx, edge + side * 5 * sy], [x + 18 * sx, edge - side * 3 * sy]], "#dbc77e")
+        }
+      }
+    }
+    for (const x of vertical) {
+      for (let y = 26; y < height - 26; y += 53 * sy) {
+        if (horizontal.some(cross => Math.abs(cross - y) < roadY / 2 + 44 * sy)) continue
+        rect(ctx, x - 3 * sx, y, 4 * sx, 26 * sy, "#e2ca823d")
+        if (Math.round(y / sy) % 3) rect(ctx, x + 34 * sx, y + 5 * sy, 2 * sx, 20 * sy, "#c7be955e")
+      }
+    }
+    for (const y of horizontal) {
+      for (let x = 26; x < width - 26; x += 53 * sx) {
         if (vertical.some(cross => Math.abs(cross - x) < roadX / 2 + 44 * sx)) continue
-        ctx.fillStyle = "#d1ba74"; ctx.fillRect(x, y - 5 * sy, 30 * sx, 2 * sy); ctx.fillRect(x, y + 3 * sy, 30 * sx, 2 * sy)
+        rect(ctx, x, y - 2 * sy, 26 * sx, 4 * sy, "#e2ca823d")
       }
     }
-    for (const x of vertical) {
-      for (const y of horizontal) {
-        for (const direction of [-1, 1]) {
-          for (let stripe = 0; stripe < 5; stripe += 1) {
-            ctx.fillStyle = "#d5d9c9"
-            ctx.fillRect(x - roadX / 2 + 15 * sx, y + direction * (roadY / 2 + 10 * sy + stripe * 7 * sy), roadX - 30 * sx, 4 * sy)
-            ctx.fillRect(x + direction * (roadX / 2 + 10 * sx + stripe * 7 * sx), y - roadY / 2 + 15 * sy, 4 * sx, roadY - 30 * sy)
-          }
-        }
-        for (const dx of [-1, 1]) for (const dy of [-1, 1]) lamp(x + dx * (roadX / 2 + 15 * sx), y + dy * (roadY / 2 + 15 * sy))
+    for (const x of vertical) for (const y of horizontal) {
+      for (const side of [-1, 1]) for (let stripe = 0; stripe < 4; stripe += 1) {
+        rect(ctx, x - roadX / 2 + 18 * sx, y + side * (roadY / 2 + 8 * sy + stripe * 7 * sy), roadX - 36 * sx, 3 * sy, "#e9dba983")
+        rect(ctx, x + side * (roadX / 2 + 8 * sx + stripe * 7 * sx), y - roadY / 2 + 18 * sy, 3 * sx, roadY - 36 * sy, "#e9dba983")
       }
+      // Dirt washed out over the crossing rather than clean grey paving.
+      oval(ctx, x - 30 * sx, y + 32 * sy, 31 * sx, 17 * sy, "#c4ab6333")
+      oval(ctx, x + 35 * sx, y - 29 * sy, 20 * sx, 12 * sy, "#756d5530")
     }
-
-    // Texture and small cracks are static, so dense enemy waves do no extra work.
-    for (let index = 0; index < 850; index += 1) {
-      ctx.fillStyle = index % 3 ? "#c8cbbb12" : "#1e36321b"
-      ctx.fillRect(random() * width, random() * height, 1 + random() * 4, 1 + random() * 3)
-    }
-    for (const x of vertical) {
-      for (let index = 0; index < 7; index += 1) {
-        const y = (index + .35) * height / 7
-        line(x + 22 * sx, y, x + 34 * sx, y + 15 * sy, "#33424866", 1)
-        line(x + 34 * sx, y + 15 * sy, x + 30 * sx, y + 29 * sy, "#33424866", 1)
+    for (let i = 0; i < 2000; i += 1) {
+      const x = random() * width
+      const y = random() * height
+      const onRoad = vertical.some(road => Math.abs(road - x) < roadX / 2) || horizontal.some(road => Math.abs(road - y) < roadY / 2)
+      oval(ctx, x, y, 1 + random() * 2, .7 + random() * 1.3, onRoad ? "#7d6e4242" : "#e1cd8830")
+      if (i % 9 === 0 && !onRoad) {
+        oval(ctx, x, y, 2.8 * scale, 1.8 * scale, "#b4ac7e", "#767346", .8)
+        if (i % 18 === 0) grass(x + 6 * sx, y, 3.5 * scale)
       }
-    }
-
-    function drawBuilding(building) {
-      const { x, y, width: w, height: h, kind, variant, houseType = "bungalow", floors = 1, ruined = false } = building
-      const roofColors = ["#76838b", "#8f7762", "#6b848d", "#8b917f", "#7c858c"]
-      const roof = roofColors[variant % roofColors.length]
-      ctx.fillStyle = "#27393170"; ctx.fillRect(x + 7, y + 10, w + 3, h + 3)
-      ctx.fillStyle = "#34484b"; ctx.fillRect(x - 2, y - 2, w + 4, h + 4)
-      ctx.fillStyle = ruined ? "#69716b" : "#879692"; ctx.fillRect(x, y, w, h)
-      ctx.fillStyle = ruined ? "#4f5a56" : roof; ctx.fillRect(x + 4, y + 4, w - 8, h - 24)
-      if (houseType === "courtyard") {
-        ctx.strokeStyle = ruined ? "#84715b" : "#b7a878"; ctx.lineWidth = 4
-        ctx.strokeRect(x + 7, y + 10, w - 14, h - 30)
-        ctx.fillStyle = ruined ? "#4e5b4d" : "#78906d"; ctx.fillRect(x + w * .28, y + h * .28, w * .44, h * .36)
-      }
-      if (floors > 1) {
-        ctx.strokeStyle = "#c0c5b433"; ctx.lineWidth = 2
-        for (let floor = 1; floor < floors; floor += 1) ctx.beginPath(), ctx.moveTo(x + 7, y + h * floor / floors), ctx.lineTo(x + w - 7, y + h * floor / floors), ctx.stroke()
-      }
-      line(x + 5, y + 4, x + w - 5, y + 4, "#b8c3b4", 3)
-      line(x + 4, y + 5, x + 4, y + h - 23, "#a5b4ab", 2)
-      line(x + 5, y + h - 21, x + w - 5, y + h - 21, "#3e5356", 3)
-      if (kind === "residential") {
-        // The ridge, paired roof slopes and small chimney distinguish houses.
-        ctx.fillStyle = "#3d535529"; ctx.fillRect(x + w / 2, y + 7, w / 2 - 7, h - 30)
-        line(x + w / 2, y + 6, x + w / 2, y + h - 24, "#bac1ab", 3)
-        for (let row = y + 18; row < y + h - 27; row += 16 * sy) line(x + 7, row, x + w - 7, row, "#445b5338", 1)
-        ctx.fillStyle = "#46585b"; ctx.fillRect(x + 15 * sx, y + 18 * sy, 13 * sx, 19 * sy)
-        ctx.fillStyle = "#a0aaa0"; ctx.fillRect(x + 15 * sx, y + 16 * sy, 13 * sx, 4 * sy)
-      } else {
-        // Flat roofs carry skylights, ventilation units and service walkways.
-        ctx.fillStyle = "#455d64"; ctx.fillRect(x + 16 * sx, y + 17 * sy, w - 32 * sx, 23 * sy)
-        ctx.fillStyle = "#9ebac0"; ctx.fillRect(x + 19 * sx, y + 20 * sy, w - 38 * sx, 16 * sy)
-        line(x + w / 2, y + 20 * sy, x + w / 2, y + 36 * sy, "#546c71", 2)
-        ctx.fillStyle = "#566966"; ctx.fillRect(x + w - 36 * sx, y + h - 48 * sy, 22 * sx, 18 * sy)
-        ctx.fillStyle = "#b0b8a7"; ctx.fillRect(x + w - 35 * sx, y + h - 49 * sy, 20 * sx, 12 * sy)
-        for (let vent = 0; vent < 3; vent += 1) line(x + w - 31 * sx, y + h - 46 * sy + vent * 3 * sy, x + w - 19 * sx, y + h - 46 * sy + vent * 3 * sy, "#6c807b", 1)
-      }
-      ctx.fillStyle = "#506563"; ctx.fillRect(x + 4, y + h - 18 * sy, w - 8, 15 * sy)
-      for (const offset of [12, w - 28 * sx]) {
-        ctx.fillStyle = "#c1c9b7"; ctx.fillRect(x + offset, y + h - 16 * sy, 16 * sx, 11 * sy)
-        ctx.fillStyle = "#93b3ba"; ctx.fillRect(x + offset + 2 * sx, y + h - 14 * sy, 12 * sx, 7 * sy)
-      }
-      ctx.fillStyle = "#304347"; ctx.fillRect(x + w / 2 - 7 * sx, y + h - 16 * sy, 14 * sx, 16 * sy)
-      ctx.fillStyle = "#b1ba9e"; ctx.fillRect(x + w / 2 - 4 * sx, y + h - 14 * sy, 8 * sx, 6 * sy)
-      ctx.fillStyle = "#b7c0ad"; ctx.fillRect(x + w / 2 - 11 * sx, y + h, 22 * sx, 4 * sy)
-      if (kind === "shop") {
-        for (let stripe = 0; stripe < Math.floor((w - 8) / (8 * sx)); stripe += 1) {
-          ctx.fillStyle = stripe % 2 ? "#c4c7ac" : "#577e7f"
-          ctx.fillRect(x + 4 + stripe * 8 * sx, y + h - 25 * sy, 8 * sx, 9 * sy)
-        }
-        ctx.fillStyle = "#344f58"; ctx.fillRect(x + 10 * sx, y + h - 40 * sy, w - 20 * sx, 13 * sy)
-        ctx.fillStyle = "#d6d8bf"; ctx.font = `bold ${9 * Math.min(sx, sy)}px sans-serif`; ctx.textAlign = "center"
-        ctx.fillText(["MART", "CAFE", "CLINIC"][variant % 3], x + w / 2, y + h - 30 * sy)
-      }
-      if (ruined) {
-        ctx.strokeStyle = "#2c373455"; ctx.lineWidth = 3
-        ctx.beginPath(); ctx.moveTo(x + 12, y + 18); ctx.lineTo(x + w * .42, y + h * .55); ctx.lineTo(x + w - 10, y + h * .34); ctx.stroke()
-        ctx.fillStyle = "#a38c6c"; ctx.fillRect(x + w * .2, y + h - 11, 9, 6); ctx.fillRect(x + w * .72, y + h - 16, 12, 7)
+      if (i % 23 === 0 && onRoad) {
+        line(ctx, x, y, x + 12 * sx, y + 6 * sy, "#8d7a4c", 1.4 * scale)
+        line(ctx, x + 12 * sx, y + 6 * sy, x + 8 * sx, y + 14 * sy, "#8d7a4c", 1.4 * scale)
+        line(ctx, x + 12 * sx, y + 6 * sy, x + 21 * sx, y + 4 * sy, "#8d7a4c", 1 * scale)
+        if (i % 46 === 0) grass(x + 9 * sx, y + 12 * sy, 3 * scale, true)
       }
     }
 
-    for (const building of buildings) drawBuilding(building)
+    const houseAssets = [0, 2, 4, 5, 1, 7, 0, 3]
+    for (const building of buildings) {
+      const roofLift = 30 * sy
+      const pad = 6 * sx
+      const item = { id: `building-${building.variant}`, type: "building", index: houseAssets[building.variant % houseAssets.length], building, x: building.x - pad, y: building.y - roofLift, width: building.width + pad * 2, height: building.height + roofLift, sortY: building.y + building.height }
+      scenery.push(Object.freeze(item))
+      // Ground contact shadows are baked; the roof itself belongs to depth order.
+      oval(ctx, building.x + building.width / 2 + 7 * sx, building.y + building.height - 2 * sy, building.width * .58, 12 * sy, "#594d3245")
+      for (let i = 0; i < 4; i += 1) grass(building.x + 10 * sx + i * building.width / 4, building.y + building.height + 4 * sy, 4 * scale, true)
+    }
+
+    function prop(index, x, baseY, w, h) {
+      const item = { id: `prop-${scenery.length}`, type: index === 8 || index === 9 ? "tree" : "prop", index, x: (x - w / 2) * sx, y: (baseY - h) * sy, width: w * sx, height: h * sy, sortY: baseY * sy }
+      scenery.push(Object.freeze(item))
+      oval(ctx, x * sx + 5 * sx, (baseY - 3) * sy, w * sx * .43, 6 * sy, "#4f52282d")
+    }
+    // Rounded, layered treelines frame the city without cluttering its alleys.
+    for (let y = 58; y < 2525; y += 64) {
+      const row = rows.find(([top, bottom]) => y >= top && y <= bottom)
+      if (!row) continue
+      for (const x of [35, 1407]) {
+        const base = y + (random() - .5) * 12
+        prop(random() < .09 ? 9 : 8, x + (random() - .5) * 10, base, 58 + random() * 14, 68 + random() * 17)
+        if (Math.floor(y / 64) % 3 === 0) prop(8, x + (x < 100 ? 29 : -29), base - 22, 52, 64)
+      }
+    }
+    // Street trees sit outside the house footprints. Their crowns frame the
+    // visible block edge; the 64-pixel passage down the block centre stays clear.
     rows.forEach(([top, bottom], row) => {
-      const middle = (top + bottom) / 2 * sy
-      if (row % 3 === 1) {
-        for (const x of [88, 1360]) {
-          const parkX = x * sx
-          ctx.fillStyle = "#718568"; ctx.fillRect(parkX - 33 * sx, top * sy + 30, 66 * sx, (bottom - top) * sy - 60)
-          tree(parkX, middle - 58 * sy, 21 * sx); tree(parkX + 8 * sx, middle + 50 * sy, 18 * sx)
-          ctx.fillStyle = "#8e8c6b"; ctx.fillRect(parkX - 20 * sx, middle - 4 * sy, 33 * sx, 8 * sy)
-        }
-      }
       for (const [left, right] of columns) {
-        tree((left + 16) * sx, (top + 16) * sy, 11 * sx)
-        tree((right - 12) * sx, (bottom - 11) * sy, 12 * sx)
+        prop(8, left + 1, top + 24, 60, 73)
+        prop(8, right - 1, top + 21, 54, 68)
+        prop(8, left + 1, bottom - 11, 63, 77)
+        prop(row % 4 === 0 ? 9 : 8, right - 1, bottom - 8, 57, 72)
+        // Oil drums and crates stay off the central 64-pixel passages.
+        prop(12, left + 24, bottom - 22, 30, 29)
+        if (row % 2) prop(14, right - 35, top + 39, 33, 25)
       }
+      const middle = (top + bottom) / 2
       if (row % 3 === 1) {
-        const parkY = middle - 34 * sy
-        ctx.strokeStyle = "#cad0b866"; ctx.lineWidth = 2
-        ctx.strokeRect(106 * sx, parkY, 41 * sx, 67 * sy)
-        parkedCar(112 * sx, parkY + 5 * sy, row === 1 ? "#768d95" : "#a1a18b")
+        for (const x of [88, 1357]) {
+          prop(8, x - 6, middle - 42, 62, 75)
+          prop(8, x + 10, middle + 67, 53, 69)
+          prop(row === 1 ? 11 : 10, x + 5, middle + 15, 47, 44)
+          prop(12, x - 14, middle + 91, 32, 31)
+        }
+      } else {
+        prop(row % 2 ? 13 : 14, 109, bottom - 15, 33, 28)
+        prop(12, 1320, top + 25, 29, 27)
       }
     })
-    ctx.strokeStyle = "#425e51"; ctx.lineWidth = 3; ctx.strokeRect(MARGIN, MARGIN, width - MARGIN * 2, height - MARGIN * 2)
+    for (let i = 0; i < horizontal.length; i += 1) {
+      const cross = horizontal[i] / sy
+      prop(i % 2 ? 10 : 11, 179, cross + 118, 49, 42)
+      prop(i % 2 ? 14 : 15, 1261, cross - 104, 48, 34)
+    }
+    // A low, broken perimeter wall is scenery only; the original bounds remain.
+    for (let x = 65; x < 1390; x += 68) {
+      if (vertical.some(road => Math.abs(road / sx - x) < 100)) continue
+      prop(8, x, 56, 64, 76)
+      prop(8, x + 14, 2548, 68, 80)
+    }
+    ctx.strokeStyle = "#756a3b"; ctx.lineWidth = 3 * scale
+    ctx.strokeRect(MARGIN, MARGIN, width - MARGIN * 2, height - MARGIN * 2)
+
+    function drawFallbackBuilding(context, item) {
+      const { x, y, width: w, height: h, kind, variant } = item.building
+      const u = sx
+      const v = sy
+      const top = y - 28 * v
+      const ledge = y + h - 35 * v
+      const roof = ["#857963", "#967954", "#808775", "#9e8b61"][variant % 4]
+      const wall = ["#b99d6d", "#aaab88", "#bfaa7e", "#9c9476"][variant % 4]
+      // A visible front facade and softly bevelled roof, never an isometric cube.
+      polygon(context, [[x - 3 * u, y + 6 * v], [x + 3 * u, top + 7 * v], [x + w - 3 * u, top], [x + w + 3 * u, y + 6 * v], [x + w + 3 * u, ledge], [x - 3 * u, ledge]], roof, ink, 2.5 * scale)
+      rect(context, x, ledge, w, h - (ledge - y), wall, ink, 2.5 * scale)
+      rect(context, x + 4 * u, ledge + 3 * v, w - 8 * u, 5 * v, "#d5bd83")
+      // Shingled/brick detail uses a fixed rhythm and unequal weathered strokes.
+      for (let roofY = top + 16 * v; roofY < ledge - 4 * v; roofY += 13 * v) {
+        line(context, x + 4 * u, roofY, x + w - 4 * u, roofY, "#584d3768", 1 * scale)
+        for (let roofX = x + 13 * u + (Math.round(roofY / v) % 2 ? 7 * u : 0); roofX < x + w - 6 * u; roofX += 20 * u) line(context, roofX, roofY - 9 * v, roofX, roofY, "#d2b37c40", 1 * scale)
+      }
+      line(context, x + 2 * u, top + 9 * v, x + w - 4 * u, top + 4 * v, "#c8bb91", 2 * scale)
+      line(context, x + w - 3 * u, top + 7 * v, x + w - 3 * u, ledge - 2 * v, "#544934", 2 * scale)
+      if (kind === "residential") {
+        line(context, x + w / 2, top + 6 * v, x + w / 2, ledge - 3 * v, "#d0b783", 2 * scale)
+        rect(context, x + 13 * u, top + 18 * v, 13 * u, 16 * v, "#796a53", ink, 2 * scale)
+        rect(context, x + 11 * u, top + 16 * v, 17 * u, 5 * v, "#b3a782", ink, 1.5 * scale)
+      } else {
+        rect(context, x + 13 * u, top + 17 * v, 29 * u, 19 * v, "#c0b38b", ink, 1.5 * scale)
+        for (let vent = 0; vent < 4; vent += 1) line(context, x + 18 * u, top + (21 + vent * 3) * v, x + 36 * u, top + (21 + vent * 3) * v, "#747663", 1.5 * scale)
+      }
+      // Broken glass, nailed boards and spalling masonry make the theme visible.
+      for (const windowX of [x + 8 * u, x + w - 25 * u]) {
+        rect(context, windowX, ledge + 12 * v, 17 * u, 15 * v, "#525d50", ink, 1.8 * scale)
+        polygon(context, [[windowX + 2 * u, ledge + 13 * v], [windowX + 14 * u, ledge + 13 * v], [windowX + 11 * u, ledge + 19 * v], [windowX + 3 * u, ledge + 23 * v]], "#9cae93")
+        line(context, windowX, ledge + 15 * v, windowX + 18 * u, ledge + 23 * v, "#89704c", 3 * scale)
+      }
+      rect(context, x + w / 2 - 9 * u, ledge + 11 * v, 18 * u, 24 * v, "#59553d", ink, 2 * scale)
+      line(context, x + w / 2 - 8 * u, ledge + 21 * v, x + w / 2 + 8 * u, ledge + 17 * v, "#a38856", 3 * scale)
+      oval(context, x + w / 2 + 4 * u, ledge + 28 * v, 1.3 * u, 1.3 * v, "#d1bc79")
+      rect(context, x + w / 2 - 13 * u, y + h, 26 * u, 3 * v, "#c4b17e", ink, 1 * scale)
+      if (kind === "shop") {
+        rect(context, x + 5 * u, ledge - 12 * v, w - 10 * u, 13 * v, variant % 3 ? "#6d8170" : "#937049", ink, 2 * scale)
+        context.fillStyle = "#e8dbac"; context.font = `bold ${8 * scale}px sans-serif`; context.textAlign = "center"
+        context.fillText(["MART", "CLINIC", "GARAGE"][variant % 3], x + w / 2, ledge - 3 * v)
+        for (let stripe = 0; stripe < Math.floor((w - 10 * u) / (8 * u)); stripe += 1) rect(context, x + 5 * u + stripe * 8 * u, ledge + 2 * v, 8 * u, 5 * v, stripe % 2 ? "#c3b488" : "#738168")
+      }
+      line(context, x + w - 8 * u, ledge + 7 * v, x + w - 11 * u, ledge + 15 * v, "#695938", 1 * scale)
+      line(context, x + w - 11 * u, ledge + 15 * v, x + w - 8 * u, ledge + 19 * v, "#695938", 1 * scale)
+    }
+
+    function drawFallbackTree(context, item) {
+      const { x, y, width: w, height: h } = item
+      const trunkX = x + w * .48
+      const base = y + h
+      rect(context, trunkX - w * .065, base - h * .36, w * .13, h * .33, "#8d7146", ink, 2 * scale)
+      line(context, trunkX, base - h * .08, trunkX - w * .12, base, "#8d7146", 4 * scale)
+      if (item.index === 9) {
+        line(context, trunkX, base - h * .28, x + w * .2, y + h * .2, "#826b48", 5 * scale)
+        line(context, trunkX + 2 * sx, base - h * .27, x + w * .82, y + h * .08, "#826b48", 4 * scale)
+        line(context, x + w * .29, y + h * .37, x + w * .09, y + h * .33, ink, 2 * scale)
+        return
+      }
+      // Each crown has several outlined lobes, like the round forest in the image.
+      oval(context, x + w * .48, y + h * .38, w * .46, h * .35, "#5e812c", ink, 2.5 * scale)
+      const lobes = [[.28, .25, .22, .16], [.61, .2, .25, .18], [.79, .35, .19, .17], [.41, .44, .26, .21], [.18, .43, .18, .18], [.65, .52, .23, .17]]
+      lobes.forEach(([cx, cy, rx, ry], index) => {
+        oval(context, x + w * cx, y + h * cy, w * rx, h * ry, ["#80a436", "#91ae3c", "#6d932e"][index % 3], "#4d6b2a", 1.8 * scale)
+        oval(context, x + w * (cx - .025), y + h * (cy - .045), w * rx * .58, h * ry * .35, "#b0c55744")
+      })
+    }
+
+    function drawFallbackProp(context, item) {
+      const { x, y, width: w, height: h, index } = item
+      if (index === 10 || index === 11) {
+        rect(context, x + w * .07, y + h * .38, w * .88, h * .4, "#4f4b39", ink, 2 * scale)
+        const body = index === 11 ? "#b8b495" : "#967647"
+        polygon(context, [[x + w * .08, y + h * .33], [x + w * .3, y + h * .12], [x + w * .7, y + h * .12], [x + w * .88, y + h * .36], [x + w * .94, y + h * .69], [x + w * .04, y + h * .69]], body, ink, 2 * scale)
+        polygon(context, [[x + w * .34, y + h * .17], [x + w * .65, y + h * .17], [x + w * .76, y + h * .36], [x + w * .23, y + h * .36]], "#748779", ink, 1 * scale)
+        oval(context, x + w * .23, y + h * .77, w * .105, h * .14, "#555243", ink, 2 * scale)
+        oval(context, x + w * .77, y + h * .77, w * .105, h * .14, "#555243", ink, 2 * scale)
+        line(context, x + w * .34, y + h * .5, x + w * .5, y + h * .57, "#765c37", 3 * scale)
+        if (index === 11) { rect(context, x + w * .4, y + h * .04, w * .11, h * .09, "#916f49", ink, 1); rect(context, x + w * .51, y + h * .04, w * .1, h * .09, "#557577", ink, 1) }
+      } else if (index === 12) {
+        rect(context, x + w * .53, y + h * .43, w * .43, h * .48, "#a88d55", ink, 2 * scale)
+        line(context, x + w * .57, y + h * .49, x + w * .91, y + h * .86, "#79623d", 2 * scale)
+        rect(context, x + w * .1, y + h * .24, w * .43, h * .58, "#8d7449", ink, 2 * scale)
+        oval(context, x + w * .315, y + h * .23, w * .215, h * .11, "#b29962", ink, 1.5 * scale)
+        line(context, x + w * .1, y + h * .45, x + w * .53, y + h * .45, "#605f48", 2 * scale)
+        line(context, x + w * .1, y + h * .68, x + w * .53, y + h * .68, "#605f48", 2 * scale)
+      } else if (index === 13) {
+        for (const offset of [.25, .55, .75]) oval(context, x + w * offset, y + h * .75, w * .19, h * .14, "#555242", ink, 2 * scale)
+        polygon(context, [[x + w * .38, y + h * .7], [x + w * .33, y + h * .38], [x + w * .48, y + h * .51], [x + w * .6, y + h * .1], [x + w * .71, y + h * .6], [x + w * .6, y + h * .72]], "#b08038", ink, 1.5 * scale)
+        polygon(context, [[x + w * .48, y + h * .67], [x + w * .59, y + h * .38], [x + w * .64, y + h * .68]], "#dbc069")
+      } else if (index === 14) {
+        polygon(context, [[x + w * .02, y + h * .95], [x + w * .11, y + h * .4], [x + w * .31, y + h * .38], [x + w * .36, y + h * .11], [x + w * .59, y + h * .18], [x + w * .63, y + h * .59], [x + w * .91, y + h * .66], [x + w * .97, y + h * .94]], "#a39165", ink, 2 * scale)
+        for (let r = 0; r < 2; r += 1) line(context, x + w * .17, y + h * (.59 + r * .16), x + w * .7, y + h * (.59 + r * .16), "#796948", 1.5 * scale)
+      } else {
+        for (let row = 0; row < 2; row += 1) for (let bag = 0; bag < 3; bag += 1) oval(context, x + w * (.18 + bag * .3 + row * .06), y + h * (.8 - row * .3), w * .17, h * .2, row ? "#b4a575" : "#9f9467", ink, 1.5 * scale)
+        line(context, x + w * .3, y + h * .1, x + w * .52, y + h * .49, "#9d8150", 4 * scale)
+      }
+    }
+
+    function drawScenery(context, item) {
+      context.save()
+      context.lineJoin = "round"
+      // If the image has not arrived, the detailed Canvas art remains playable.
+      const drawn = art && art.drawEnvironment(context, item.index, item.x, item.y, item.width, item.height)
+      if (!drawn) {
+        if (item.type === "building") drawFallbackBuilding(context, item)
+        else if (item.type === "tree") drawFallbackTree(context, item)
+        else drawFallbackProp(context, item)
+      }
+      context.restore()
+    }
 
     const spawn = Object.freeze({ x: width / 2, y: height / 2 })
     updateNavigation(spawn.x, spawn.y)
-    return Object.freeze({ width, height, terrain, buildings: Object.freeze(buildings), spawn, roads: { vertical: [...vertical], horizontal: [...horizontal], bendAmplitude: { x: 18 * sx, y: 14 * sy } }, isFree, move, steer, updateNavigation })
+    return Object.freeze({ width, height, terrain, buildings: Object.freeze(buildings), scenery: Object.freeze(scenery), drawScenery, spawn, roads: { vertical: [...vertical], horizontal: [...horizontal], bendAmplitude: { x: 18 * sx, y: 14 * sy } }, isFree, move, steer, updateNavigation })
   }
 
   global.WASTELAND_CITY = Object.freeze({ create })
