@@ -4,12 +4,12 @@
 
 - 用户目标：技能界面减少杂乱，参考《弹壳特攻队》的局内获取方式。
 - 用户已确认先在独立本地分支完成；仓库没有 GitHub 远程，此轮不创建 Issue / PR。
+- 用户随后收窄范围：只更新网页端，小程序端暂停更新。
 - 基线：`f243d22`，包含已完成的枪械、渐进尸潮与三分钟撤离逻辑。
 - 集成分支：`work/codex/skill-acquisition`。
 - 网页写入：`prototype-2d/index.html`、`skills.js`、`README.md`。
-- 小程序写入：`wechat-miniprogram/miniprogram/pages/index/index.js`、`index.wxml`、`index.wxss`，独立分支 `work/wechat/skill-acquisition`。
 - 测试写入：`scripts/verify-skills.mjs`、`scripts/verify-combat.mjs`、`prototype-2d/tests/combat-smoke.mjs`，独立分支 `work/tests/skill-acquisition`。
-- 集成补充：本说明；小程序 `app.json` 补上竖屏声明，修复仓库验证的既有失败项。
+- 集成补充：本说明。早期集成的小程序页面改动已撤回；小程序配置也恢复基线。
 
 ## 规则
 
@@ -26,13 +26,13 @@
 - `node scripts/validate.mjs`
 - `node scripts/verify-skills.mjs`
 - `node prototype-2d/tests/combat-smoke.mjs`
-- `node scripts/verify-combat.mjs`
+- `node scripts/verify-combat.mjs --web-only`
 - 浏览器手机视口检查新技能卡、分组技能栏及暂停技能说明。
 
-实际执行结果与局限在完成验证后补充。小程序的 wx 桩检查不能替代微信开发者工具或真机验证。
+实际执行结果与局限在完成验证后补充。仓库验证包含小程序既有的竖屏声明检查；该端暂停更新时需如实记录其基线失败项。
 
 ## 保留边界
 
 - 本轮不增加技能合成或超武进化。
-- 双端沿用各自既有技能 ID 与战斗效果，技能获取规则与槽位容量保持一致；既有技能池差异仍需后续统一。
+- 小程序继续使用本轮之前的技能获取逻辑，未纳入本次网页交付；双端技能池差异仍需后续统一。
 - 不修改 `main`，不修改其他聊天的工作分支或未提交文件。
