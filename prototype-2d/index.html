@@ -714,7 +714,7 @@
     }
 
     function spawnLoot(typeOrSkillId = "random", quality, x, y) {
-      if (!state || state.phase !== "playing") return null
+      if (!state || state.phase !== "playing" || state.paused) return null
       if (typeOrSkillId && typeof typeOrSkillId === "object") {
         const options = typeOrSkillId
         typeOrSkillId = options.id || options.skillId || options.weaponId || options.kind || "random"
