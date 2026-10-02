@@ -35,7 +35,8 @@
 | --- | --- |
 | `node scripts/validate.mjs` | PASS：脚本、JSON、竖屏配置与小程序入口 |
 | `node prototype-2d/tests/combat-smoke.mjs` | PASS：构筑、移动/撞边、枪械、暂停、死亡、上限、179/180 秒结算与重开 |
-| `node scripts/verify-combat.mjs` | PASS：真实 Edge 浏览器 390×844 桌面/触屏回归，以及 wx 桩逻辑回归；运行需要 Playwright |
+| `node scripts/verify-combat.mjs --mini-only` | PASS：wx 桩图集加载、走跑停、暂停/升级、射击、179 秒压力、104/72 上限、死亡/重开与 180 秒结算 |
+| `node scripts/verify-combat.mjs`（网页部分） | BLOCKED：当前执行环境缺少 Playwright；授权 Edge 启动曾受 `spawn EPERM` 限制。历史浏览器证据仍保留在本地记录中 |
 | 浏览器压力模拟 | 约 179 秒模拟战斗；桌面峰值 160、触屏峰值 104；随后验证 180 秒胜利与冻结 |
 | 小程序压力模拟 | 179 秒 wx 桩模拟战斗峰值 84；管理员生成验证 104/72 上限；不是微信设备性能结果 |
 | 视觉检查 | Edge 实际渲染四方向持枪、两臂层级、四类直立感染者及低趴爬行者；390×844 画面无横向溢出 |
