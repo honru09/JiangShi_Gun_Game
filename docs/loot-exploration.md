@@ -40,7 +40,7 @@
 
 ## 实际结果
 
-实现与验收进行中，尚未宣称通过。完成后在这里记录真实执行结果。
+2026-10-02 实际结果：`verify-loot.mjs --unit-only` 与授权 Edge 390×844/320×568 PASS；`city-map-smoke.mjs`、`verify-combat.mjs --web-only` PASS。`validate.mjs` 仅保留既有小程序竖屏配置失败，未修改小程序。
 
 ## 验证边界
 

@@ -23,7 +23,9 @@
 | `node scripts/verify-loot.mjs --unit-only` | PASS：道具球升级、品质实际效果、枪械换装、槽位上限、随机掉落、房屋搜索持久化、暂停/结算/重开 |
 | `node prototype-2d/tests/combat-smoke.mjs` | PASS：网页脚本、移动、射击、死亡冻结、桌面 160/触屏 104 上限、179/180 秒结算与重开 |
 | `node scripts/validate.mjs` | FAIL 1 项：既有小程序 `app.json` 未声明 `window.pageOrientation=portrait`；网页脚本、技能/房屋/掉落脚本和 JSON 其余检查 PASS。本轮未改小程序 |
-| `verify-loot.mjs` 浏览器阶段 | BLOCKED：当前沙箱启动 Edge 返回 `spawn EPERM`；未把模拟结果写成浏览器通过 |
+| `node scripts/verify-loot.mjs` | PASS：8 组页面模拟；授权 Edge 390×844 与 320×568 通过道具球、房屋搜索、换枪、暂停、回访、结算和自然掉落 |
+| `node prototype-2d/tests/city-map-smoke.mjs` | PASS：授权 Edge 触屏地图视觉/交互回归；30 栋、多种房型、破损房屋、弯曲道路、入口可达和道具球无升级弹窗 |
+| `node scripts/verify-combat.mjs --web-only` | PASS：授权 Edge 桌面/触屏自动射击、179 秒压力、160/104 上限、180 秒撤离和普通入口隐藏调试工具 |
 
 ## Git 与协作
 
@@ -34,6 +36,6 @@
 ## 未执行与限制
 
 - 微信开发者工具编译、真机预览、真人试玩和微信上传：NOT RUN。
-- 浏览器完整视觉阶段受 Edge 启动权限限制；单元和真实页面脚本模拟已通过。
+- 非授权沙箱启动 Edge 会返回 `spawn EPERM`；使用授权本机 Edge 已完成本轮网页浏览器回归。
 - 临时公网隧道只在当前会话有效，不代表稳定部署或线上服务。
 - 低端手机、微信 Canvas 帧率和真实网络环境仍需设备验证。

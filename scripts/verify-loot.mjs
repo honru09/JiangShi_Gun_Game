@@ -38,7 +38,7 @@ async function browserChecks() {
       page.on("pageerror", error => errors.push(error.message));
       page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
       await page.goto(url); await page.locator("#startRun").click();
-      await page.evaluate(() => { const d = window.__LAST_NIGHT_DEBUG__; d.state.godMode = true; d.state.paused = true; });
+      await page.evaluate(() => { const d = window.__LAST_NIGHT_DEBUG__; d.state.godMode = true; d.state.paused = false; });
       assert.equal(await page.locator("[data-upgrade-id], #levelOverlay, #upgradeList").count(), 0);
       assert.equal(await page.locator(".skill-slot").count(), 7);
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
