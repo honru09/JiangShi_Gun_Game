@@ -529,6 +529,8 @@
         xpMultiplier: 1 + level("magnetHarness") * .1,
         fireInterval: weapon.interval / (1 + instinct * .12 + adrenalineEffect * .12),
         bulletDamage: weapon.damage * weaponQuality * (1 + level("armorPiercingBolt") * .12),
+        damage: weapon.damage * weaponQuality * (1 + level("armorPiercingBolt") * .12),
+        weaponQualityMultiplier: weaponQuality,
         bulletSpeed: weapon.speed + level("armorPiercingBolt") * 28,
         bulletLife: weapon.life,
         pierce: Math.floor(level("armorPiercingBolt")),
