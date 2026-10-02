@@ -712,6 +712,14 @@
 
     function spawnLoot(typeOrSkillId = "random", quality, x, y) {
       if (!state || state.phase !== "playing") return null
+      if (typeOrSkillId && typeof typeOrSkillId === "object") {
+        const options = typeOrSkillId
+        typeOrSkillId = options.id || options.skillId || options.weaponId || options.kind || "random"
+        quality = options.quality || options.rarity
+        x = options.x; y = options.y
+        if (options.kind === "skill" && !Skills.byId(typeOrSkillId)) typeOrSkillId = options.skillId || "skill"
+        if (options.kind === "gun" && !Loot.weapons[typeOrSkillId]) typeOrSkillId = options.weaponId || "gun"
+      }
       const total = state.loot.length + [...state.sceneCaches.values()].reduce((sum, cache) => sum + cache.loot.length, 0)
       if (state.loot.length >= CONFIG.lootCap || total >= CONFIG.worldLootCap) return null
       let item
@@ -813,6 +821,30 @@
       }
       syncHud()
       return true
+    }
+
+    function tryCollectLoot(lootId) {
+      if (!state || state.phase !== "playing" || state.paused) return false
+      const ball = state.loot.find(item => item.id === lootId)
+      if (!ball || distanceSquared(ball.x, ball.y, state.player.x, state.player.y) > 28 ** 2) return false
+      state.loot = state.loot.filter(item => item !== ball)
+      collectLoot(ball)
+      syncHud(); draw()
+      return true
+    }
+
+    function enterBuilding(buildingId) {
+      if (!state || state.phase !== "playing" || state.paused || state.room) return false
+      const house = houseSystem.houses.find(item => item.id === buildingId) || houseSystem.getNearbyEntrance(state.player, Infinity)
+      if (!house) return false
+      state.player.x = house.door.x; state.player.y = house.door.y
+      return interact()
+    }
+
+    function exitBuilding() {
+      if (!state || state.phase !== "playing" || state.paused || !state.room) return false
+      state.player.x = state.room.exit.x; state.player.y = state.room.exit.y
+      return interact()
     }
 
     const ENEMY_TYPES = {
@@ -1466,7 +1498,7 @@
         runId: state.runId, phase: state.phase, result: state.result, ended: state.phase === "victory" || state.phase === "gameover", paused: state.paused, time: state.time, remainingSeconds: Math.max(0, RUN_SECONDS - state.time), wave: state.wave,
         level: state.level, xp: state.xp, nextXp: state.nextXp, kills: state.kills,
         enemies: state.enemies.length, projectiles: state.projectiles.length, pickups: state.pickups.length,
-        loot: state.loot.map(item => ({ ...item })), scene: state.scene, weapon: { ...state.weapon }, modifiers: modifiers(),
+        loot: state.loot.map(item => ({ ...item })), scene: state.scene, stage: state.scene, worldVersion: 2, weapon: { ...state.weapon }, modifiers: modifiers(),
         room: state.room ? { houseId: state.room.houseId, containers: state.room.containers.map(item => ({ ...item })) } : null,
         qualityRules: { outdoor: { common: .8, fine: .2 }, indoor: { fine: .4, rare: .45, epic: .15 } },
         particles: state.particles.length, mines: state.mines.length,
@@ -1570,7 +1602,7 @@
         catch { toast("浏览器未提供剪贴板权限") }
       })
       window.__LAST_NIGHT_DEBUG__ = Object.freeze({
-        snapshot, spawnLoot, interact, get state() { return state }, get config() { return { ...CONFIG } }, get build() { return build }, get map() { return city },
+        snapshot, spawnLoot, tryCollectLoot, interact, enterBuilding, exitBuilding, get state() { return state }, get config() { return { ...CONFIG } }, get build() { return build }, get map() { return city },
         get loot() { return state.loot }, get houses() { return houseSystem }, get modifiers() { return modifiers() },
         step(seconds = FIXED_STEP) {
           const steps = Math.ceil(clamp(Number(seconds) || FIXED_STEP, FIXED_STEP, 600) / FIXED_STEP)
