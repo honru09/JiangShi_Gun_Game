@@ -37,6 +37,7 @@
 | `node scripts/verify-combat.mjs --mini-only` | PASS：真实PNG裁剪边界、微信桩战斗/动作、180秒结算及重开 |
 | `node prototype-2d/tests/character-motion-smoke.mjs` | PASS：网页/微信7瞄准角肩掌、两帧走跑爬、跳跃阶段、双臂双腿与停止归位 |
 | `node prototype-2d/tests/visual-integration-smoke.mjs` | PASS：Edge实际浏览器；延迟图集时禁止开局、失败重试恢复、第一帧即精细场景、全部六屋连续进出、390×844无横向溢出；无页面脚本错误 |
+| 临时公网验收 | PASS：公网页面HTTP 200且内容与当前目录一致；Edge实际通过公网开局，300秒、六栋房屋、两类素材就绪、无脚本错误 |
 | `git diff --check` | PASS |
 
 浏览器截图和报告在本机 `evidence/local/window-integration/`，不会提交。逻辑模拟不代表微信真机或五分钟真人试玩。
@@ -46,13 +47,16 @@
 - 界面窗口美术提交已在基线 `3d28b31` 中；保留环境图集与主题。
 - 最新玩法来自 `work/codex/house-scale` 的 `9563199`，前置 `dfb2928`。
 - 地图整合提交 `6644c7b`，角色整合 `d47fb9d`，角色回归测试 `f4b2187`。
-- 原项目未提交文件已保存到 `work/integration-backup-20261009/`；历史未跟踪设计、证据、个人文件保留。
+- 原项目未提交文件已保存到 `work/integration-backup-20261009/` 与名为`Preserve pre-integration root edits 2026-10-09`的Git stash；历史未跟踪设计、证据、个人文件保留。
+- 当前目录分支`work/codex/firearms-integration`已快进到验收后的集成版本。没有更新`main`。
 - 所有窗口每次更新必须验收、提交、推送任务分支并创建/更新PR，见 `AGENTS.md` 和 `COLLABORATION.md`。
 - GitHub上传/PR：**BLOCKED**。本机未配置远程仓库，尚缺用户仓库地址与可用认证；根目录公钥只能识别身份，不能独立推送。未推送、未创建PR、未更新`main`。
 
 ## 上线与限制
 
-- 临时公网：等待本轮验证版本同步到当前目录后启动，地址以本轮发布结果为准。
+- 临时公网已运行：[进入试玩](https://blwoql-ip-66-90-98-34.tunnelmole.net/)，本地入口`http://127.0.0.1:8080/`。
+- 使用其他窗口采用的Tunnelmole；Cloudflare在本机出现边缘连接TLS握手失败，未采用其不可达地址。
+- 服务直接使用当前项目的`prototype-2d/`，网页进程29492、隧道进程10076；本地进程信息及日志在忽略目录`work/runtime-20261009/`。
 - 仅公开`prototype-2d/`静态网页；密钥、Git与项目内部文件不通过服务目录公开。
 - 微信开发者工具编译、真机预览、体验版上传：**NOT RUN**。仍为`touristappid`。
 - 临时隧道依赖本机服务和隧道进程持续运行，不是永久托管。无多人联机或状态同步。
