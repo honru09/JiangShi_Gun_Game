@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>人物动作检查</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#1d2423;color:#f3e6c5;font:16px system-ui,sans-serif}main{max-width:1480px;margin:auto;padding:24px}h1{font-size:26px;margin:0 0 8px}p{color:#bfbfa8;margin:0 0 20px}.controls{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin-bottom:20px}button{border:1px solid #a5b28d;border-radius:7px;background:#45584d;color:#fff4d7;padding:9px 20px;font:inherit}label{display:flex;align-items:center;gap:10px}canvas{display:block;width:100%;height:auto;background:#343f38;border-radius:12px}a{color:#cddda5}
+</style><main><h1>人物与僵尸 · 动作检查</h1><p>双手持枪、连续走跑、蓄力起跳与四肢爬行。可暂停查看每一帧。</p>
+<div class="controls"><button id="toggle">暂停动画</button><label>动作帧<input id="phase" type="range" min="0" max="1" step=".001" value="0"></label><label><input id="bones" type="checkbox">显示关节</label><a href="index.html">返回游戏</a></div>
+<canvas id="poses" width="1440" height="1440"></canvas></main>
+<script src="character-atlas.js"></script><script src="character-art.js"></script>
+<script>
+const canvas=document.getElementById('poses'),ctx=canvas.getContext('2d'),art=window.WASTELAND_CHARACTER_ART;
+let playing=true,time=0,last=0;const slider=document.getElementById('phase');
+document.getElementById('toggle').onclick=()=>{playing=!playing;document.getElementById('toggle').textContent=playing?'暂停动画':'播放动画'};
+slider.oninput=()=>{time=Number(slider.value)*Math.PI*2;playing=false;document.getElementById('toggle').textContent='播放动画'};
+function gun(actor){const g=art.weaponPose(actor);ctx.save();ctx.translate(g.x,g.y);ctx.rotate(g.angle);ctx.scale(g.scale,g.scale*g.flipY);ctx.translate(-g.recoil,0);ctx.fillStyle='#2e3734';ctx.strokeStyle='#271e19';ctx.lineWidth=2;ctx.fillRect(-17,-5,15,11);ctx.strokeRect(-17,-5,15,11);ctx.fillStyle='#859386';ctx.fillRect(-3,-6,31,13);ctx.strokeRect(-3,-6,31,13);ctx.fillStyle='#47574f';ctx.fillRect(26,-5,13,10);ctx.strokeRect(26,-5,13,10);ctx.fillStyle='#b1bfa7';ctx.fillRect(37,-2,12,4);ctx.fillStyle='#785c43';ctx.fillRect(10,6,7,11);ctx.restore()}
+function joints(rig){if(!document.getElementById('bones').checked)return;ctx.save();ctx.strokeStyle='#42f7dc';ctx.fillStyle='#42f7dc';ctx.lineWidth=.7;for(const chain of [...rig.arms,...rig.legs]){ctx.beginPath();ctx.moveTo(chain.root.x,chain.root.y);ctx.lineTo(chain.joint.x,chain.joint.y);ctx.lineTo(chain.end.x,chain.end.y);ctx.stroke();for(const p of [chain.root,chain.joint,chain.end]){ctx.beginPath();ctx.arc(p.x,p.y,1.4,0,Math.PI*2);ctx.fill()}}ctx.restore()}
+function label(text,x,y){ctx.fillStyle='#eee7c9';ctx.font='18px system-ui';ctx.fillText(text,x,y)}
+function actor(type,x,y,phase,angle=0,hop=0){ctx.save();ctx.translate(x,y);ctx.scale(1.75,1.75);const a={x:0,y:0,type,walkCycle:phase,gait:.85,moveAmount:1,speed:30,movingSpeed:type==='hero'?180:30,armAngle:angle,recoil:0,radius:17,hp:10,maxHp:10,vx:160,vy:0};if(type==='brute'){a.motion='hop';a.motionTime=hop;a.hopPhase=hop;a.hopHeight=hop>=.6&&hop<1.05?Math.sin((hop-.6)/.45*Math.PI)*20:0}if(type==='crawler')a.radius=18;if(type==='hero')art.drawPlayer(ctx,a,{drawWeapon:()=>gun(a)});else art.drawEnemy(ctx,a,{playerX:100});const rig=art.pose(type,a,{playerX:100});ctx.translate(0,-rig.lift);joints(rig);ctx.restore()}
+function draw(now){if(last&&playing)time+=(now-last)/1000*3;last=now;if(playing)slider.value=(time%(Math.PI*2))/(Math.PI*2);ctx.clearRect(0,0,1440,1440);ctx.fillStyle='#343f38';ctx.fillRect(0,0,1440,1440);if(art.ready){label('瞄准方向 · 双手握枪',24,32);for(let i=0;i<8;i++){label(['右','右下','下','左下','左','左上','上','右上'][i],i*178+75,235);actor('hero',i*178+85,171,time,i*Math.PI/4)}let row=1;for(const [type,title]of [['hero','主角 · 跑步'],['walker','普通僵尸 · 拖步'],['runner','疾跑僵尸 · 跑步'],['brute','重型僵尸 · 蓄力 / 蹬伸 / 腾空 / 落地'],['crawler','爬行僵尸 · 四肢支撑']]){const y=row*235+36;label(title,24,y);for(let i=0;i<8;i++)actor(type,i*178+85,y+132,time+i*Math.PI/4,0,(time/3+i*.21)%2.6);row++}}requestAnimationFrame(draw)}requestAnimationFrame(draw);
+</script></html>

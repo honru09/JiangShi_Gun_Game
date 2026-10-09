@@ -1296,8 +1296,9 @@
 
     function muzzlePosition() {
       const player = state.player
-      const reach = 48 - player.recoil * 4
-      return { x: player.x + 7 + Math.cos(player.armAngle) * reach, y: player.y - 9 + Math.sin(player.armAngle) * reach }
+      const mount = weaponMount(player)
+      const reach = (48 * mount.scaleX - mount.recoil) * mount.scale
+      return { x: player.x + mount.x + Math.cos(player.armAngle) * reach, y: player.y + mount.y + Math.sin(player.armAngle) * reach }
     }
 
     function fireRifle(stats) {
@@ -1306,11 +1307,12 @@
       player.muzzle = .075
       player.recoil = 1
       const muzzle = muzzlePosition()
+      const mount = weaponMount(player)
       state.stats.shots += 1
       for (let pellet = 0; pellet < stats.pellets && state.projectiles.length < CONFIG.projectileCap; pellet += 1) {
         const offset = (pellet - (stats.pellets - 1) / 2) * stats.spread
         const angle = player.armAngle + offset
-        state.projectiles.push({ id: id(), x: muzzle.x, y: muzzle.y, oldX: muzzle.x, oldY: muzzle.y, sweepOrigin: { x: player.x + 7, y: player.y - 9 }, vx: Math.cos(angle) * stats.bulletSpeed, vy: Math.sin(angle) * stats.bulletSpeed, life: stats.bulletLife, damage: stats.bulletDamage * (build.level("scatterModule") ? .66 : 1), remaining: stats.pierce + 1, hitIds: new Set(), burn: stats.burn, arc: stats.arc })
+        state.projectiles.push({ id: id(), x: muzzle.x, y: muzzle.y, oldX: muzzle.x, oldY: muzzle.y, sweepOrigin: { x: player.x + mount.x, y: player.y + mount.y }, vx: Math.cos(angle) * stats.bulletSpeed, vy: Math.sin(angle) * stats.bulletSpeed, life: stats.bulletLife, damage: stats.bulletDamage * (build.level("scatterModule") ? .66 : 1), remaining: stats.pierce + 1, hitIds: new Set(), burn: stats.burn, arc: stats.arc })
       }
       particle(muzzle.x, muzzle.y, "#ffd373", 2, 45)
     }
@@ -1421,10 +1423,15 @@
       player.recoil = Math.max(0, player.recoil - dt * 13)
       player.sinceHit += dt
       if (player.sinceHit > 4) player.hp = Math.min(player.maxHp, player.hp + stats.regen * dt)
-      const target = nearestEnemy(player.x + 7, player.y - 9, null, WIDTH * 1.1, true)
+      const target = nearestEnemy(player.x, player.y - 15, null, WIDTH * 1.1, true)
       player.targetId = target?.id ?? null
       if (target) {
-        player.aim = Math.atan2(target.y - (player.y - 9), target.x - (player.x + 7))
+        let aim = player.armAngle
+        for (let i = 0; i < 4; i++) {
+          const mount = weaponMount({ ...player, armAngle: aim })
+          aim = Math.atan2(target.y - player.y - mount.y, target.x - player.x - mount.x)
+        }
+        player.aim = aim
         const difference = Math.atan2(Math.sin(player.aim - player.armAngle), Math.cos(player.aim - player.armAngle))
         player.armAngle += difference * Math.min(1, dt * 18)
         player.fireTimer -= dt
@@ -1519,7 +1526,9 @@
         // collision, or the indoor bounds can capture a circling infected.
         if (streetMovement) city.move(enemy, vx * dt, vy * dt)
         else moveEntity(enemy, vx * dt, vy * dt)
-        enemy.walkCycle += Math.hypot(enemy.x - previousX, enemy.y - previousY) * .1
+        const distanceMoved = Math.hypot(enemy.x - previousX, enemy.y - previousY)
+        enemy.walkCycle += distanceMoved * .1
+        enemy.moveAmount = lerp(enemy.moveAmount ?? 1, clamp(distanceMoved / Math.max(.001, enemy.speed * dt), 0, 1), Math.min(1, dt * 16))
         enemy.hit = Math.max(0, enemy.hit - dt)
         enemy.sawTimer = Math.max(0, enemy.sawTimer - dt)
         enemy.contactTimer = Math.max(0, enemy.contactTimer - dt)
@@ -1946,13 +1955,19 @@
       context.restore()
     }
 
+    function weaponMount(player) {
+      return window.WASTELAND_CHARACTER_ART?.weaponPose(player, { scaleX: state.weapon.id === "submachineGun" ? .8 : 1 })
+        || { x: 7, y: -9, angle: player.armAngle, recoil: player.recoil * 4, scale: 1, scaleX: 1, flipY: 1 }
+    }
 
     function drawWeapon(player, includeArms = true) {
       context.save()
-      context.translate(7, -9)
+      const mount = weaponMount(player)
+      context.translate(mount.x, mount.y)
       context.rotate(player.armAngle)
-      context.translate(-player.recoil * 4, 0)
-      if (state.weapon.id === "submachineGun") context.scale(.8, 1)
+      context.scale(mount.scale, mount.scale * mount.flipY)
+      context.translate(-mount.recoil, 0)
+      context.scale(mount.scaleX, 1)
       // Shoulder/elbow/grip chains are the only character parts transformed by aim.
       if (includeArms) {
         line(-10, -11, 10, -12, "#7e402f", 9)
@@ -1998,7 +2013,10 @@
 
     function drawPlayer() {
       const player = state.player
-      if (window.WASTELAND_CHARACTER_ART?.drawPlayer(context, player, { drawWeapon: () => drawWeapon(player, false) })) return
+      if (window.WASTELAND_CHARACTER_ART?.drawPlayer(context, player, {
+        gun: { scaleX: state.weapon.id === "submachineGun" ? .8 : 1 },
+        drawWeapon: () => drawWeapon(player, false)
+      })) return
       context.save()
       context.translate(player.x, player.y)
       // Keep the torso/head in screen coordinates; never rotate this parent transform.
