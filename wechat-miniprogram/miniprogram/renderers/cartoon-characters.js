@@ -1,47 +1,70 @@
-// Source crops stay in the packaged atlas. Limb articulation happens at draw time.
+// The shared rig uses pixel coordinates; this adapter keeps the game's world
+// coordinates and the legacy wx Canvas setters at the rendering boundary.
+const articulatedRig = require('./articulated-rig')
+const { createRenderer } = articulatedRig
 const WORLD_PER_PIXEL = 0.021
 const STYLE = {
-  hero: { scale: 1, bodyHeight: 72 },
-  shambler: { scale: 0.94, bodyHeight: 72 },
-  runner: { scale: 0.86, bodyHeight: 72 },
-  brute: { scale: 1.36, bodyHeight: 72 },
-  bloater: { scale: 1.17, bodyHeight: 72 }
+  hero: { scale: 1 },
+  shambler: { scale: 0.94 },
+  runner: { scale: 0.86 },
+  brute: { scale: 1.36 },
+  bloater: { scale: 1.17 },
+  crawler: { scale: 1 }
 }
 
-// Runtime pose selection for the modular atlas. Each locomotion mode has two
-// authored poses; hop exposes the three readable stages used by the gameplay
-// motion state machine. The limbs are still placed procedurally, so no extra
-// bitmap frames are required.
-function normalizedPhase(actor) {
-  const candidate = Number.isFinite(actor && actor.gaitPhase) ? actor.gaitPhase
-    : Number.isFinite(actor && actor.walkCycle) ? actor.walkCycle
-      : Number.isFinite(actor && actor.motionTime) ? actor.motionTime * Math.PI : 0
-  const phase = candidate % (Math.PI * 2)
-  return phase < 0 ? phase + Math.PI * 2 : phase
+function heroActor(player, angle = player.angle) {
+  return { ...player, x: 0, y: 0, gait: player.moveAmount || 0,
+    walkCycle: player.gaitPhase || 0, armAngle: angle,
+    movingSpeed: (player.actualSpeed || 0) / WORLD_PER_PIXEL }
 }
 
-function selectAnimationFrame(actor, type) {
-  const phase = normalizedPhase(actor)
-  const explicit = actor && ['walk', 'run', 'crawl', 'hop'].includes(actor.motion) ? actor.motion : null
-  const motion = explicit || (type === 'crawler' ? 'crawl' : type === 'runner' || type === 'hero' && Number(actor && actor.moveAmount) > .65 ? 'run' : 'walk')
-  let mode = motion
-  let index = 0
-  if (motion === 'hop') {
-    const hopPhase = actor && actor.hopPhase
-    const hopClock = Number.isFinite(hopPhase) ? hopPhase : Number.isFinite(actor && actor.motionTime) ? actor.motionTime % 2.6 : null
-    if (typeof hopPhase === 'string' && hopPhase !== 'approach') mode = `hop-${hopPhase}`
-    else if (hopClock !== null && hopClock < .6) mode = 'hop-windup'
-    else if (hopClock !== null && hopClock < 1.05) mode = 'hop-airborne'
-    else if (hopClock !== null && hopClock < 1.4) mode = 'hop-recovery'
-    else if (hopClock === null && (Number(actor && actor.hopHeight) || 0) > .1) mode = 'hop-airborne'
-    else { mode = 'walk'; index = phase < Math.PI ? 0 : 1 }
-    if (mode.indexOf('hop-') === 0) index = mode === 'hop-airborne' && (Number(actor && actor.hopHeight) || 0) < .16 ? 1 : 0
-  } else {
-    const moving = (Number(actor && actor.moveAmount) || 0) > .015 || (Number(actor && actor.actualSpeed) || 0) > 1
-    mode = moving ? motion : 'idle'
-    index = moving ? (phase < Math.PI ? 0 : 1) : 0
+function heroWeaponPose(player, angle = player.angle) {
+  return articulatedRig.weaponPose(heroActor(player, angle), {
+    grip: { x: 0.245 / WORLD_PER_PIXEL, y: 0.17 / WORLD_PER_PIXEL },
+    support: { x: 0.59 / WORLD_PER_PIXEL, y: 0.055 / WORLD_PER_PIXEL }
+  })
+}
+
+function canvasFacade(context) {
+  const facade = {}
+  const values = { fillStyle: '#000', strokeStyle: '#000', lineWidth: 1,
+    lineCap: 'butt', lineJoin: 'miter', globalAlpha: 1 }
+  const stack = []
+  const setters = { fillStyle: 'setFillStyle', strokeStyle: 'setStrokeStyle',
+    lineWidth: 'setLineWidth', lineCap: 'setLineCap', lineJoin: 'setLineJoin',
+    globalAlpha: 'setGlobalAlpha' }
+  Object.keys(setters).forEach(property => Object.defineProperty(facade, property, {
+    get: () => values[property],
+    set: value => {
+      values[property] = value
+      const setter = context[setters[property]]
+      if (typeof setter === 'function') setter.call(context, value)
+      else context[property] = value
+    }
+  }))
+  ;['translate', 'rotate', 'scale', 'beginPath', 'closePath', 'moveTo',
+    'lineTo', 'quadraticCurveTo', 'bezierCurveTo', 'arc', 'rect', 'fill',
+    'stroke', 'fillRect', 'strokeRect'].forEach(method => {
+    facade[method] = (...args) => context[method](...args)
+  })
+  facade.save = () => { stack.push({ ...values }); context.save() }
+  facade.restore = () => {
+    const previous = stack.pop()
+    if (previous) Object.assign(values, previous)
+    context.restore()
   }
-  return { type, motion: mode, index, name: `${mode}-${index + 1}`, phase: Number(phase.toFixed(3)) }
+  facade.drawImage = (source, ...args) => context.drawImage(source.source || source, ...args)
+  // Older CanvasContext versions do not expose ellipse; transformed arcs have
+  // the same path geometry and preserve the caller's current fill/stroke.
+  facade.ellipse = (x, y, radiusX, radiusY, rotation, startAngle, endAngle, anticlockwise) => {
+    context.save()
+    context.translate(x, y)
+    context.rotate(rotation)
+    context.scale(radiusX, radiusY)
+    context.arc(0, 0, 1, startAngle, endAngle, anticlockwise)
+    context.restore()
+  }
+  return facade
 }
 
 function sourceCharacter(manifest, type) {
@@ -65,102 +88,18 @@ function validateManifest(manifest) {
   })
 }
 
-function image(context, source, crop, x, y, width, height) {
-  context.drawImage(source, crop.x, crop.y, crop.width, crop.height, x, y, width, height)
-}
-
-function bodyGeometry(character, style) {
-  const height = style.bodyHeight * WORLD_PER_PIXEL * style.scale
-  return { height, width: height * character.body.width / character.body.height, bottom: 0.14 * style.scale }
-}
-
-function infectedGeometry(character, style, enemy) {
-  const geometry = bodyGeometry(character, style)
-  if (enemy.motion === 'hop' && enemy.hopPhase < 0.6) {
-    geometry.height *= 0.95
-    geometry.width *= 1.02
-    geometry.bottom += 0.06 * style.scale
+function infectedActor(enemy) {
+  const scale = STYLE[enemy.type] ? STYLE[enemy.type].scale : 1
+  return {
+    ...enemy,
+    type: enemy.type === 'shambler' ? 'walker' : enemy.type,
+    x: 0,
+    y: 0,
+    radius: enemy.type === 'crawler' ? 18 : 17,
+    gait: enemy.moveAmount || 0,
+    walkCycle: enemy.gaitPhase || 0,
+    hopHeight: (enemy.hopHeight || 0) / (WORLD_PER_PIXEL * scale)
   }
-  return geometry
-}
-
-function crawlerGeometry(character) {
-  const width = 69 * WORLD_PER_PIXEL
-  return { width, height: width * character.body.height / character.body.width, bottom: 0.08 }
-}
-
-function articulatedLimb(context, source, crop, from, to, mirror, anchors) {
-  const origin = { x: crop.width * anchors.start.x, y: crop.height * anchors.start.y }
-  const tip = { x: crop.width * anchors.end.x, y: crop.height * anchors.end.y }
-  const spanX = (tip.x - origin.x) * mirror
-  const spanY = tip.y - origin.y
-  const distance = Math.hypot(to.x - from.x, to.y - from.y)
-  const scale = distance / Math.hypot(spanX, spanY)
-  context.save()
-  context.translate(from.x, from.y)
-  context.rotate(Math.atan2(to.y - from.y, to.x - from.x) - Math.atan2(spanY, spanX))
-  context.scale(mirror, 1)
-  image(context, source, crop, -origin.x * scale, -origin.y * scale, crop.width * scale, crop.height * scale)
-  context.restore()
-}
-
-function arm(context, source, crop, from, to, mirror = 1, anchors) {
-  articulatedLimb(context, source, crop, from, to, mirror, {
-    start: anchors && anchors.shoulder || { x: .12, y: .36 },
-    end: anchors && anchors.palm || { x: .84, y: .67 }
-  })
-}
-
-function legSegment(context, source, crop, from, to, width, mirror) {
-  const length = Math.hypot(to.x - from.x, to.y - from.y)
-  context.save()
-  context.translate(from.x, from.y)
-  context.rotate(Math.atan2(to.y - from.y, to.x - from.x) - Math.PI / 2)
-  if (mirror < 0) context.scale(-1, 1)
-  image(context, source, crop, -width / 2, -0.025, width, length + 0.05)
-  context.restore()
-}
-
-function leg(context, source, crop, hip, foot, scale, mirror) {
-  // The atlas leg already bends at the knee; keep its complete painted contour.
-  legSegment(context, source, crop, hip, foot, 16.5 * WORLD_PER_PIXEL * scale, mirror)
-}
-
-function drawBody(context, source, character, geometry, offsetX, offsetY, facing) {
-  context.save()
-  context.translate(offsetX, offsetY)
-  if (facing < 0) context.scale(-1, 1)
-  image(context, source, character.body, -geometry.width / 2, geometry.bottom - geometry.height, geometry.width, geometry.height)
-  context.restore()
-}
-
-function drawCrawler(context, source, character, enemy, animationFrame) {
-  const geometry = crawlerGeometry(character)
-  const poseSign = animationFrame && animationFrame.motion === 'idle' ? 0 : animationFrame && animationFrame.index ? 1 : -1
-  const gait = poseSign * enemy.moveAmount
-  const bob = -Math.abs(gait) * 0.025
-  context.save()
-  context.scale(enemy.facing, 1)
-  for (let side = -1; side <= 1; side += 2) {
-    const step = gait * side * 0.13
-    const hip = { x: -0.31 + side * 0.07, y: 0.005 + side * 0.035 }
-    const foot = { x: -0.46 - step, y: 0.43 + side * 0.055 - Math.max(0, -step) * 0.35 }
-    articulatedLimb(context, source, character.leg, hip, foot, 1, character.legAnchors || {
-      start: { x: .35, y: .1 }, end: { x: .68, y: .9 }
-    })
-  }
-  const front = side => {
-    const step = gait * side * 0.13
-    const shoulder = { x: 0.28 + side * 0.06, y: -0.1 + bob + side * 0.035 }
-    const hand = { x: 0.65 + step, y: 0.42 + side * 0.055 - Math.max(0, step) * 0.35 }
-    articulatedLimb(context, source, character.arm, shoulder, hand, 1, character.armAnchors || {
-      start: { x: .13, y: .2 }, end: { x: .83, y: .8 }
-    })
-  }
-  drawBody(context, source, character, geometry, 0, bob, 1)
-  front(-1)
-  front(1)
-  context.restore()
 }
 
 function createCharacterRenderer(wxApi, manifest, onChange) {
@@ -169,8 +108,36 @@ function createCharacterRenderer(wxApi, manifest, onChange) {
     statusText: '角色素材载入中',
     source: null,
     resources: {},
+    rig: null,
+    context: null,
+    facade: null,
+    heroMotion: null,
     version: manifest && manifest.version,
-    animationFrame: { type: 'none', motion: 'idle', index: 0, name: 'idle-1', phase: 0 },
+    get animationFrame() { return articulatedRig.animationFrame },
+
+    drawingContext(context) {
+      if (context !== this.context) {
+        this.context = context
+        this.facade = canvasFacade(context)
+      }
+      return this.facade
+    },
+
+    refreshRig() {
+      const main = this.resources[manifest.image]
+      if (!main || main.status !== 'ready') { this.rig = null; return }
+      const images = {}
+      const characters = {}
+      Object.keys(manifest.characters).forEach(type => {
+        const character = manifest.characters[type]
+        const resource = this.resources[character.image || manifest.image]
+        if (!resource || resource.status !== 'ready') return
+        images[resource.image] = { width: resource.width, height: resource.height, source: resource.source }
+        characters[type] = character
+      })
+      this.rig = createRenderer({ image: images[manifest.image], images,
+        manifest: { ...manifest, characters } })
+    },
 
     load() {
       const fail = message => {
@@ -185,6 +152,7 @@ function createCharacterRenderer(wxApi, manifest, onChange) {
         if (character.image) this.resources[character.image] = { image: character.image, width: character.imageWidth, height: character.imageHeight, status: 'loading' }
       })
       const updateStatus = () => {
+        this.refreshRig()
         const resources = Object.values(this.resources)
         const failed = resources.filter(resource => resource.status === 'failed')
         if (failed.length) {
@@ -216,77 +184,55 @@ function createCharacterRenderer(wxApi, manifest, onChange) {
       }))
     },
 
-    drawHero(context, player) {
-      this.animationFrame = selectAnimationFrame(player, 'hero')
+    drawHero(context, player, drawWeapon) {
       const character = sourceCharacter(manifest, 'hero')
       const resource = this.resources[character.image || manifest.image]
-      if (!resource || resource.status !== 'ready') return false
-      const source = resource.source
-      const style = STYLE.hero
-      const geometry = bodyGeometry(character, style)
-      const poseSign = this.animationFrame.motion === 'idle' ? 0 : this.animationFrame.index ? 1 : -1
-      const gait = poseSign * player.moveAmount
-      const strideSize = 0.11 + player.moveAmount * 0.2
-      for (let side = -1; side <= 1; side += 2) {
-        const step = gait * side * strideSize
-        const hip = { x: side * 0.2, y: 0.1 }
-        const foot = { x: hip.x + step * 0.48, y: 0.65 + step }
-        leg(context, source, character.leg, hip, foot, 1, side)
+      if (!resource || resource.status !== 'ready' || !this.rig) return false
+      if (!this.heroMotion || this.heroMotion.player !== player) {
+        this.heroMotion = { player, x: player.x, y: player.y, directionX: 0, directionY: 0 }
       }
-      drawBody(context, source, character, geometry, 0, 0, 1)
-      const aimAngle = Math.atan2(Math.sin(player.angle), Math.cos(player.angle))
-      const cosine = Math.cos(aimAngle)
-      const sine = Math.sin(aimAngle)
-      const armFacing = cosine < 0 ? -1 : 1
-      const recoil = player.recoil * 0.08
-      const point = (x, y) => ({ x: 0.04 + cosine * (x - recoil) - sine * y, y: -0.24 + sine * (x - recoil) + cosine * y })
-      const shoulderY = geometry.bottom - geometry.height * 0.34
-      arm(context, source, character.arm, { x: -geometry.width * 0.36, y: shoulderY }, point(0.28, -0.055), armFacing, character.armAnchors)
-      arm(context, source, character.arm, { x: geometry.width * 0.36, y: shoulderY }, point(0.59, 0.055), armFacing, character.armAnchors)
+      const motion = this.heroMotion
+      const dx = player.x - motion.x
+      const dy = player.y - motion.y
+      const distance = Math.hypot(dx, dy)
+      if (distance > 0.0001) {
+        motion.directionX = dx / distance
+        motion.directionY = dy / distance
+      }
+      motion.x = player.x
+      motion.y = player.y
+      const pixelSpeed = (player.actualSpeed || 0) / WORLD_PER_PIXEL
+      const actor = { ...heroActor(player),
+        vx: motion.directionX * pixelSpeed, vy: motion.directionY * pixelSpeed }
+      context.save()
+      context.scale(WORLD_PER_PIXEL, WORLD_PER_PIXEL)
+      this.rig.drawPlayer(this.drawingContext(context), actor, {
+        shadow: false,
+        gun: heroWeaponPose(player),
+        drawWeapon: () => {
+          if (typeof drawWeapon !== 'function') return
+          context.save()
+          context.scale(1 / WORLD_PER_PIXEL, 1 / WORLD_PER_PIXEL)
+          drawWeapon()
+          context.restore()
+        }
+      })
+      context.restore()
       return true
     },
 
     drawInfected(context, enemy) {
-      this.animationFrame = selectAnimationFrame(enemy, enemy.type)
       const character = sourceCharacter(manifest, enemy.type)
       if (!character) return false
       const resource = this.resources[character.image || manifest.image]
-      if (!resource || resource.status !== 'ready') return false
-      const source = resource.source
-      if (enemy.type === 'crawler') { drawCrawler(context, source, character, enemy, this.animationFrame); return true }
       const style = STYLE[enemy.type]
-      if (!character || !style) return false
-      const scale = style.scale
-      const geometry = infectedGeometry(character, style, enemy)
-      const poseSign = this.animationFrame.motion === 'idle' ? 0 : this.animationFrame.index ? 1 : -1
-      const gait = poseSign * enemy.moveAmount
-      const stride = gait * scale * (enemy.type === 'runner' ? 0.21 : 0.13)
-      const lift = enemy.motion === 'hop' ? enemy.hopHeight || 0 : 0
+      if (!resource || resource.status !== 'ready' || !style || !this.rig) return false
+      const unit = WORLD_PER_PIXEL * style.scale
       context.save()
-      context.translate(0, -lift)
-      const crouch = this.animationFrame.motion === 'hop-windup' ? 0.09 * scale : this.animationFrame.motion === 'hop-recovery' ? 0.05 * scale : 0
-      const tucked = this.animationFrame.motion === 'hop-airborne' ? 0.17 * scale : 0
-      for (let side = -1; side <= 1; side += 2) {
-        const step = this.animationFrame.motion.indexOf('hop-') === 0 ? side * tucked * .3 : stride * side
-        const hip = { x: side * 0.19 * scale, y: geometry.bottom - 0.06 * scale + crouch }
-        const foot = { x: hip.x + enemy.facing * 0.025 * scale + step * 0.75 + side * crouch * .5, y: 0.68 * scale + step * 0.45 - tucked }
-        leg(context, source, character.leg, hip, foot, scale, enemy.facing)
-      }
-      const sway = gait * 0.032 * scale
-      const bob = crouch - Math.abs(gait) * 0.018 * scale
-      drawBody(context, source, character, geometry, sway, bob, enemy.facing)
-      const shoulderY = geometry.bottom - geometry.height * 0.34 + bob
-      for (let side = -1; side <= 1; side += 2) {
-        const shoulder = { x: side * geometry.width * 0.36 + sway, y: shoulderY }
-        // Keep the two reaching arms on separate, anatomically plausible
-        // paths. A shared hand target made the far arm cross the chest and
-        // disappear beneath the near arm, which read as a one-armed zombie.
-        const hand = {
-          x: shoulder.x + enemy.facing * 0.48 * scale + side * 0.12 * scale,
-          y: shoulder.y + 0.085 * scale + side * 0.045 * scale + gait * 0.025 * scale
-        }
-        arm(context, source, character.arm, shoulder, hand, enemy.facing, character.armAnchors)
-      }
+      context.scale(unit, unit)
+      this.rig.drawEnemy(this.drawingContext(context), infectedActor(enemy), {
+        playerX: enemy.facing || 1, shadow: false, healthBar: false
+      })
       context.restore()
       return true
     },
@@ -295,24 +241,12 @@ function createCharacterRenderer(wxApi, manifest, onChange) {
       const character = sourceCharacter(manifest, enemy.type)
       if (!character) return null
       const resource = this.resources[character.image || manifest.image]
-      if (!resource || resource.status !== 'ready') return null
-      if (enemy.type === 'crawler') {
-        const geometry = crawlerGeometry(character)
-        const animationFrame = selectAnimationFrame(enemy, 'crawler')
-        const poseSign = animationFrame.motion === 'idle' ? 0 : animationFrame.index ? 1 : -1
-        const gait = poseSign * enemy.moveAmount
-        return { centerX: 0, width: geometry.width, top: geometry.bottom - geometry.height - Math.abs(gait) * 0.025 }
-      }
       const style = STYLE[enemy.type]
-      if (!character || !style) return null
-      const geometry = infectedGeometry(character, style, enemy)
-      const animationFrame = selectAnimationFrame(enemy, enemy.type)
-      const poseSign = animationFrame.motion === 'idle' ? 0 : animationFrame.index ? 1 : -1
-      const gait = poseSign * enemy.moveAmount
-      const centerX = gait * 0.032 * style.scale
-      const crouch = animationFrame.motion === 'hop-windup' ? 0.09 * style.scale : animationFrame.motion === 'hop-recovery' ? 0.05 * style.scale : 0
-      const bob = crouch - Math.abs(gait) * 0.018 * style.scale
-      return { centerX, width: geometry.width, top: geometry.bottom - geometry.height + bob - (enemy.hopHeight || 0) }
+      if (!resource || resource.status !== 'ready' || !style || !this.rig) return null
+      const actor = infectedActor(enemy)
+      const bounds = this.rig.bounds(actor.type, actor, { playerX: enemy.facing || 1 })
+      const unit = WORLD_PER_PIXEL * style.scale
+      return { centerX: bounds.centerX * unit, width: bounds.width * unit, top: bounds.top * unit }
     }
   }
   return renderer
@@ -392,4 +326,4 @@ function drawCartoonRifle(context, muzzleFlash) {
   }
 }
 
-module.exports = { createCharacterRenderer, drawCartoonRifle, WORLD_PER_PIXEL }
+module.exports = { createCharacterRenderer, drawCartoonRifle, heroWeaponPose, WORLD_PER_PIXEL }

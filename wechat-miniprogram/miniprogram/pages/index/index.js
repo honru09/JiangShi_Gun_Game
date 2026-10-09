@@ -1,4 +1,4 @@
-const { createCharacterRenderer, drawCartoonRifle } = require('../../renderers/cartoon-characters')
+const { createCharacterRenderer, drawCartoonRifle, heroWeaponPose, WORLD_PER_PIXEL } = require('../../renderers/cartoon-characters')
 const characterManifest = require('../../assets/cartoon-rig-manifest.js')
 
 const TICK_MS = 33
@@ -984,7 +984,9 @@ Page({
           enemy.hopHeight = 0.4 * Math.sin((phase - 0.6) / 0.45 * Math.PI)
         } else if (phase < 1.4) {
           moveMultiplier = 0.4
-          enemy.hopHeight = 0.4 * (1 - (phase - 1.05) / 0.35)
+          // The airborne arc has already landed at 1.05s. Recovery bends the
+          // joints on the ground, rather than starting a second vertical jump.
+          enemy.hopHeight = 0
         } else {
           moveMultiplier = 1
           enemy.hopHeight = 0
@@ -1052,10 +1054,18 @@ Page({
       state.targetDistance = 0
       return
     }
-    const deltaX = target.x - player.x - 0.04
-    const deltaY = target.y - player.y + 0.24
-    const targetAngle = Math.atan2(deltaY, deltaX)
+    // The rifle is held close to the moving chest. Refine aim from the same
+    // mount used for drawing and firing instead of a separate fixed shoulder.
+    let targetAngle = Math.atan2(target.y - player.y, target.x - player.x)
+    for (let pass = 0; pass < 4; pass += 1) {
+      const gun = heroWeaponPose(player, targetAngle)
+      targetAngle = Math.atan2(target.y - player.y - gun.y * WORLD_PER_PIXEL,
+        target.x - player.x - gun.x * WORLD_PER_PIXEL)
+    }
     player.angle = targetAngle
+    const gun = heroWeaponPose(player)
+    const deltaX = target.x - player.x - gun.x * WORLD_PER_PIXEL
+    const deltaY = target.y - player.y - gun.y * WORLD_PER_PIXEL
     state.targetId = target.id
     state.targetDistance = Math.hypot(deltaX, deltaY)
     if (state.fireClock <= 0) {
@@ -1089,6 +1099,7 @@ Page({
     const baseAngle = player.angle
     player.recoil = 1
     const muzzle = this.muzzlePosition(baseAngle)
+    const gun = heroWeaponPose(player, baseAngle)
     const pelletCount = stats.pellets
     for (let index = 0; index < pelletCount; index += 1) {
       const center = (pelletCount - 1) / 2
@@ -1100,8 +1111,8 @@ Page({
         id: state.nextProjectileId,
         x: muzzle.x,
         y: muzzle.y,
-        previousX: player.x + 0.04,
-        previousY: player.y - 0.24,
+        previousX: player.x + gun.x * WORLD_PER_PIXEL,
+        previousY: player.y + gun.y * WORLD_PER_PIXEL,
         firstFlight: true,
         vx: directionX * stats.bulletSpeed,
         vy: directionY * stats.bulletSpeed,
@@ -1702,7 +1713,19 @@ Page({
     context.translate(player.x, player.y)
     if (player.invuln > 0 && Math.floor(player.invuln * 16) % 2) context.setGlobalAlpha(0.55)
     this.ellipse(0, 0.68, 0.42, 0.16, '#0a1011')
-    const illustrated = this._characterArt && this._characterArt.drawHero(context, player)
+    const gun = heroWeaponPose(player)
+    const angle = gun.angle
+    const drawWeapon = () => {
+      context.save()
+      context.translate(gun.x * WORLD_PER_PIXEL, gun.y * WORLD_PER_PIXEL)
+      context.rotate(angle)
+      context.scale(gun.scale, gun.scale * gun.flipY)
+      context.translate(-gun.recoil * WORLD_PER_PIXEL, 0)
+      context.scale(gun.scaleX, 1)
+      drawCartoonRifle(context, state.muzzleFlash)
+      context.restore()
+    }
+    const illustrated = this._characterArt && this._characterArt.drawHero(context, player, drawWeapon)
     if (!illustrated) {
       const stride = Math.sin(player.gaitPhase) * player.moveAmount
       const strideSize = 0.11 + player.moveAmount * 0.2
@@ -1730,13 +1753,15 @@ Page({
       this.circle(-0.085, -0.64, 0.025, '#33251f')
       this.circle(0.085, -0.64, 0.025, '#33251f')
     }
-    const angle = player.angle
-    const recoil = player.recoil * 0.08
-    const localPoint = (x, y) => ({
-      x: 0.04 + Math.cos(angle) * (x - recoil) - Math.sin(angle) * y,
-      y: -0.24 + Math.sin(angle) * (x - recoil) + Math.cos(angle) * y
-    })
-    const grip = localPoint(0.28, 0.14)
+    const localPoint = (x, y) => {
+      const along = (x * gun.scaleX - gun.recoil * WORLD_PER_PIXEL) * gun.scale
+      const across = y * gun.scale * gun.flipY
+      return {
+        x: gun.x * WORLD_PER_PIXEL + Math.cos(angle) * along - Math.sin(angle) * across,
+        y: gun.y * WORLD_PER_PIXEL + Math.sin(angle) * along + Math.cos(angle) * across
+      }
+    }
+    const grip = localPoint(0.245, 0.17)
     const foregrip = localPoint(0.59, 0.055)
     const elbow = localPoint(0.05, 0.28)
     const supportElbow = localPoint(0.37, 0.28)
@@ -1746,13 +1771,8 @@ Page({
       this.line(0.23, -0.31, supportElbow.x, supportElbow.y, '#bf7750', 0.17)
       this.line(supportElbow.x, supportElbow.y, foregrip.x, foregrip.y, '#bf7750', 0.15)
     }
-    context.save()
-    context.translate(0.04, -0.24)
-    context.rotate(angle)
-    context.translate(-recoil, 0)
-    drawCartoonRifle(context, state.muzzleFlash)
-    context.restore()
     if (!illustrated) {
+      drawWeapon()
       this.circle(grip.x, grip.y, 0.075, '#d4b38a')
       this.circle(foregrip.x, foregrip.y, 0.075, '#d4b38a')
     }
@@ -1846,10 +1866,11 @@ Page({
 
   muzzlePosition(angle) {
     const player = this._state.player
-    const barrelLength = 0.96 - player.recoil * 0.08
+    const gun = heroWeaponPose(player, angle)
+    const barrelLength = (0.96 * gun.scaleX - gun.recoil * WORLD_PER_PIXEL) * gun.scale
     return {
-      x: player.x + 0.04 + Math.cos(angle) * barrelLength,
-      y: player.y - 0.24 + Math.sin(angle) * barrelLength
+      x: player.x + gun.x * WORLD_PER_PIXEL + Math.cos(gun.angle) * barrelLength,
+      y: player.y + gun.y * WORLD_PER_PIXEL + Math.sin(gun.angle) * barrelLength
     }
   },
 
