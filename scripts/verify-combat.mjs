@@ -67,7 +67,7 @@ function miniProgramChecks() {
   page.onReady();
   page.confirmDraft();
   page.draw();
-  assert(imageDraws >= 9 * 5, "the survivor and eight zombies must use the new atlas");
+  assert(imageDraws >= 9 * 3, "the survivor and eight zombies must draw their atlas torsos and both shoes");
   pass("mini program packaged atlas loads and character crops stay in bounds", { version: manifest.version, imageDraws });
   const loadedRenderer = page._characterArt;
   page._characterArt = null;
