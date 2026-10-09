@@ -12,54 +12,45 @@
     height = Math.max(1280, Number.isFinite(height) ? height : 2560)
     const sx = width / 1440
     const sy = height / 2560
-    const vertical = [240, 720, 1200].map(value => value * sx)
-    const horizontal = [320, 800, 1280, 1760, 2240].map(value => value * sy)
-    const roadX = 136 * sx
-    const roadY = 136 * sy
-    const sidewalkX = 24 * sx
-    const sidewalkY = 24 * sy
+    const vertical = [720].map(value => value * sx)
+    const horizontal = [836, 1668].map(value => value * sy)
+    const roadX = 120 * sx
+    const roadY = 112 * sy
+    const sidewalkX = 22 * sx
+    const sidewalkY = 22 * sy
     const buildings = []
     const blocks = []
-    const rows = [[40, 228], [412, 708], [892, 1188], [1372, 1668], [1852, 2148], [2332, 2520]]
-    const columns = [[332, 628], [812, 1108]]
+    // Houses grow within six plots; the world and actors retain their scale.
+    const rows = [[40, 750], [936, 1570], [1776, 2416]]
+    const columns = [[80, 628], [812, 1360]]
+    const district = [
+      { kind: "residential", houseType: "courtyard", width: 480, height: 656 },
+      { kind: "shop", houseType: "bungalow", width: 500, height: 624 },
+      { kind: "apartment", houseType: "floor", width: 488, height: 596, floors: 4 },
+      { kind: "market", houseType: "bungalow", width: 500, height: 608 },
+      { kind: "clinic", houseType: "bungalow", width: 456, height: 624, ruined: true },
+      { kind: "warehouse", houseType: "bungalow", width: 500, height: 632 }
+    ]
     let serial = 0
 
-    function addBuilding(x, y, w, h, kind, houseType = "bungalow", floors = 1, ruined = false) {
+    function addBuilding(x, y, w, h, kind, houseType = "bungalow", floors = 1, ruined = false, plot = null) {
       const variant = serial++
-      // Keep the visual map's varied footprints aligned with the house and
-      // loot systems, which use these fields for room layouts and acceptance.
-      buildings.push(Object.freeze({ x: x * sx, y: y * sy, width: w * sx, height: h * sy, kind, category: kind, variant, houseType, floors, ruined }))
+      const roomScale = ({ warehouse: 1.18, market: 1.12, shop: 1.08, clinic: 1.1, garage: 1.08, apartment: 1.12, residential: 1.04 }[kind] || 1) * (houseType === "floor" ? 1.08 : houseType === "courtyard" ? 1.05 : 1)
+      const roofShape = houseType === "courtyard" ? "courtyard" : houseType === "floor" || ["warehouse", "clinic", "garage"].includes(kind) ? "flat" : variant % 3 === 0 ? "gable" : "hip"
+      const exterior = Object.freeze({ roofShape, wallInset: houseType === "courtyard" ? 12 : 8, facadeWindows: Math.max(2, Math.floor(w / 72)), doorWidth: 88, yard: houseType === "courtyard", ruined })
+      const footprint = Object.freeze({ x: x * sx, y: y * sy, width: w * sx, height: h * sy })
+      buildings.push(Object.freeze({ ...footprint, footprint, kind, category: kind, variant, houseType, floors, ruined, roomScale, exterior, plotId: plot?.id, plot }))
     }
 
     rows.forEach(([top, bottom], row) => {
       columns.forEach(([left, right], col) => {
-        blocks.push({ x: left * sx, y: top * sy, width: (right - left) * sx, height: (bottom - top) * sy })
-        const shortBlock = row === 0 || row === rows.length - 1
-        const layoutSeed = row * 7 + col * 3
-        const houseType = layoutSeed % 3 === 0 ? "courtyard" : layoutSeed % 3 === 1 ? "floor" : "bungalow"
-        const houseWidth = houseType === "courtyard" ? 122 : houseType === "floor" ? 108 : 88
-        const houseHeight = shortBlock ? (houseType === "floor" ? 132 : 108) : (houseType === "courtyard" ? 122 : houseType === "floor" ? 146 : 96)
-        const xs = [left + 18, right - 18 - houseWidth]
-        const ys = shortBlock ? [row === 0 ? 108 : 2452 - houseHeight] : [top + 18, bottom - 18 - houseHeight]
-        ys.forEach((y, side) => xs.forEach((x, part) => {
-          const variant = row + col + side + part
-          const kindRoll = (row * 17 + col * 11 + side * 5 + part * 3) % 11
-          const kind = kindRoll === 0 ? "clinic"
-            : kindRoll === 1 ? "market"
-              : kindRoll === 2 ? "warehouse"
-                : kindRoll === 3 ? "garage"
-                  : variant % 5 === 0 ? "shop" : variant % 3 === 0 ? "apartment" : "residential"
-          addBuilding(x, y, houseWidth, houseHeight, kind, houseType, houseType === "floor" ? 2 + (variant % 2) : 1, (row * 13 + col * 7 + side * 5 + part) % 7 === 0)
-        }))
+        const plot = Object.freeze({ id: `block-${row}-${col}`, x: left * sx, y: top * sy, width: (right - left) * sx, height: (bottom - top) * sy, row, column: col })
+        blocks.push(plot)
+        const plan = district[row * columns.length + col]
+        const x = (left + right - plan.width) / 2
+        const y = (top + bottom - plan.height) / 2
+        addBuilding(x, y, plan.width, plan.height, plan.kind, plan.houseType, plan.floors || 1, Boolean(plan.ruined), plot)
       })
-      // Outer blocks leave open parklets between the shops and the main roads.
-      if (row % 3 !== 1) {
-        let houseHeight = Math.min(166, bottom - top - 56)
-        const y = Math.max(108, (top + bottom - houseHeight) / 2)
-        houseHeight = Math.min(houseHeight, bottom - 24 - y, 2452 - y)
-        addBuilding(56, y, 72, houseHeight, row % 2 ? "apartment" : "shop")
-        addBuilding(1312, y + 8, 72, houseHeight - 16, row % 2 ? "residential" : row === 0 ? "clinic" : "shop", "bungalow", 1, row === 0)
-      }
     })
 
     function circleHitsRect(x, y, radius, rect) {
@@ -308,8 +299,8 @@
 
     const allGreen = [...blocks]
     rows.forEach(([top, bottom]) => {
-      allGreen.push({ x: 28 * sx, y: top * sy, width: 123 * sx, height: (bottom - top) * sy })
-      allGreen.push({ x: 1290 * sx, y: top * sy, width: 122 * sx, height: (bottom - top) * sy })
+      allGreen.push({ x: 28 * sx, y: top * sy, width: 42 * sx, height: (bottom - top) * sy })
+      allGreen.push({ x: 1370 * sx, y: top * sy, width: 42 * sx, height: (bottom - top) * sy })
     })
     for (const block of allGreen) {
       const points = []
@@ -421,11 +412,13 @@
       }
     }
 
-    const houseAssets = [0, 2, 4, 5, 1, 7, 0, 3]
+    const houseAssets = Object.freeze({ residential: 0, shop: 2, market: 2, clinic: 1, garage: 3, apartment: 4, warehouse: 7 })
     for (const building of buildings) {
       const roofLift = 30 * sy
       const pad = 6 * sx
-      const item = { id: `building-${building.variant}`, type: "building", index: houseAssets[building.variant % houseAssets.length], building, x: building.x - pad, y: building.y - roofLift, width: building.width + pad * 2, height: building.height + roofLift, sortY: building.y + building.height }
+      // The atlas base stays on the footprint's south edge, where the house
+      // system places its entrance. Only the roof extends above the footprint.
+      const item = { id: `building-${building.variant}`, type: "building", index: houseAssets[building.kind] ?? 0, building, x: building.x - pad, y: building.y - roofLift, width: building.width + pad * 2, height: building.height + roofLift, sortY: building.y + building.height }
       scenery.push(Object.freeze(item))
       // Ground contact shadows are baked; the roof itself belongs to depth order.
       oval(ctx, building.x + building.width / 2 + 7 * sx, building.y + building.height - 2 * sy, building.width * .58, 12 * sy, "#594d3245")
@@ -447,15 +440,14 @@
         if (Math.floor(y / 64) % 3 === 0) prop(8, x + (x < 100 ? 29 : -29), base - 22, 52, 64)
       }
     }
-    // Street trees sit outside the house footprints. Their crowns frame the
-    // visible block edge; the 64-pixel passage down the block centre stays clear.
+    // Trees and small props frame each plot without occupying its doorway.
     rows.forEach(([top, bottom], row) => {
       for (const [left, right] of columns) {
         prop(8, left + 1, top + 24, 60, 73)
         prop(8, right - 1, top + 21, 54, 68)
         prop(8, left + 1, bottom - 11, 63, 77)
         prop(row % 4 === 0 ? 9 : 8, right - 1, bottom - 8, 57, 72)
-        // Oil drums and crates stay off the central 64-pixel passages.
+        // Oil drums and crates stay on the plot corners, clear of the doorway.
         prop(12, left + 24, bottom - 22, 30, 29)
         if (row % 2) prop(14, right - 35, top + 39, 33, 25)
       }
@@ -474,8 +466,8 @@
     })
     for (let i = 0; i < horizontal.length; i += 1) {
       const cross = horizontal[i] / sy
-      prop(i % 2 ? 10 : 11, 179, cross + 118, 49, 42)
-      prop(i % 2 ? 14 : 15, 1261, cross - 104, 48, 34)
+      prop(i % 2 ? 10 : 11, 672, cross + 118, 49, 42)
+      prop(i % 2 ? 14 : 15, 770, cross - 104, 48, 34)
     }
     // A low, broken perimeter wall is scenery only; the original bounds remain.
     for (let x = 65; x < 1390; x += 68) {
@@ -598,9 +590,9 @@
       context.restore()
     }
 
-    const spawn = Object.freeze({ x: width / 2, y: height / 2 })
+    const spawn = Object.freeze({ x: width / 2, y: horizontal[0] })
     updateNavigation(spawn.x, spawn.y)
-    return Object.freeze({ width, height, terrain, buildings: Object.freeze(buildings), scenery: Object.freeze(scenery), drawScenery, spawn, roads: { vertical: [...vertical], horizontal: [...horizontal], bendAmplitude: { x: 18 * sx, y: 14 * sy } }, isFree, move, steer, updateNavigation })
+    return Object.freeze({ width, height, terrain, buildings: Object.freeze(buildings), blocks: Object.freeze(blocks), scenery: Object.freeze(scenery), drawScenery, spawn, roads: { vertical: [...vertical], horizontal: [...horizontal], bendAmplitude: { x: 18 * sx, y: 14 * sy } }, isFree, move, steer, updateNavigation })
   }
 
   global.WASTELAND_CITY = Object.freeze({ create })
