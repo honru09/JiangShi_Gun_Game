@@ -8,8 +8,40 @@ const STYLE = {
   bloater: { scale: 1.17, bodyHeight: 72 }
 }
 
-function clamp(value, minimum, maximum) {
-  return Math.min(maximum, Math.max(minimum, value))
+// Runtime pose selection for the modular atlas. Each locomotion mode has two
+// authored poses; hop exposes the three readable stages used by the gameplay
+// motion state machine. The limbs are still placed procedurally, so no extra
+// bitmap frames are required.
+function normalizedPhase(actor) {
+  const candidate = Number.isFinite(actor && actor.gaitPhase) ? actor.gaitPhase
+    : Number.isFinite(actor && actor.walkCycle) ? actor.walkCycle
+      : Number.isFinite(actor && actor.motionTime) ? actor.motionTime * Math.PI : 0
+  const phase = candidate % (Math.PI * 2)
+  return phase < 0 ? phase + Math.PI * 2 : phase
+}
+
+function selectAnimationFrame(actor, type) {
+  const phase = normalizedPhase(actor)
+  const explicit = actor && ['walk', 'run', 'crawl', 'hop'].includes(actor.motion) ? actor.motion : null
+  const motion = explicit || (type === 'crawler' ? 'crawl' : type === 'runner' || type === 'hero' && Number(actor && actor.moveAmount) > .65 ? 'run' : 'walk')
+  let mode = motion
+  let index = 0
+  if (motion === 'hop') {
+    const hopPhase = actor && actor.hopPhase
+    const hopClock = Number.isFinite(hopPhase) ? hopPhase : Number.isFinite(actor && actor.motionTime) ? actor.motionTime % 2.6 : null
+    if (typeof hopPhase === 'string' && hopPhase !== 'approach') mode = `hop-${hopPhase}`
+    else if (hopClock !== null && hopClock < .6) mode = 'hop-windup'
+    else if (hopClock !== null && hopClock < 1.05) mode = 'hop-airborne'
+    else if (hopClock !== null && hopClock < 1.4) mode = 'hop-recovery'
+    else if (hopClock === null && (Number(actor && actor.hopHeight) || 0) > .1) mode = 'hop-airborne'
+    else { mode = 'walk'; index = phase < Math.PI ? 0 : 1 }
+    if (mode.indexOf('hop-') === 0) index = mode === 'hop-airborne' && (Number(actor && actor.hopHeight) || 0) < .16 ? 1 : 0
+  } else {
+    const moving = (Number(actor && actor.moveAmount) || 0) > .015 || (Number(actor && actor.actualSpeed) || 0) > 1
+    mode = moving ? motion : 'idle'
+    index = moving ? (phase < Math.PI ? 0 : 1) : 0
+  }
+  return { type, motion: mode, index, name: `${mode}-${index + 1}`, phase: Number(phase.toFixed(3)) }
 }
 
 function sourceCharacter(manifest, type) {
@@ -57,14 +89,26 @@ function crawlerGeometry(character) {
   return { width, height: width * character.body.height / character.body.width, bottom: 0.08 }
 }
 
-function arm(context, source, crop, from, to, scale) {
+function articulatedLimb(context, source, crop, from, to, mirror, anchors) {
+  const origin = { x: crop.width * anchors.start.x, y: crop.height * anchors.start.y }
+  const tip = { x: crop.width * anchors.end.x, y: crop.height * anchors.end.y }
+  const spanX = (tip.x - origin.x) * mirror
+  const spanY = tip.y - origin.y
   const distance = Math.hypot(to.x - from.x, to.y - from.y)
-  const thickness = clamp(15 * WORLD_PER_PIXEL * scale, 0.2 * scale, 0.36 * scale)
+  const scale = distance / Math.hypot(spanX, spanY)
   context.save()
   context.translate(from.x, from.y)
-  context.rotate(Math.atan2(to.y - from.y, to.x - from.x))
-  image(context, source, crop, -0.055 * scale, -thickness / 2, distance + 0.11 * scale, thickness)
+  context.rotate(Math.atan2(to.y - from.y, to.x - from.x) - Math.atan2(spanY, spanX))
+  context.scale(mirror, 1)
+  image(context, source, crop, -origin.x * scale, -origin.y * scale, crop.width * scale, crop.height * scale)
   context.restore()
+}
+
+function arm(context, source, crop, from, to, mirror = 1, anchors) {
+  articulatedLimb(context, source, crop, from, to, mirror, {
+    start: anchors && anchors.shoulder || { x: .12, y: .36 },
+    end: anchors && anchors.palm || { x: .84, y: .67 }
+  })
 }
 
 function legSegment(context, source, crop, from, to, width, mirror) {
@@ -90,17 +134,10 @@ function drawBody(context, source, character, geometry, offsetX, offsetY, facing
   context.restore()
 }
 
-function crawlLimb(context, source, crop, from, to, mirror) {
-  if (crop.height > crop.width * 0.9) {
-    legSegment(context, source, crop, from, to, 13.5 * WORLD_PER_PIXEL, mirror)
-  } else {
-    arm(context, source, crop, from, to, 0.83)
-  }
-}
-
-function drawCrawler(context, source, character, enemy) {
+function drawCrawler(context, source, character, enemy, animationFrame) {
   const geometry = crawlerGeometry(character)
-  const gait = Math.sin(enemy.gaitPhase) * enemy.moveAmount
+  const poseSign = animationFrame && animationFrame.motion === 'idle' ? 0 : animationFrame && animationFrame.index ? 1 : -1
+  const gait = poseSign * enemy.moveAmount
   const bob = -Math.abs(gait) * 0.025
   context.save()
   context.scale(enemy.facing, 1)
@@ -108,17 +145,19 @@ function drawCrawler(context, source, character, enemy) {
     const step = gait * side * 0.13
     const hip = { x: -0.31 + side * 0.07, y: 0.005 + side * 0.035 }
     const foot = { x: -0.46 - step, y: 0.43 + side * 0.055 - Math.max(0, -step) * 0.35 }
-    crawlLimb(context, source, character.leg, hip, foot, 1)
+    articulatedLimb(context, source, character.leg, hip, foot, 1, character.legAnchors || {
+      start: { x: .35, y: .1 }, end: { x: .68, y: .9 }
+    })
   }
   const front = side => {
     const step = gait * side * 0.13
     const shoulder = { x: 0.28 + side * 0.06, y: -0.1 + bob + side * 0.035 }
     const hand = { x: 0.65 + step, y: 0.42 + side * 0.055 - Math.max(0, step) * 0.35 }
-    crawlLimb(context, source, character.arm, shoulder, hand, 1)
+    articulatedLimb(context, source, character.arm, shoulder, hand, 1, character.armAnchors || {
+      start: { x: .13, y: .2 }, end: { x: .83, y: .8 }
+    })
   }
   drawBody(context, source, character, geometry, 0, bob, 1)
-  // Keep both forearms over the torso; drawing one behind the body made the
-  // low crawler look one-armed at the game's small scale.
   front(-1)
   front(1)
   context.restore()
@@ -131,6 +170,7 @@ function createCharacterRenderer(wxApi, manifest, onChange) {
     source: null,
     resources: {},
     version: manifest && manifest.version,
+    animationFrame: { type: 'none', motion: 'idle', index: 0, name: 'idle-1', phase: 0 },
 
     load() {
       const fail = message => {
@@ -177,13 +217,15 @@ function createCharacterRenderer(wxApi, manifest, onChange) {
     },
 
     drawHero(context, player) {
+      this.animationFrame = selectAnimationFrame(player, 'hero')
       const character = sourceCharacter(manifest, 'hero')
       const resource = this.resources[character.image || manifest.image]
       if (!resource || resource.status !== 'ready') return false
       const source = resource.source
       const style = STYLE.hero
       const geometry = bodyGeometry(character, style)
-      const gait = Math.sin(player.gaitPhase) * player.moveAmount
+      const poseSign = this.animationFrame.motion === 'idle' ? 0 : this.animationFrame.index ? 1 : -1
+      const gait = poseSign * player.moveAmount
       const strideSize = 0.11 + player.moveAmount * 0.2
       for (let side = -1; side <= 1; side += 2) {
         const step = gait * side * strideSize
@@ -192,59 +234,58 @@ function createCharacterRenderer(wxApi, manifest, onChange) {
         leg(context, source, character.leg, hip, foot, 1, side)
       }
       drawBody(context, source, character, geometry, 0, 0, 1)
-      // Use a signed -180°…180° aim angle and place both hands along the
-      // rifle axis. The small perpendicular offsets keep the two arms from
-      // folding through each other when the player turns left.
       const aimAngle = Math.atan2(Math.sin(player.angle), Math.cos(player.angle))
       const cosine = Math.cos(aimAngle)
       const sine = Math.sin(aimAngle)
+      const armFacing = cosine < 0 ? -1 : 1
       const recoil = player.recoil * 0.08
-      const point = (distance, lateral) => ({
-        x: 0.04 + cosine * (distance - recoil) - sine * lateral,
-        y: -0.24 + sine * (distance - recoil) + cosine * lateral
-      })
+      const point = (x, y) => ({ x: 0.04 + cosine * (x - recoil) - sine * y, y: -0.24 + sine * (x - recoil) + cosine * y })
       const shoulderY = geometry.bottom - geometry.height * 0.34
-      arm(context, source, character.arm, { x: -geometry.width * 0.36, y: shoulderY }, point(0.28, -0.055), 1)
-      arm(context, source, character.arm, { x: geometry.width * 0.36, y: shoulderY }, point(0.59, 0.055), 1)
+      arm(context, source, character.arm, { x: -geometry.width * 0.36, y: shoulderY }, point(0.28, -0.055), armFacing, character.armAnchors)
+      arm(context, source, character.arm, { x: geometry.width * 0.36, y: shoulderY }, point(0.59, 0.055), armFacing, character.armAnchors)
       return true
     },
 
     drawInfected(context, enemy) {
+      this.animationFrame = selectAnimationFrame(enemy, enemy.type)
       const character = sourceCharacter(manifest, enemy.type)
       if (!character) return false
       const resource = this.resources[character.image || manifest.image]
       if (!resource || resource.status !== 'ready') return false
       const source = resource.source
-      if (enemy.type === 'crawler') { drawCrawler(context, source, character, enemy); return true }
+      if (enemy.type === 'crawler') { drawCrawler(context, source, character, enemy, this.animationFrame); return true }
       const style = STYLE[enemy.type]
       if (!character || !style) return false
       const scale = style.scale
       const geometry = infectedGeometry(character, style, enemy)
-      const gait = Math.sin(enemy.gaitPhase) * enemy.moveAmount
+      const poseSign = this.animationFrame.motion === 'idle' ? 0 : this.animationFrame.index ? 1 : -1
+      const gait = poseSign * enemy.moveAmount
       const stride = gait * scale * (enemy.type === 'runner' ? 0.21 : 0.13)
       const lift = enemy.motion === 'hop' ? enemy.hopHeight || 0 : 0
       context.save()
       context.translate(0, -lift)
+      const crouch = this.animationFrame.motion === 'hop-windup' ? 0.09 * scale : this.animationFrame.motion === 'hop-recovery' ? 0.05 * scale : 0
+      const tucked = this.animationFrame.motion === 'hop-airborne' ? 0.17 * scale : 0
       for (let side = -1; side <= 1; side += 2) {
-        const step = stride * side
-        const hip = { x: side * 0.19 * scale, y: geometry.bottom - 0.06 * scale }
-        const foot = { x: hip.x + enemy.facing * 0.025 * scale + step * 0.75, y: 0.68 * scale + step * 0.45 }
+        const step = this.animationFrame.motion.indexOf('hop-') === 0 ? side * tucked * .3 : stride * side
+        const hip = { x: side * 0.19 * scale, y: geometry.bottom - 0.06 * scale + crouch }
+        const foot = { x: hip.x + enemy.facing * 0.025 * scale + step * 0.75 + side * crouch * .5, y: 0.68 * scale + step * 0.45 - tucked }
         leg(context, source, character.leg, hip, foot, scale, enemy.facing)
       }
       const sway = gait * 0.032 * scale
-      const bob = -Math.abs(gait) * 0.018 * scale
+      const bob = crouch - Math.abs(gait) * 0.018 * scale
       drawBody(context, source, character, geometry, sway, bob, enemy.facing)
       const shoulderY = geometry.bottom - geometry.height * 0.34 + bob
       for (let side = -1; side <= 1; side += 2) {
+        const shoulder = { x: side * geometry.width * 0.36 + sway, y: shoulderY }
         // Keep the two reaching arms on separate, anatomically plausible
         // paths. A shared hand target made the far arm cross the chest and
         // disappear beneath the near arm, which read as a one-armed zombie.
-        const shoulder = { x: side * geometry.width * 0.36 + sway, y: shoulderY }
         const hand = {
           x: shoulder.x + enemy.facing * 0.48 * scale + side * 0.12 * scale,
           y: shoulder.y + 0.085 * scale + side * 0.045 * scale + gait * 0.025 * scale
         }
-        arm(context, source, character.arm, shoulder, hand, scale)
+        arm(context, source, character.arm, shoulder, hand, enemy.facing, character.armAnchors)
       }
       context.restore()
       return true
@@ -257,15 +298,20 @@ function createCharacterRenderer(wxApi, manifest, onChange) {
       if (!resource || resource.status !== 'ready') return null
       if (enemy.type === 'crawler') {
         const geometry = crawlerGeometry(character)
-        const gait = Math.sin(enemy.gaitPhase) * enemy.moveAmount
+        const animationFrame = selectAnimationFrame(enemy, 'crawler')
+        const poseSign = animationFrame.motion === 'idle' ? 0 : animationFrame.index ? 1 : -1
+        const gait = poseSign * enemy.moveAmount
         return { centerX: 0, width: geometry.width, top: geometry.bottom - geometry.height - Math.abs(gait) * 0.025 }
       }
       const style = STYLE[enemy.type]
       if (!character || !style) return null
       const geometry = infectedGeometry(character, style, enemy)
-      const gait = Math.sin(enemy.gaitPhase) * enemy.moveAmount
+      const animationFrame = selectAnimationFrame(enemy, enemy.type)
+      const poseSign = animationFrame.motion === 'idle' ? 0 : animationFrame.index ? 1 : -1
+      const gait = poseSign * enemy.moveAmount
       const centerX = gait * 0.032 * style.scale
-      const bob = -Math.abs(gait) * 0.018 * style.scale
+      const crouch = animationFrame.motion === 'hop-windup' ? 0.09 * style.scale : animationFrame.motion === 'hop-recovery' ? 0.05 * style.scale : 0
+      const bob = crouch - Math.abs(gait) * 0.018 * style.scale
       return { centerX, width: geometry.width, top: geometry.bottom - geometry.height + bob - (enemy.hopHeight || 0) }
     }
   }

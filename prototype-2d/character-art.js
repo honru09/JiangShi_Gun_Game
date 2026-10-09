@@ -5,6 +5,47 @@
   let browserRenderer = null
   let loadStatus = "unconfigured"
   let loadError = null
+  // The atlas is a modular rig rather than a pre-baked sprite sheet. Keep a
+  // small, named animation state so callers can inspect which two-frame pose
+  // is currently being drawn while the limbs continue to be articulated at
+  // runtime.
+  let debugAnimationFrame = Object.freeze({ actor: "none", type: "none", motion: "idle", index: 0, name: "idle", phase: 0 })
+
+  function normalizedPhase(actor) {
+    const candidate = Number.isFinite(actor?.gaitPhase) ? actor.gaitPhase
+      : Number.isFinite(actor?.walkCycle) ? actor.walkCycle
+        : Number.isFinite(actor?.motionTime) ? actor.motionTime * Math.PI : 0
+    const phase = candidate % (Math.PI * 2)
+    return phase < 0 ? phase + Math.PI * 2 : phase
+  }
+
+  function selectAnimationFrame(actor, type, actorName) {
+    const phase = normalizedPhase(actor)
+    const explicitMotion = actor?.motion === "run" || actor?.motion === "walk" || actor?.motion === "crawl" || actor?.motion === "hop"
+      ? actor.motion : null
+    const motion = explicitMotion || (type === "crawler" ? "crawl" : type === "runner" || type === "hero" && (Number(actor?.movingSpeed) > 140 || Number(actor?.moveAmount) > .65) ? "run" : "walk")
+    let mode = motion
+    let index = 0
+    if (motion === "hop") {
+      const hopPhase = actor?.hopPhase
+      const hopClock = Number.isFinite(hopPhase) ? hopPhase : Number.isFinite(actor?.motionTime) ? actor.motionTime % 2.6 : null
+      if (typeof hopPhase === "string" && hopPhase !== "approach") mode = `hop-${hopPhase}`
+      else if (hopClock !== null && hopClock < .6) mode = "hop-windup"
+      else if (hopClock !== null && hopClock < 1.05) mode = "hop-airborne"
+      else if (hopClock !== null && hopClock < 1.4) mode = "hop-recovery"
+      else if (hopClock === null && Number(actor?.hopHeight) > .1) mode = "hop-airborne"
+      else { mode = "walk"; index = phase < Math.PI ? 0 : 1 }
+      // Airborne has a second pose for the apex; windup/recovery stay stable.
+      if (mode.startsWith("hop-")) index = mode === "hop-airborne" && Number.isFinite(actor?.hopHeight) && actor.hopHeight < 8 ? 1 : 0
+    } else if (motion === "crawl" || motion === "walk" || motion === "run") {
+      const moving = (Number(actor?.moveAmount) || 0) > .015 || (Number(actor?.movingSpeed) || 0) > 1 || (Number(actor?.gait) || 0) > .015
+        || (actorName === "enemy" && Number(actor?.speed) > 0 && actor?.hopPhase !== "windup")
+      mode = moving ? motion : "idle"
+      index = moving ? (phase < Math.PI ? 0 : 1) : 0
+    }
+    debugAnimationFrame = Object.freeze({ actor: actorName, type, motion: mode, index, name: `${mode}-${index + 1}`, phase: Number(phase.toFixed(3)) })
+    return debugAnimationFrame
+  }
 
   function rect(value) {
     if (Array.isArray(value)) return { x: value[0], y: value[1], width: value[2], height: value[3] }
@@ -78,13 +119,10 @@
       context.restore()
     }
 
-    function heroArm(context, player, rear) {
+    function heroArm(context, player, rear, bob = 0) {
       const torso = parts.get("hero.body")
       const torsoScale = Math.min(74 / torso.source.height, 58 / torso.source.width)
-      const shoulder = { x: (rear ? -1 : 1) * torso.source.width * torsoScale * .34, y: 6 - torso.source.height * torsoScale * .43 }
-      // Keep the aim on a signed half-turn. Mirroring the painted arm when
-      // aiming left preserves an elbow bend instead of twisting the same
-      // right-facing limb through a full 360 degrees.
+      const shoulder = { x: (rear ? -1 : 1) * torso.source.width * torsoScale * .34, y: 6 - torso.source.height * torsoScale * .43 + bob }
       const aimAngle = Math.atan2(Math.sin(player.armAngle), Math.cos(player.armAngle))
       const cosine = Math.cos(aimAngle)
       const sine = Math.sin(aimAngle)
@@ -93,12 +131,14 @@
       const gripY = rear ? -3 : 7
       const hand = { x: 7 + cosine * gripX - sine * gripY, y: -9 + sine * gripX + cosine * gripY }
       const part = parts.get("hero.arm")
-      const anchors = manifest.characters?.hero?.armAnchors || {
+      const anchors = characters.hero?.armAnchors || {
         shoulder: { x: .12, y: .36 }, palm: { x: .84, y: .67 }
       }
-      const sourceShoulder = { x: part.source.width * (armFacing > 0 ? anchors.shoulder.x : 1 - anchors.shoulder.x), y: part.source.height * anchors.shoulder.y }
-      const sourceHand = { x: part.source.width * (armFacing > 0 ? anchors.palm.x : 1 - anchors.palm.x), y: part.source.height * anchors.palm.y }
-      const sourceSpanX = sourceHand.x - sourceShoulder.x
+      const sourceShoulder = { x: part.source.width * anchors.shoulder.x, y: part.source.height * anchors.shoulder.y }
+      const sourceHand = { x: part.source.width * anchors.palm.x, y: part.source.height * anchors.palm.y }
+      // Mirror the span used to solve rotation, while retaining the original
+      // painted anchors. Mirroring an already flipped anchor shifts the sleeve.
+      const sourceSpanX = (sourceHand.x - sourceShoulder.x) * armFacing
       const sourceSpanY = sourceHand.y - sourceShoulder.y
       const scale = Math.hypot(hand.x - shoulder.x, hand.y - shoulder.y) / Math.hypot(sourceSpanX, sourceSpanY)
       const angle = Math.atan2(hand.y - shoulder.y, hand.x - shoulder.x) - Math.atan2(sourceSpanY, sourceSpanX)
@@ -129,6 +169,7 @@
     }
 
     function drawPlayer(context, player, options = {}) {
+      const animationFrame = selectAnimationFrame(player, "hero", "player")
       context.save()
       context.translate(player.x, player.y)
       shadow(context)
@@ -137,21 +178,27 @@
         context.lineWidth = 2
         context.beginPath(); context.ellipse(0, -16, 34, 54, 0, 0, Math.PI * 2); context.stroke()
       }
-      const stride = Math.sin(player.walkCycle) * Math.min(1.25, player.gait)
-      const lift = Math.abs(Math.sin(player.walkCycle)) * Math.min(1, player.gait)
+      // Two authored walk/run poses alternate at the gait phase boundary.
+      // The actual travel amount still scales the pose, so stopping settles
+      // cleanly into the idle frame without changing movement physics.
+      const poseSign = animationFrame.motion === "idle" ? 0 : animationFrame.index ? 1 : -1
+      const runScale = animationFrame.motion === "run" ? 1.25 : 1
+      const stride = poseSign * Math.min(1.25, player.gait || player.moveAmount || 0) * runScale
+      const lift = Math.abs(stride) * .8
+      const bob = -lift * 1.6
       for (let index = 0; index < 2; index += 1) {
         const side = index ? 1 : -1
         const phase = stride * side
-        leg(context, "hero", { x: side * 8, y: 4 }, { x: side * 8 + phase * 5, y: 30 + phase * 8 }, side)
+        leg(context, "hero", { x: side * 8, y: 4 + bob }, { x: side * 8 + phase * 5, y: 30 + phase * 8 }, side)
       }
-      body(context, "hero", -lift * 1.6)
+      body(context, "hero", bob)
       // Render both arms over the torso so the far hand cannot be hidden by
       // the large illustrated body. The rifle remains between the two hands.
-      heroArm(context, player, true)
+      heroArm(context, player, true, bob)
       // A tall head would hide the unchanged upward muzzle, so keep the rifle readable in every aim direction.
       options.drawWeapon?.()
       // Keep the near arm and palm over the chest/rifle, including upward aim.
-      heroArm(context, player, false)
+      heroArm(context, player, false, bob)
       context.restore()
       return true
     }
@@ -159,20 +206,24 @@
     function drawEnemy(context, enemy, options = {}) {
       if (enemy.type === "crawler") return drawCrawler(context, enemy, options)
       const type = TYPES.includes(enemy.type) ? enemy.type : "walker"
+      const animationFrame = selectAnimationFrame(enemy, type, "enemy")
       const facing = (options.playerX ?? enemy.x + 1) >= enemy.x ? 1 : -1
-      const stride = Math.sin(enemy.walkCycle) * (type === "runner" ? 6 : 4)
-      const sway = Math.sin(enemy.walkCycle * .5) * (type === "brute" ? 1.5 : 2.3)
+      const poseSign = animationFrame.motion === "idle" ? 0 : animationFrame.index ? 1 : -1
+      const stride = poseSign * (type === "runner" ? 6 : 4)
+      const sway = poseSign * (type === "brute" ? 1.5 : 2.3)
       context.save()
       context.translate(enemy.x, enemy.y)
       context.scale(enemy.radius / 17, enemy.radius / 17)
       shadow(context, 24)
       context.translate(0, -(enemy.hopHeight || 0) * 17 / enemy.radius)
+      const crouch = animationFrame.motion === "hop-windup" ? 5 : animationFrame.motion === "hop-recovery" ? 3 : 0
+      const tucked = animationFrame.motion === "hop-airborne" ? 8 : 0
       for (let index = 0; index < 2; index += 1) {
         const side = index ? 1 : -1
-        const foot = Math.sin(enemy.walkCycle - .45 + (index ? Math.PI : 0)) * (type === "runner" ? 8 : 5)
-        leg(context, type, { x: side * 8, y: 5.5 }, { x: side * 10 + foot * .45, y: 31 + foot }, facing)
+        const foot = animationFrame.motion.startsWith("hop-") ? side * tucked * .3 : poseSign * (index ? -1 : 1) * (type === "runner" ? 8 : 5)
+        leg(context, type, { x: side * 8 + sway, y: 4 + crouch - Math.abs(stride) * .18 }, { x: side * (10 + crouch * .5) + foot * .45, y: 31 + foot - tucked }, facing)
       }
-      context.translate(sway, -Math.abs(stride) * .18)
+      context.translate(sway, crouch - Math.abs(stride) * .18)
       body(context, type, 0, facing)
       // Paint both arms after the torso. The far arm is mirrored outward and
       // must stay visible instead of being occluded by the oversized body.
@@ -205,6 +256,7 @@
 
     function drawCrawler(context, enemy, options) {
       if (!parts.has("crawler.body")) return false
+      const animationFrame = selectAnimationFrame(enemy, "crawler", "enemy")
       const facing = (options.playerX ?? enemy.x + 1) >= enemy.x ? 1 : -1
       context.save()
       context.translate(enemy.x, enemy.y)
@@ -217,9 +269,9 @@
       const armAnchors = metadata.armAnchors || { start: { x: .13, y: .2 }, end: { x: .83, y: .8 } }
       const legAnchors = metadata.legAnchors || { start: { x: .35, y: .1 }, end: { x: .68, y: .9 } }
       function limbPair(near, drawLeg = true, drawArm = true) {
-        const phase = enemy.walkCycle + (near ? 0 : Math.PI)
-        const step = Math.sin(phase) * 5
-        const lift = Math.max(0, Math.cos(phase)) * 3
+        const poseSign = animationFrame.motion === "idle" ? 0 : animationFrame.index ? 1 : -1
+        const step = poseSign * (near ? 5 : -5)
+        const lift = animationFrame.motion === "idle" ? 0 : (animationFrame.index ? 3 : 0)
         const side = near ? 1 : -1
         if (drawLeg) crawlingLimb(context, backLeg, { x: -21 + side * 2, y: near ? 5 : 2 }, { x: -31 + step, y: 19 - lift + side * 2 }, legAnchors)
         // Spread the two forearms at the shoulder and hand so the crawler
@@ -227,11 +279,9 @@
         // merged arm.
         if (drawArm) crawlingLimb(context, arm, { x: 13 + side * 4, y: near ? -3 : -7 }, { x: 31 + step + side * 5, y: 18 - lift + side * 3 }, armAnchors)
       }
-      // Draw both support legs behind the torso, then bring both forearms
-      // forward so the low crawler reads as a four-limbed body.
       limbPair(false, true, false)
       limbPair(true, true, false)
-      body(context, "crawler", Math.sin(enemy.walkCycle * 2) * .8, 1)
+      body(context, "crawler", (animationFrame.motion === "idle" ? 0 : animationFrame.index ? -.8 : .8), 1)
       limbPair(false, false, true)
       limbPair(true, false, true)
       if (enemy.burn > 0) {
@@ -293,6 +343,7 @@
     get ready() { return !!browserRenderer },
     get status() { return loadStatus },
     get error() { return loadError },
+    get animationFrame() { return debugAnimationFrame },
     drawPlayer(context, player, options) { return browserRenderer?.drawPlayer(context, player, options) || false },
     drawEnemy(context, enemy, options) { return browserRenderer?.drawEnemy(context, enemy, options) || false }
   })
