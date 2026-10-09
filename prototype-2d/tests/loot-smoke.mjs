@@ -14,10 +14,12 @@ export function bootPage(coarse = false, admin = true) {
   const html = readFileSync(join(publicRoot, "index.html"), "utf8");
   let now = 0, animationFrame;
   const noop = () => {};
+  const drawCalls = [];
   const drawing = new Proxy({}, { get(target, key) {
     if (key === "createLinearGradient" || key === "createRadialGradient") return () => ({ addColorStop: noop });
     if (key === "measureText") return text => ({ width: String(text).length * 8 });
-    return target[key] || noop;
+    if (!target[key]) target[key] = (...args) => { drawCalls.push({ name: String(key), args }); };
+    return target[key];
   }, set(target, key, value) { target[key] = value; return true; } });
   class Element {
     constructor(id) {
@@ -58,7 +60,7 @@ export function bootPage(coarse = false, admin = true) {
     const source = filename ? readFileSync(join(publicRoot, filename), "utf8") : script[2];
     if (source.trim()) vm.runInContext(source, runtime, { filename: filename || "index.html#inline" });
   }
-  return { debug: sandbox.__LAST_NIGHT_DEBUG__, skills: sandbox.WASTELAND_SKILLS, elements,
+  return { debug: sandbox.__LAST_NIGHT_DEBUG__, skills: sandbox.WASTELAND_SKILLS, elements, drawCalls,
     click(id) { assert(elements.has(id), `missing UI control ${id}`); elements.get(id).emit("click"); },
     key(code, down = true) { events.emit(down ? "keydown" : "keyup", { code, repeat: false }); },
     frame(seconds = 1 / 60) { now += seconds * 1000; animationFrame(now); },
@@ -66,6 +68,13 @@ export function bootPage(coarse = false, admin = true) {
 }
 
 const plain = value => JSON.parse(JSON.stringify(value));
+const THROWABLE_IDS = new Set(["grenade", "molotov", "bearTrap", "extinguisher"]);
+const DOOR_VECTORS = {
+  south: { outward: { x: 0, y: 1 }, inward: { x: 0, y: -1 }, enter: "KeyW", leave: "KeyS" },
+  north: { outward: { x: 0, y: -1 }, inward: { x: 0, y: 1 }, enter: "KeyS", leave: "KeyW" },
+  east: { outward: { x: 1, y: 0 }, inward: { x: -1, y: 0 }, enter: "KeyA", leave: "KeyD" },
+  west: { outward: { x: -1, y: 0 }, inward: { x: 1, y: 0 }, enter: "KeyD", leave: "KeyA" }
+};
 function collect(debug, id, quality = "common") {
   const ball = debug.spawnLoot(id, quality, debug.state.player.x, debug.state.player.y);
   assert(ball, `cannot create ${id} ball`);
@@ -74,18 +83,64 @@ function collect(debug, id, quality = "common") {
   assert(!debug.loot.some(item => item.id === ball.id), "touching a ball consumes it");
   return ball;
 }
-function enter(page, house, keyboard = false) {
-  const debug = page.debug;
-  debug.state.player.x = house.door.x; debug.state.player.y = house.door.y;
-  if (keyboard) { page.key("KeyE"); page.key("KeyE", false); }
-  else assert.equal(debug.interact(), true);
-  assert.equal(debug.state.scene, house.id);
-  return debug.state.room;
+function doorDirection(house) {
+  return DOOR_VECTORS[house?.door?.side] || DOOR_VECTORS.south;
 }
-function exit(debug) {
-  debug.state.player.x = debug.state.room.exit.x; debug.state.player.y = debug.state.room.exit.y;
-  assert.equal(debug.interact(), true);
-  assert.equal(debug.state.scene, "outdoor");
+function walkDoor(page, house, direction = "enter") {
+  const debug = page.debug;
+  const vectors = doorDirection(house);
+  const radius = debug.state.player.radius || 19;
+  let point;
+  if (direction === "enter") {
+    point = { x: house.door.x + vectors.outward.x * 72, y: house.door.y + vectors.outward.y * 72 };
+  } else {
+    const room = debug.state.room;
+    assert(room, "a room is required to walk back through its doorway");
+    const depth = 24;
+    point = { x: room.exit.x - vectors.outward.x * depth, y: room.exit.y - vectors.outward.y * depth };
+    const offsets = [0, -32, 32, -64, 64, -96, 96];
+    for (const offset of offsets) {
+      const candidate = vectors.outward.x
+        ? { x: point.x, y: point.y + offset }
+        : { x: point.x + offset, y: point.y };
+      if (debug.houses.isFree(room, candidate.x, candidate.y, radius)) { point = candidate; break; }
+    }
+    assert(debug.houses.isFree(room, point.x, point.y, radius), "door interior point is walkable");
+  }
+  debug.state.player.x = point.x; debug.state.player.y = point.y;
+  const key = vectors[direction === "enter" ? "enter" : "leave"];
+  const entering = direction === "enter";
+  let maxStep = 0;
+  let frames = 0;
+  page.key(key);
+  try {
+    for (; frames < 36; frames += 1) {
+      const before = { x: debug.state.player.x, y: debug.state.player.y };
+      debug.step(1 / 60);
+      const distance = Math.hypot(debug.state.player.x - before.x, debug.state.player.y - before.y);
+      maxStep = Math.max(maxStep, distance);
+      if (entering ? debug.state.room?.houseId === house.id : !debug.state.room) break;
+    }
+  } finally {
+    page.key(key, false);
+  }
+  if (entering) {
+    assert.equal(debug.state.room?.houseId, house.id, `${house.id} is reachable by walking through its door`);
+    assert(frames < 36, `${house.id} doorway did not activate while walking`);
+  } else {
+    assert.equal(debug.state.room, null, "walking outward leaves the room without an interaction key");
+    assert(frames < 36, "room doorway did not open while walking outward");
+  }
+  // A doorway changes only the collision/rendering context. It must not
+  // teleport the actor to a detached room coordinate during the crossing.
+  assert(maxStep <= 24, `door crossing moved ${maxStep.toFixed(2)}px in one frame`);
+  return { room: debug.state.room, maxStep, frames };
+}
+function enter(page, house) {
+  return walkDoor(page, house, "enter").room;
+}
+function leave(page, house) {
+  return walkDoor(page, house, "leave").room;
 }
 function immutableSimulation(debug) {
   return JSON.stringify({ time: debug.state.time, phase: debug.state.phase, player: debug.state.player,
@@ -148,11 +203,12 @@ export function runLootChecks() {
   console.log("PASS skill and firearm quality affect actual combat values; picking up a shotgun changes the equipped firearm");
 
   collect(debug, "incendiaryMagazine"); collect(debug, "armorLining");
-  assert.equal(debug.build.selectedCore.length, 3);
+  collect(debug, "sawDrone");
+  assert.equal(debug.build.selectedCore.length, 4);
   assert.equal(debug.build.selectedBoost.length, 2);
   const capped = plain(debug.build.snapshot());
   debug.state.player.hp = 1;
-  collect(debug, "sawDrone"); collect(debug, "fieldBandage");
+  collect(debug, "proximityMine"); collect(debug, "fieldBandage");
   assert.deepEqual(plain(debug.build.snapshot()), capped, "full groups reject new skills without replacing existing choices");
   assert(debug.state.player.hp > 1, "full groups convert discarded balls to medical supplies");
   while (debug.build.level("scatterModule") < page.skills.byId("scatterModule").max) collect(debug, "scatterModule");
@@ -160,7 +216,7 @@ export function runLootChecks() {
   collect(debug, "scatterModule");
   assert.equal(debug.build.level("scatterModule"), maximum);
   assert(debug.state.player.hp > 1, "a capped duplicate becomes medical supplies");
-  console.log("PASS tactical 3 / boost 2 capacities and level caps consume overflow balls with medical supplies");
+  console.log("PASS item 4 / boost 2 capacities and level caps consume overflow balls with medical supplies");
 
   const moving = bootPage(); moving.start(); moving.debug.state.godMode = true;
   moving.key("KeyD");
@@ -185,9 +241,27 @@ export function runLootChecks() {
   assert(house);
   const outdoorBall = houseDebug.spawnLoot("scatterModule", "common", houseDebug.map.spawn.x, houseDebug.map.spawn.y);
   const outdoorEnemyIds = houseDebug.state.enemies.map(enemy => enemy.id);
-  const room = enter(housePage, house, true);
-  assert(!houseDebug.loot.some(ball => ball.id === outdoorBall.id));
-  assert(houseDebug.state.enemies.every(enemy => !outdoorEnemyIds.includes(enemy.id)), "outdoor enemies do not enter a room");
+  const crossed = walkDoor(housePage, house, "enter");
+  const room = crossed.room;
+  assert(room, "walking through the exterior door activates the first-floor plan");
+  assert(houseDebug.loot.some(ball => ball.id === outdoorBall.id), "outdoor loot remains in the shared world");
+  assert(outdoorEnemyIds.every(id => houseDebug.state.enemies.some(enemy => enemy.id === id)), "outdoor enemies remain active across the doorway");
+  assert.equal(room.layer, "city", "room stays on the shared city canvas layer");
+  assert(room.invasionEntrances.some(entry => entry.kind === "door"), "room exposes a zombie door entrance");
+  assert(room.invasionEntrances.filter(entry => entry.kind === "window").length >= 4, "room exposes multiple zombie window entrances");
+  assert(houseDebug.state.enemies.some(enemy => enemy.spawnSource === "invasion" && enemy.invasionEntryId), "indoor zombies spawn from a door or window");
+  housePage.drawCalls.length = 0;
+  houseDebug.step(1 / 60);
+  const insideSnapshot = houseDebug.snapshot();
+  assert.equal(insideSnapshot.worldLayer, "city", "indoor view keeps the city world layer");
+  assert.equal(insideSnapshot.room.layer, "city", "indoor view reports the shared city layer");
+  assert.deepEqual(plain(insideSnapshot.room.worldBounds), {
+    minX: house.building.x, minY: house.building.y,
+    maxX: house.building.x + house.building.width, maxY: house.building.y + house.building.height,
+    width: house.building.width, height: house.building.height
+  }, "the first-floor plan occupies the exterior footprint");
+  assert(housePage.drawCalls.some(call => call.name === "drawImage"), "indoor draw keeps the exterior terrain on the same canvas");
+  assert(housePage.drawCalls.some(call => call.name === "fillRect" && call.args.length >= 4 && Math.abs(call.args[0] - house.building.x) < .001 && Math.abs(call.args[1] - house.building.y) < .001 && Math.abs(call.args[2] - house.building.width) < .001 && Math.abs(call.args[3] - house.building.height) < .001), "indoor draw overlays the floor plan at the exterior footprint");
   const timeBeforeRoom = houseDebug.state.time;
   houseDebug.step(.5);
   assert(houseDebug.state.time > timeBeforeRoom, "the run timer continues inside houses");
@@ -197,20 +271,20 @@ export function runLootChecks() {
   assert.equal(houseDebug.interact(), true);
   assert.equal(searched.searched, true);
   assert(houseDebug.loot.length > ballsBeforeSearch);
-  for (const ball of houseDebug.loot) assert(["fine", "rare", "epic"].includes(ball.quality));
+  for (const ball of houseDebug.loot) if (ball.id !== outdoorBall.id) assert(["fine", "rare", "epic"].includes(ball.quality));
   const indoorBalls = houseDebug.loot.map(ball => ball.id);
   const afterSearch = houseDebug.loot.length;
   assert.equal(houseDebug.interact(), false);
   assert.equal(houseDebug.loot.length, afterSearch, "the same cache cannot be searched twice");
-  exit(houseDebug);
+  leave(housePage, house);
   assert(houseDebug.loot.some(ball => ball.id === outdoorBall.id));
-  assert(!houseDebug.loot.some(ball => indoorBalls.includes(ball.id)));
+  assert(indoorBalls.every(id => houseDebug.loot.some(ball => ball.id === id)), "indoor loot remains in the shared world after leaving");
   const revisited = enter(housePage, house);
   assert.equal(revisited.containers[0].searched, true);
   assert.deepEqual(houseDebug.loot.map(ball => ball.id), indoorBalls);
   houseDebug.state.player.x = searched.x; houseDebug.state.player.y = searched.y;
   assert.equal(houseDebug.interact(), false);
-  console.log("PASS E enters a house, room combat stays isolated with the timer running, high quality caches search once and persist across return visits");
+  console.log("PASS walking across a real doorway keeps the city layer; entities, loot and room searches persist across return visits");
 
   housePage.click("pauseRun");
   const unopened = houseDebug.state.room.containers[1];
@@ -221,14 +295,15 @@ export function runLootChecks() {
   assert.equal(immutableSimulation(houseDebug), pausedAtCache);
   assert.equal(unopened.searched, false);
   housePage.click("resumeRun");
-  houseDebug.state.time = 179; houseDebug.step(.5);
+  houseDebug.state.time = 299; houseDebug.step(.5);
   assert.equal(houseDebug.state.phase, "playing");
   houseDebug.step(.5); assert.equal(houseDebug.state.phase, "victory");
   const ended = immutableSimulation(houseDebug);
   assert.equal(houseDebug.interact(), false);
   houseDebug.step(1); assert.equal(immutableSimulation(houseDebug), ended);
   housePage.click("restartRun");
-  assert.equal(houseDebug.state.scene, "outdoor");
+  assert.equal(houseDebug.state.scene, "city");
+  assert.equal(houseDebug.state.activeHouseId, null);
   assert.equal(houseDebug.state.time, 0);
   assert.equal(houseDebug.build.slots().length, 2);
   assert.equal(houseDebug.state.weapon.id, "assaultRifle");
@@ -237,7 +312,7 @@ export function runLootChecks() {
   assert(resetRoom.containers.every(container => !container.searched));
   assert(!houseDebug.loot.some(ball => indoorBalls.includes(ball.id)));
   assert.equal(bootPage(false, false).debug, undefined);
-  console.log("PASS pause and 180-second victory freeze room searches; restart resets rooms, collected skills and equipped guns");
+  console.log("PASS pause and 300-second victory freeze room searches; restart resets rooms, collected skills and equipped guns");
   const deathPage = bootPage(); deathPage.start();
   const deathDebug = deathPage.debug; deathDebug.state.godMode = false;
   const deathHouse = deathDebug.houses.houses[0];
@@ -277,10 +352,88 @@ export function runLootChecks() {
   assert(killDebug.loot.every(item => item.kind !== "gun" && item.kind !== "skill"), "kills never create weapons or permanent upgrade balls");
   assert(killDebug.combatDrops.every(item => item.kind === "consumable"), "every kill drop is a temporary combat consumable");
   const rooms = consumableDebug.houses.houses.map(house => consumableDebug.houses.createRoom(house));
-  assert(rooms.every(room => room.width > 720 && room.height >= 1280 && room.rooms.length >= 3 && room.obstacles.length >= 3), "large rooms expose normal interior structure and furniture collision");
+  assert(rooms.every(room => room.width >= 456 && room.height >= 596 && room.worldScale === 1 && room.rooms.length >= 6 && room.obstacles.length >= 6), "human-scale floor plans have real-sized furniture and multiple rooms without compression");
+  assert(rooms.every(room => room.layer === "city" && room.cameraMode === "birdseye-fixed-scale" && room.worldOrigin && Number.isFinite(room.worldOrigin.x) && Number.isFinite(room.worldOrigin.y)), "interiors keep the shared city layer and fixed birdseye camera contract");
+  assert(rooms.every((room, index) => { const building = consumableDebug.houses.houses[index].building; const centerX = building.x + building.width / 2; const centerY = building.y + building.height / 2; return room.worldBounds && Math.abs(room.worldBounds.minX - building.x) <= 1 && Math.abs(room.worldBounds.minY - building.y) <= 1 && Math.abs(room.worldBounds.width - building.width) <= 1 && Math.abs(room.worldBounds.height - building.height) <= 1 && room.worldBounds.minX <= centerX && centerX <= room.worldBounds.maxX && room.worldBounds.minY <= centerY && centerY <= room.worldBounds.maxY }), "interior floor plans occupy the exact world footprint as their exterior building");
+  assert(rooms.every(room => room.entry && room.exit && room.bounds.minX <= room.entry.x && room.entry.x <= room.bounds.maxX && room.bounds.minX <= room.exit.x && room.exit.x <= room.bounds.maxX && room.exit.y <= room.bounds.maxY), "world-space room entrances and exits stay on the same map coordinates");
+  assert(rooms.every(room => room.walls?.length === 4 && room.walls.every(wall => wall.type === "perimeter")), "interiors expose a complete four-sided perimeter wall");
+  assert(new Set(rooms.map(room => `${room.width}x${room.height}`)).size >= 4, "room scale expands by building type instead of using one interior size");
+  assert(rooms.every(room => room.invasionEntrances.filter(entry => entry.kind === "window").length >= 4), "all rooms have window invasion points");
+  assert(rooms.every(room => room.invasionEntrances.every(entry => consumableDebug.houses.isFree(room, entry.x, entry.y, 17))), "invasion points are walkable for an infected");
+  const highRiseRoom = rooms.find(room => room.floorMode === "first-floor-birdseye");
+  assert(highRiseRoom && highRiseRoom.floor === 1 && highRiseRoom.indoorStyle === "high-rise-ground-floor" && highRiseRoom.rooms.some(area => area.name.includes("电梯")) && highRiseRoom.rooms.some(area => area.name.includes("楼梯")), "high-rise entry shows only a first-floor birdseye lobby layout");
   assert(new Set(consumableDebug.houses.houses.map(house => house.kind)).size >= 5, "city exposes varied building categories");
+
+  const boxPage = bootPage(); boxPage.start();
+  const boxDebug = boxPage.debug; boxDebug.state.godMode = true; boxDebug.state.density = 0;
+  boxDebug.state.lootTimer = Infinity; boxDebug.state.hordeTimer = Infinity; boxDebug.state.spawnBudget = 0;
+  for (let count = 0; count < 12; count += 1) {
+    boxDebug.state.loot = [];
+    const ball = boxDebug.spawnLoot("random", "common", boxDebug.state.player.x + 90, boxDebug.state.player.y);
+    assert(ball && ball.kind === "skill" && THROWABLE_IDS.has(ball.itemId), "random item boxes only contain supported throwable passives");
+  }
+  const boxHouse = boxDebug.houses.houses[0]; enter(boxPage, boxHouse);
+  const boxContainer = boxDebug.state.room.containers[0];
+  boxDebug.state.player.x = boxContainer.x; boxDebug.state.player.y = boxContainer.y;
+  assert.equal(boxDebug.interact(), true);
+  assert(THROWABLE_IDS.has(boxDebug.loot.at(-1)?.itemId), "house item boxes only contain supported throwable passives");
+
+  for (const throwableId of THROWABLE_IDS) {
+    const pickupPage = bootPage(); pickupPage.start();
+    const pickupDebug = pickupPage.debug; pickupDebug.state.godMode = true; pickupDebug.state.density = 0;
+    const picked = collect(pickupDebug, throwableId);
+    assert.equal(pickupDebug.build.level(throwableId), 1, `${throwableId} enters the passive build on pickup`);
+    assert(pickupDebug.build.selectedCore.includes(throwableId), `${throwableId} occupies a core passive slot`);
+    const targetBaseSpeed = throwableId === "extinguisher" ? 100 : 0;
+    const target = { ...pickupDebug.state.enemies[0], x: pickupDebug.state.player.x + 72, y: pickupDebug.state.player.y, hp: 1000, maxHp: 1000, speed: targetBaseSpeed, baseSpeed: targetBaseSpeed, contactTimer: Infinity, dead: false };
+    const outsideRear = { ...target, id: target.id + 10000, x: pickupDebug.state.player.x - 100, y: pickupDebug.state.player.y - 14, hp: 1000, maxHp: 1000, speed: 0, baseSpeed: 0 };
+    const outsideSide = { ...target, id: target.id + 20000, x: pickupDebug.state.player.x + 30, y: pickupDebug.state.player.y + 120, hp: 1000, maxHp: 1000, speed: 0, baseSpeed: 0 };
+    pickupDebug.state.enemies = [target]; pickupDebug.state.player.fireTimer = Infinity;
+    const timerKey = throwableId === "grenade" ? "grenadeTimer"
+      : throwableId === "molotov" ? "molotovTimer"
+        : throwableId === "bearTrap" ? "bearTrapTimer" : "extinguisherTimer";
+    pickupDebug.state.player[timerKey] = 0;
+    const beforeHp = target.hp; const beforeExplosions = pickupDebug.state.stats.explosions;
+    pickupDebug.step(1 / 60);
+    const produced = pickupDebug.state.throwableProjectiles.length + pickupDebug.state.fireZones.length + pickupDebug.state.traps.length;
+    assert(produced > 0 || pickupDebug.state.player.throwAction || pickupDebug.state.extinguisherZones?.length > 0, `${throwableId} auto-releases without manual input`);
+    if (throwableId === "extinguisher") {
+      pickupDebug.step(.4);
+      const zone = pickupDebug.state.extinguisherZones?.[0];
+      assert(zone, "extinguisher resolves into a persistent spray zone");
+      assert(zone.life > 4.1 && zone.life <= 5, "extinguisher spray survives for five seconds");
+      // Freeze the passive timer so the expiry assertion observes this spray
+      // field rather than the next automatic release cycle.
+      pickupDebug.state.player.extinguisherTimer = Infinity;
+      // Add close side/rear fixtures after the direction is locked so the
+      // nearest-target selector cannot turn the spray around during setup.
+      target.speed = 0; target.baseSpeed = 0;
+      outsideRear.x = pickupDebug.state.player.x - 35;
+      outsideRear.y = pickupDebug.state.player.y - 14;
+      outsideSide.x = pickupDebug.state.player.x + 25;
+      outsideSide.y = pickupDebug.state.player.y + 40;
+      pickupDebug.state.enemies.push(outsideRear, outsideSide);
+      const hpBeforeSpray = target.hp;
+      const rearBeforeSpray = outsideRear.hp;
+      const sideBeforeSpray = outsideSide.hp;
+      pickupDebug.step(.3);
+      assert(target.hp < hpBeforeSpray, "extinguisher cone deals periodic light damage");
+      assert(target.trapSlow > 0 && target.trapSlow <= .61, "extinguisher applies a 40% movement slow");
+      assert.equal(outsideRear.hp, rearBeforeSpray, "extinguisher does not hit enemies behind the nozzle");
+      assert.equal(outsideSide.hp, sideBeforeSpray, "extinguisher does not hit enemies outside the fan");
+      pickupDebug.step(5);
+      assert.equal(pickupDebug.state.extinguisherZones.length, 0, "extinguisher spray expires after five seconds");
+      pickupDebug.step(.6);
+      assert.equal(target.trapSlow, 0, "extinguisher slow recovers after the field expires");
+    } else {
+      pickupDebug.step(6);
+      assert(target.hp < beforeHp || pickupDebug.state.stats.explosions > beforeExplosions, `${throwableId} applies an automatic throwable effect`);
+    }
+    assert(picked.itemId === throwableId);
+  }
   console.log("PASS rare combat consumables apply temporary effects once; large categorized rooms expose furniture and collision");
-  return { checks: 9, simulated: true };
+  console.log("PASS random and house boxes restrict drops to supported throwable passives; each pickup auto-releases its passive effect");
+  return { checks: 13, simulated: true };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) runLootChecks();

@@ -29,6 +29,7 @@ coverage/
 **/.devtools/
 
 # Secrets and local credentials
+/id_ed25519*
 .env
 .env.*
 !.env.example

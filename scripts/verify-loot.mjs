@@ -12,6 +12,55 @@ const evidence = join(root, "evidence/local/scene-loot");
 const results = [];
 const pass = (label, details = {}) => { results.push({ label, ...details }); console.log(`PASS ${label}`, JSON.stringify(details)); };
 
+async function walkDoorInBrowser(page, houseId, direction = "enter") {
+  const entering = direction === "enter";
+  const setup = await page.evaluate(({ houseId, entering }) => {
+    const d = window.__LAST_NIGHT_DEBUG__;
+    const house = d.houses.houses.find(item => item.id === houseId);
+    if (!house) throw new Error(`unknown house ${houseId}`);
+    const vectors = {
+      south: { outward: { x: 0, y: 1 }, enter: "KeyW", leave: "KeyS" },
+      north: { outward: { x: 0, y: -1 }, enter: "KeyS", leave: "KeyW" },
+      east: { outward: { x: 1, y: 0 }, enter: "KeyA", leave: "KeyD" },
+      west: { outward: { x: -1, y: 0 }, enter: "KeyD", leave: "KeyA" }
+    }[house.door.side] || { outward: { x: 0, y: 1 }, enter: "KeyW", leave: "KeyS" };
+    const radius = d.state.player.radius || 19;
+    let point;
+    if (entering) {
+      point = { x: house.door.x + vectors.outward.x * 72, y: house.door.y + vectors.outward.y * 72 };
+    } else {
+      const room = d.state.room;
+      if (!room) throw new Error("cannot leave without an active room");
+      point = { x: room.exit.x - vectors.outward.x * 24, y: room.exit.y - vectors.outward.y * 24 };
+      for (const offset of [0, -32, 32, -64, 64, -96, 96]) {
+        const candidate = vectors.outward.x
+          ? { x: point.x, y: point.y + offset }
+          : { x: point.x + offset, y: point.y };
+        if (d.houses.isFree(room, candidate.x, candidate.y, radius)) { point = candidate; break; }
+      }
+      if (!d.houses.isFree(room, point.x, point.y, radius)) throw new Error("room doorway point is blocked");
+    }
+    d.state.player.x = point.x; d.state.player.y = point.y;
+    return { key: vectors[entering ? "enter" : "leave"], point };
+  }, { houseId, entering });
+  await page.keyboard.down(setup.key);
+  try {
+    return await page.evaluate(({ houseId, entering }) => {
+      const d = window.__LAST_NIGHT_DEBUG__;
+      let maxStep = 0; let frames = 0;
+      for (; frames < 36; frames += 1) {
+        const before = { x: d.state.player.x, y: d.state.player.y };
+        d.step(1 / 60);
+        maxStep = Math.max(maxStep, Math.hypot(d.state.player.x - before.x, d.state.player.y - before.y));
+        if (entering ? d.state.room?.houseId === houseId : !d.state.room) break;
+      }
+      return { roomId: d.state.room?.houseId || null, scene: d.state.scene, maxStep, frames, snapshot: d.snapshot() };
+    }, { houseId, entering });
+  } finally {
+    await page.keyboard.up(setup.key);
+  }
+}
+
 async function browserChecks() {
   const require = createRequire(import.meta.url);
   const { chromium } = process.env.PLAYWRIGHT_MODULE_PATH
@@ -40,7 +89,10 @@ async function browserChecks() {
       await page.goto(url); await page.locator("#startRun").click();
       await page.evaluate(() => { const d = window.__LAST_NIGHT_DEBUG__; d.state.godMode = true; d.state.paused = false; });
       assert.equal(await page.locator("[data-upgrade-id], #levelOverlay, #upgradeList").count(), 0);
-      assert.equal(await page.locator(".skill-slot").count(), 7);
+      assert.equal(await page.locator(".skill-group.fixed .skill-slot").count(), 1, "edge HUD reserves one main-weapon slot");
+      assert.equal(await page.locator('.skill-group.fixed .skill-slot[data-skill-id="assaultRifle"]').count(), 1, "main weapon is visible in the fixed slot");
+      assert.equal(await page.locator(".skill-group.core .skill-slot").count(), 4, "edge HUD exposes four throwable item slots");
+      assert.equal(await page.locator(".skill-group.boost .skill-slot").count(), 2, "edge HUD exposes two temporary boost slots");
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       const contact = await page.evaluate(() => {
         const d = window.__LAST_NIGHT_DEBUG__, s = d.state;
@@ -60,21 +112,30 @@ async function browserChecks() {
       await page.screenshot({ path: join(evidence, `${prefix}-item-levels.png`) });
       pass(`${prefix} browser touch collection and duplicate effect`, { viewport, ...contact });
 
-      // Search through the same visible interaction button used on touch screens.
-      const houseId = await page.evaluate(() => {
+      // Walk through the real exterior doorway. The floor plan is rendered at
+      // the same world coordinate; the interaction button remains for search.
+      const houseInfo = await page.evaluate(() => {
         const d = window.__LAST_NIGHT_DEBUG__, h = d.houses.houses[0];
-        d.state.player.x = h.door.x; d.state.player.y = h.door.y;
-        d.state.paused = false; d.step(1 / 60); return h.id;
+        return { id: h.id, building: h.building, door: h.door };
       });
-      assert(await page.locator("#interactRun").isVisible());
-      const buttonBox = await page.locator("#interactRun").boundingBox();
-      assert(buttonBox.x >= 0 && buttonBox.y >= 0 && buttonBox.x + buttonBox.width <= viewport.width + 1 && buttonBox.y + buttonBox.height <= viewport.height + 1);
-      await page.locator("#interactRun").click();
-      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.scene), houseId);
+      const houseId = houseInfo.id;
+      const entered = await walkDoorInBrowser(page, houseId, "enter");
+      assert.equal(entered.roomId, houseId);
+      assert(entered.maxStep <= 24, `browser door crossing moved ${entered.maxStep.toFixed(2)}px in one frame`);
+      assert.equal(entered.snapshot.worldLayer, "city");
+      assert.equal(entered.snapshot.room.layer, "city");
+      assert.deepEqual(entered.snapshot.room.worldBounds, {
+        minX: houseInfo.building.x, minY: houseInfo.building.y,
+        maxX: houseInfo.building.x + houseInfo.building.width, maxY: houseInfo.building.y + houseInfo.building.height,
+        width: houseInfo.building.width, height: houseInfo.building.height
+      });
       await page.evaluate(() => {
         const d = window.__LAST_NIGHT_DEBUG__, cache = d.state.room.containers[0];
         d.state.player.x = cache.x; d.state.player.y = cache.y; d.step(1 / 60);
       });
+      assert(await page.locator("#interactRun").isVisible(), "the interaction button is reserved for searching, not entering a door");
+      const buttonBox = await page.locator("#interactRun").boundingBox();
+      assert(buttonBox.x >= 0 && buttonBox.y >= 0 && buttonBox.x + buttonBox.width <= viewport.width + 1 && buttonBox.y + buttonBox.height <= viewport.height + 1);
       await page.locator("#interactRun").click();
       const found = await page.evaluate(() => {
         const d = window.__LAST_NIGHT_DEBUG__; d.state.paused = true;
@@ -83,19 +144,19 @@ async function browserChecks() {
           time: d.state.time, scene: d.state.scene };
       });
       assert(found.searched); assert(found.ball); assert(["fine", "rare", "epic"].includes(found.ball.quality));
-      assert.equal(found.ball.kind, "gun", "the first house cache yields a firearm");
-      assert.notEqual(found.ball.itemId, "assaultRifle", "the first house cache yields a new firearm");
+      assert.equal(found.ball.kind, "skill", "the first house cache yields a throwable skill");
+      assert(["grenade", "molotov", "bearTrap", "extinguisher"].includes(found.ball.itemId), "the first house cache yields only a supported throwable");
       assert.equal(found.weapon.id, "assaultRifle", "searching drops the gun rather than instantly equipping it");
       await page.screenshot({ path: join(evidence, `${prefix}-house-search.png`) });
       const equipped = await page.evaluate(() => {
         const d = window.__LAST_NIGHT_DEBUG__, ball = d.loot.at(-1);
         d.state.player.x = ball.x; d.state.player.y = ball.y; d.step(1 / 60);
-        return { weapon: d.state.weapon, scene: d.state.scene, slots: d.build.slots().length };
+        return { weapon: d.state.weapon, scene: d.state.scene, slots: d.build.slots().length, skill: d.build.level(ball.itemId) };
       });
-      assert.equal(equipped.weapon.id, found.ball.itemId); assert.equal(equipped.weapon.quality, found.ball.quality);
-      assert.equal(equipped.scene, houseId); assert.equal(equipped.slots, 3);
+      assert.equal(equipped.weapon.id, "assaultRifle");
+      assert.equal(equipped.scene, houseId); assert.equal(equipped.slots, 3); assert.equal(equipped.skill, 1);
       await page.screenshot({ path: join(evidence, `${prefix}-house-equipped.png`) });
-      pass(`${prefix} visible touch interaction enters a house, searches higher quality new guns and equips on contact`, { viewport, weapon: equipped.weapon });
+      pass(`${prefix} visible touch interaction enters a house, searches higher quality throwable passives and collects on contact`, { viewport, weapon: equipped.weapon, skill: equipped.skill });
 
       await page.evaluate(() => { window.__LAST_NIGHT_DEBUG__.state.paused = false; });
       await page.locator("#pauseRun").click();
@@ -118,20 +179,15 @@ async function browserChecks() {
       assert(resume.y >= 0 && resume.y + resume.height <= viewport.height + 1);
       await page.screenshot({ path: join(evidence, `${prefix}-pause-bottom.png`) });
       await page.locator("#resumeRun").click();
-      await page.evaluate(() => {
-        const d = window.__LAST_NIGHT_DEBUG__;
-        d.state.player.x = d.state.room.exit.x; d.state.player.y = d.state.room.exit.y; d.step(1 / 60);
-      });
-      await page.locator("#interactRun").click();
-      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.scene), "outdoor");
-      await page.evaluate(id => {
-        const d = window.__LAST_NIGHT_DEBUG__, h = d.houses.houses.find(house => house.id === id);
-        d.state.player.x = h.door.x; d.state.player.y = h.door.y; d.step(1 / 60);
-      }, houseId);
-      await page.locator("#interactRun").click();
+      const exited = await walkDoorInBrowser(page, houseId, "leave");
+      assert.equal(exited.roomId, null);
+      assert.equal(exited.scene, "city");
+      assert(exited.maxStep <= 24, `browser door exit moved ${exited.maxStep.toFixed(2)}px in one frame`);
+      const returned = await walkDoorInBrowser(page, houseId, "enter");
+      assert.equal(returned.roomId, houseId);
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.room.containers[0].searched), true);
       await page.evaluate(() => {
-        const d = window.__LAST_NIGHT_DEBUG__; d.state.paused = true; d.state.time = 179; d.step(1);
+        const d = window.__LAST_NIGHT_DEBUG__; d.state.paused = true; d.state.time = 299; d.step(1);
       });
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.phase), "victory");
       await page.locator("#restartRun").click();
@@ -139,10 +195,10 @@ async function browserChecks() {
         const d = window.__LAST_NIGHT_DEBUG__; d.state.paused = true;
         return { scene: d.state.scene, slots: d.build.slots().length, weapon: d.state.weapon.id, time: d.state.time };
       });
-      assert.equal(reset.scene, "outdoor"); assert.equal(reset.slots, 2); assert.equal(reset.weapon, "assaultRifle"); assert(reset.time < .2);
+      assert.equal(reset.scene, "city"); assert.equal(reset.slots, 2); assert.equal(reset.weapon, "assaultRifle"); assert(reset.time < .2);
       await page.screenshot({ path: join(evidence, `${prefix}-restart.png`) });
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-      pass(`${prefix} real pause freezes search state, touch exit and return preserve caches, victory restart resets the run`, { viewport });
+      pass(`${prefix} real pause freezes search state, physical doorway exit and return preserve caches, victory restart resets the run`, { viewport, entry: entered, exit: exited });
       await page.close();
     }
     const live = await browser.newPage({ viewport: { width: 390, height: 844 } });

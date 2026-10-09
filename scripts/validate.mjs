@@ -51,6 +51,7 @@ try {
 }
 
 checkJavaScript("prototype-2d/skills.js");
+checkJavaScript("prototype-2d/art-assets.js");
 checkJavaScript("prototype-2d/character-atlas.js");
 checkJavaScript("prototype-2d/character-art.js");
 checkJavaScript("prototype-2d/city-map.js");

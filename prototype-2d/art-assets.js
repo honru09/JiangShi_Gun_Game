@@ -1,4 +1,4 @@
-/* Transparent sprite atlases. Loading never blocks a run; Canvas art remains available. */
+/* Transparent environment atlas; browser gameplay waits for the active art. */
 (() => {
   "use strict"
   const sheets = {
@@ -49,8 +49,10 @@
 
   function create() {
     const loaded = {}
+    const settled = {}
     const ready = Promise.all(Object.entries(sheets).map(async ([key, config]) => {
       loaded[key] = await loadSheet(config)
+      settled[key] = true
     }))
     function draw(ctx, key, index, x, y, width, height, options = {}) {
       const sheet = loaded[key], rect = sheet?.cells[index]
@@ -61,6 +63,8 @@
     }
     return {
       ready,
+      get environmentReady() { return Boolean(loaded.environment) },
+      get environmentSettled() { return Boolean(settled.environment) },
       get isReady() { return Boolean(loaded.environment && loaded.characters) },
       get status() { return Object.fromEntries(Object.keys(sheets).map(key => [key, Boolean(loaded[key])])) },
       drawEnvironment: (ctx, index, x, y, width, height) => draw(ctx, "environment", index, x, y, width, height),

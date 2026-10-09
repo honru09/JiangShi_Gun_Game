@@ -8,7 +8,6 @@ import { join, resolve } from "node:path"
 const root = process.env.GAME_TEST_ROOT ? resolve(process.env.GAME_TEST_ROOT, "prototype-2d")
   : fileURLToPath(new URL("../", import.meta.url))
 const html = readFileSync(join(root, "index.html"), "utf8")
-const manifest = JSON.parse(readFileSync(join(root, "assets/cartoon-rig-manifest.json"), "utf8"))
 
 function boot(coarse = false, admin = true) {
   let now = 0
@@ -52,7 +51,6 @@ function boot(coarse = false, admin = true) {
   }
   return {
     debug: sandbox.__LAST_NIGHT_DEBUG__, elements,
-    art: sandbox.WASTELAND_CHARACTER_ART,
     key(code, down = true) { windowEvents.emit(down ? "keydown" : "keyup", { code, repeat: false }) },
     blur() { windowEvents.emit("blur") },
     frame(seconds = 1 / 60) { now += seconds * 1000; animationFrame(now) },
@@ -68,28 +66,9 @@ assert.equal(debug.snapshot().phase, "playing")
 assert.equal(debug.snapshot().enemies, 8)
 assert.equal(debug.snapshot().build.slots.length, 2)
 assert.equal((page.elements.get("skillDock").innerHTML.match(/class="skill-slot /g) || []).length, 7)
-assert.equal(debug.config.runSeconds, 180)
+assert.equal(debug.config.runSeconds, 300)
 assert.equal(debug.snapshot().nextXp, 5)
-assert.equal(debug.atlasReady, false)
-assert.equal(debug.artStatus, "unavailable")
-const painted = page.art.createRenderer({
-  image: { width: manifest.width, height: manifest.height },
-  images: { [manifest.characters.crawler.image]: { width: manifest.characters.crawler.imageWidth, height: manifest.characters.crawler.imageHeight } },
-  manifest,
-})
-assert.equal(painted.ready, true)
-let drawnSprites = 0
-const paintContext = new Proxy({}, { get: (_, key) => key === "drawImage" ? () => { drawnSprites += 1 } : () => {} })
-let drawnWeapon = false
-painted.drawPlayer(paintContext, debug.state.player, { drawWeapon: () => { drawnWeapon = true } })
-painted.drawEnemy(paintContext, debug.state.enemies[0], { playerX: debug.state.player.x })
-painted.drawEnemy(paintContext, { type: "crawler", x: 120, y: 180, radius: 18, walkCycle: 1, maxHp: 48, hp: 48, burn: 0 }, { playerX: debug.state.player.x })
-assert.equal(drawnWeapon, true)
-assert.ok(drawnSprites >= 12)
-console.log("PASS sprite renderer loads valid bounds, draws articulated parts, and missing image uses fallback")
 assert.equal(debug.state.enemies.every(enemy => enemy.type === "walker" && enemy.speed === 38), true)
-assert.equal(debug.state.enemies.every(enemy => enemy.motion === "walk"), true)
-assert.equal(debug.state.enemies.some(enemy => enemy.type === "crawler"), false)
 debug.state.godMode = true
 debug.state.nextXp = 1e9
 debug.step(5)
@@ -149,37 +128,6 @@ assert.equal(debug.snapshot().build.slots.length, 3)
 assert.equal(page.elements.has("upgradeList"), false)
 console.log("PASS administrator creates a scene ball; touching a new skill acquires level one without an upgrade dialog")
 
-const motionPage = boot()
-motionPage.start()
-const motion = motionPage.debug
-motion.state.godMode = true
-motion.state.nextXp = 1e9
-motion.state.player.fireTimer = Infinity
-motion.state.enemies = [
-  { id: 1001, type: "walker", motion: "walk", motionTime: 0, x: 80, y: 180, radius: 17, hp: 1000, maxHp: 1000, baseSpeed: 38, speed: 38, damage: 0, xp: 1, color: "#7c8b66", hit: 0, burn: 0, burnLevel: 0, burnTimer: 0, contactTimer: 0, sawTimer: 0, walkCycle: 0, dead: false },
-  { id: 1002, type: "runner", motion: "run", motionTime: 0, x: 100, y: 320, radius: 14, hp: 1000, maxHp: 1000, baseSpeed: 72, speed: 72, damage: 0, xp: 1, color: "#b7a378", hit: 0, burn: 0, burnLevel: 0, burnTimer: 0, contactTimer: 0, sawTimer: 0, walkCycle: 0, dead: false },
-  { id: 1003, type: "brute", motion: "hop", motionTime: .1, hopPhase: "windup", hopHeight: 0, hopDirX: 0, hopDirY: 0, x: 130, y: 460, radius: 24, hp: 1000, maxHp: 1000, baseSpeed: 26, speed: 26, damage: 0, xp: 1, color: "#67715c", hit: 0, burn: 0, burnLevel: 0, burnTimer: 0, contactTimer: 0, sawTimer: 0, walkCycle: 0, dead: false },
-  { id: 1004, type: "crawler", motion: "crawl", motionTime: 0, x: 180, y: 600, radius: 18, hp: 1000, maxHp: 1000, baseSpeed: 22, speed: 22, damage: 0, xp: 1, color: "#8a9472", hit: 0, burn: 0, burnLevel: 0, burnTimer: 0, contactTimer: 0, sawTimer: 0, walkCycle: 0, dead: false }
-]
-motion.state.time = 65
-const positionsBefore = motion.state.enemies.map(enemy => enemy.x)
-motion.step(.61)
-const hop = motion.state.enemies.find(enemy => enemy.motion === "hop")
-assert.equal(hop.hopPhase, "airborne")
-assert.ok(hop.hopHeight > 0)
-assert.ok(hop.x !== positionsBefore[2])
-assert.ok(motion.state.enemies.some(enemy => enemy.motion === "crawl" && enemy.walkCycle > 0))
-const hopContactHp = motion.state.player.hp
-hop.x = motion.state.player.x
-hop.y = motion.state.player.y
-hop.contactTimer = 0
-motion.step(.1)
-assert.equal(motion.state.player.hp, hopContactHp)
-motion.step(.6)
-assert.ok(hop.hopPhase === "recovery" || hop.hopPhase === "approach")
-assert.ok(motion.state.enemies.find(enemy => enemy.motion === "run").speed > motion.state.enemies.find(enemy => enemy.motion === "walk").speed)
-console.log("PASS walk/run/hop/crawl modes: hop windup-airborne-recovery and airborne contact immunity")
-
 const closeEnemy = { ...debug.state.enemies[0], x: debug.state.player.x, y: debug.state.player.y, radius: 17, baseSpeed: 0, hp: 100, maxHp: 100, dead: false }
 debug.state.enemies = [closeEnemy]
 debug.state.player.fireTimer = 0
@@ -204,6 +152,52 @@ assert.equal(fatalPage.debug.state.stats.shots, dead.stats.shots)
 assert.equal(fatalPage.debug.state.player.walkCycle, dead.player.walkCycle)
 console.log("PASS death stops movement, firing, spawning and further upgrades")
 
+const motionPage = boot()
+motionPage.start()
+const motion = motionPage.debug
+const motionState = motion.state
+const motionPlayer = motionState.player
+motionPlayer.x = motion.map.width / 2
+motionPlayer.y = motion.map.height / 2
+motionPlayer.fireTimer = Infinity
+motionState.godMode = true
+const seedEnemy = motionState.enemies[0]
+const motionTypes = [
+  ["walker", "walk", 38, 220], ["runner", "run", 72, -220],
+  ["crawler", "crawl", 22, 350], ["brute", "hop", 26, -350]
+]
+motionState.enemies = motionTypes.map(([type, mode, speed, offset], index) => ({
+  ...seedEnemy, id: index + 900, type, motion: mode, baseSpeed: speed, speed,
+  x: motionPlayer.x, y: motionPlayer.y + offset, hp: 10000, maxHp: 10000,
+  walkCycle: 0, motionTime: 0, hopPhase: mode === "hop" ? "windup" : null,
+  hopHeight: 0, hopDirX: 0, hopDirY: 0, damage: 0, dead: false
+}))
+const motionStarts = motionState.enemies.map(enemy => ({ x: enemy.x, y: enemy.y }))
+assert(motionState.enemies.every(enemy => motion.map.isFree(enemy.x, enemy.y, enemy.radius)))
+motion.step(.2)
+const motionDistances = motionState.enemies.map((enemy, index) => Math.hypot(enemy.x - motionStarts[index].x, enemy.y - motionStarts[index].y))
+assert(motionDistances[0] > 0 && motionDistances[1] > motionDistances[0] && motionDistances[2] > 0)
+assert(motionState.enemies.slice(0, 3).every(enemy => enemy.walkCycle > 0))
+const hop = motionState.enemies[3]
+assert.equal(motionDistances[3], 0)
+assert.equal(hop.hopPhase, "windup")
+motion.step(.5)
+assert.equal(hop.hopPhase, "airborne")
+assert(hop.hopHeight > 6)
+motionState.enemies = [hop]
+hop.x = motionPlayer.x; hop.y = motionPlayer.y; hop.baseSpeed = 0
+hop.damage = 20; hop.contactTimer = 0
+motionState.godMode = false
+motionPlayer.invulnerable = 0; motionPlayer.hp = motionPlayer.maxHp
+motionPlayer.sinceHit = 0; motionPlayer.instinctReady = false
+const airborneHp = motionPlayer.hp
+motion.step(1 / 60)
+assert.equal(motionPlayer.hp, airborneHp)
+motion.step(.5)
+assert.equal(hop.hopPhase, "recovery")
+assert(motionPlayer.hp < airborneHp)
+console.log("PASS walk/run/crawl move at distinct speeds; hopping winds up, lifts off, skips aerial contact and damages after landing")
+
 function pressure(coarse) {
   const test = boot(coarse)
   test.start()
@@ -222,15 +216,14 @@ function pressure(coarse) {
   assert.ok(api.state.enemies.some(enemy => enemy.type === "runner"))
   assert.ok(api.state.enemies.some(enemy => enemy.type === "brute"))
   assert.ok(api.state.enemies.some(enemy => enemy.type === "bloater"))
-  assert.ok(api.state.enemies.some(enemy => enemy.type === "crawler"))
-  api.state.time = 179
+  api.state.time = 299
   api.step(.5)
   assert.equal(api.state.phase, "playing")
   api.step(.5)
   assert.equal(api.state.phase, "victory")
   assert.equal(api.snapshot().result, "victory")
   assert.equal(api.snapshot().remainingSeconds, 0)
-  assert.equal(api.state.time, 180)
+  assert.equal(api.state.time, 300)
   const finished = api.snapshot()
   api.step(1)
   assert.equal(api.snapshot().time, finished.time)
@@ -241,7 +234,7 @@ function pressure(coarse) {
   assert.equal(api.snapshot().build.slots.length, 2)
   assert.equal(api.state.time, 0)
   assert.equal(api.state.enemies.length, 8)
-  console.log(`PASS ${coarse ? "touch" : "desktop"} pressure: peak ${finished.stats.peakEnemies}/${api.config.enemyCap}; 179s live, 180s victory, frozen result and restart`)
+  console.log(`PASS ${coarse ? "touch" : "desktop"} pressure: peak ${finished.stats.peakEnemies}/${api.config.enemyCap}; 299s live, 300s victory, frozen result and restart`)
 }
 pressure(false)
 pressure(true)

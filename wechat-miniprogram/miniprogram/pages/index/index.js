@@ -1740,19 +1740,7 @@ Page({
     const foregrip = localPoint(0.59, 0.055)
     const elbow = localPoint(0.05, 0.28)
     const supportElbow = localPoint(0.37, 0.28)
-    if (!illustrated && enemy.type === 'crawler') {
-      context.save()
-      context.scale(enemy.facing || 1, 1)
-      const crawlGait = Math.sin(enemy.gaitPhase) * enemy.moveAmount
-      this.ellipse(0, 0.05, radius * 1.08, radius * 0.46, '#644b3b')
-      for (let side = -1; side <= 1; side += 2) {
-        const offset = crawlGait * side * radius * 0.18
-        this.line(-radius * 0.35, 0.02 + side * 0.03, -radius * 0.78 - offset, radius * 0.39 + side * 0.06, '#4c3d34', radius * 0.28)
-        this.line(radius * 0.36, 0.02 + side * 0.03, radius * 0.82 + offset, radius * 0.39 + side * 0.06, '#4c3d34', radius * 0.25)
-      }
-      this.circle(radius * 0.75, -0.04, radius * 0.35, '#967044')
-      context.restore()
-    } else if (!illustrated) {
+    if (!illustrated) {
       this.line(-0.23, -0.31, elbow.x, elbow.y, '#bf7750', 0.17)
       this.line(elbow.x, elbow.y, grip.x, grip.y, '#bf7750', 0.15)
       this.line(0.23, -0.31, supportElbow.x, supportElbow.y, '#bf7750', 0.17)
@@ -1785,7 +1773,19 @@ Page({
     context.translate(enemy.x, enemy.y)
     this.ellipse(0, radius * 0.75, radius, radius * 0.3, '#0c1314')
     const illustrated = this._characterArt && this._characterArt.drawInfected(context, enemy)
-    if (!illustrated) {
+    if (!illustrated && enemy.type === 'crawler') {
+      context.save()
+      context.scale(enemy.facing || 1, 1)
+      const crawlGait = Math.sin(enemy.gaitPhase) * enemy.moveAmount
+      this.ellipse(0, 0.05, radius * 1.08, radius * 0.46, '#644b3b')
+      for (let side = -1; side <= 1; side += 2) {
+        const offset = crawlGait * side * radius * 0.18
+        this.line(-radius * 0.35, 0.02 + side * 0.03, -radius * 0.78 - offset, radius * 0.39 + side * 0.06, '#4c3d34', radius * 0.28)
+        this.line(radius * 0.36, 0.02 + side * 0.03, radius * 0.82 + offset, radius * 0.39 + side * 0.06, '#4c3d34', radius * 0.25)
+      }
+      this.circle(radius * 0.75, -0.04, radius * 0.35, '#967044')
+      context.restore()
+    } else if (!illustrated) {
       for (let side = -1; side <= 1; side += 2) {
         const step = stride * side
         const hipX = side * radius * 0.28

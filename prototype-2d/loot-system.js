@@ -17,6 +17,7 @@
     fireRateOverdrive: { id: "fireRateOverdrive", name: "5秒攻速翻倍", icon: "速", color: "#ffbd63", effect: "fireRate", duration: 5, multiplier: 2 },
     ammoOvercharge: { id: "ammoOvercharge", name: "5秒弹药效果 +2", icon: "弹", color: "#74bfff", effect: "ammo", duration: 5, levels: 2 }
   })
+  const throwableSkills = Object.freeze(["grenade", "molotov", "bearTrap", "extinguisher"])
   const ranks = Object.keys(qualities)
 
   // Outdoors: 80% common / 20% fine. Houses: 40% fine / 45% rare / 15% epic.
@@ -26,15 +27,15 @@
   }
 
   function randomItem(build, random = Math.random) {
-    if (random() < .25) {
-      const ids = Object.keys(weapons)
-      return { kind: "gun", itemId: ids[Math.floor(random() * ids.length)] }
-    }
+    // World supply boxes now contain only throwable skills. Firearms remain
+    // available through explicit debug calls and can still be equipped from
+    // other systems, but are never selected by a random box.
     const Skills = window.WASTELAND_SKILLS
-    const owned = build.selectedSkills().filter(skill => build.level(skill.id) < skill.max)
-    const available = Skills.core.concat(Skills.boost).filter(skill => build.canUpgrade(skill.id))
-    const pool = owned.length && random() < .55 ? owned : available.length ? available : build.selectedSkills()
-    const skill = pool[Math.floor(random() * pool.length)] || Skills.core[0]
+    const throwable = (Skills.throwable || []).filter(skill => throwableSkills.includes(skill.id))
+    const owned = build.selectedSkills().filter(skill => throwableSkills.includes(skill.id) && build.level(skill.id) < skill.max)
+    const available = throwable.filter(skill => build.canUpgrade(skill.id))
+    const pool = owned.length && random() < .55 ? owned : available.length ? available : owned.length ? owned : throwable
+    const skill = pool[Math.floor(random() * pool.length)] || throwable[0] || Skills.core[0]
     return { kind: "skill", itemId: skill.id }
   }
 
@@ -83,5 +84,5 @@
     context.restore()
   }
 
-  window.WASTELAND_LOOT = Object.freeze({ qualities, weapons, combatConsumables, ranks, rollQuality, randomItem, randomCombatConsumable, describe, draw })
+  window.WASTELAND_LOOT = Object.freeze({ qualities, weapons, combatConsumables, throwableSkills, ranks, rollQuality, randomItem, randomCombatConsumable, describe, draw })
 })()

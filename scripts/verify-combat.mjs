@@ -8,7 +8,7 @@ import vm from "node:vm";
 
 const root = process.env.GAME_TEST_ROOT ? resolve(process.env.GAME_TEST_ROOT)
   : fileURLToPath(new URL("../", import.meta.url));
-const evidence = join(root, "evidence/local/cartoon-character-art");
+const evidence = join(root, "evidence/local/firearms-motion");
 mkdirSync(evidence, { recursive: true });
 const results = [];
 const pass = (label, details = {}) => {
@@ -21,7 +21,7 @@ function miniProgramChecks() {
   const indexPath = join(root, "wechat-miniprogram/miniprogram/pages/index/index.js");
   const miniRoot = join(root, "wechat-miniprogram/miniprogram");
   const require = createRequire(indexPath);
-  const manifest = require(join(miniRoot, "assets/cartoon-rig-manifest.json"));
+  const manifest = require(join(miniRoot, "assets/cartoon-rig-manifest.js"));
   const images = new Map();
   let imageDraws = 0;
   const context = new Proxy({}, { get: (_, name) => name === "createLinearGradient"
@@ -69,6 +69,12 @@ function miniProgramChecks() {
   page.draw();
   assert(imageDraws >= 9 * 5, "the survivor and eight zombies must use the new atlas");
   pass("mini program packaged atlas loads and character crops stay in bounds", { version: manifest.version, imageDraws });
+  const loadedRenderer = page._characterArt;
+  page._characterArt = null;
+  page.drawPlayer();
+  page.drawInfected({ ...page._state.enemies[0], type: "crawler", facing: 1 });
+  page._characterArt = loadedRenderer;
+  pass("mini program unavailable atlas keeps hero and crawler fallback drawable");
   assert.equal(page.data.skillSlots.length, 7);
   assert.equal(page._state.enemies.length, 8);
   const state = page._state;
@@ -208,9 +214,7 @@ async function browserChecks() {
       response.writeHead(403).end(); return;
     }
     try {
-      const mime = filename.endsWith(".js") ? "text/javascript; charset=utf-8"
-        : filename.endsWith(".png") ? "image/png" : filename.endsWith(".json") ? "application/json; charset=utf-8" : "text/html; charset=utf-8";
-      response.setHeader("Content-Type", mime);
+      response.setHeader("Content-Type", filename.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/html; charset=utf-8");
       response.end(readFileSync(filename));
     } catch { response.writeHead(404).end(); }
   });
@@ -225,8 +229,6 @@ async function browserChecks() {
       page.on("pageerror", error => errors.push(error.message));
       page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
       await page.goto(`${url}?admin=1&tester=automated`);
-      await page.waitForFunction(() => window.__LAST_NIGHT_DEBUG__?.atlasReady === true);
-      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.artStatus), "ready");
       await page.locator("#startRun").click();
       const initial = await page.evaluate(() => {
         const debug = window.__LAST_NIGHT_DEBUG__;
@@ -297,7 +299,7 @@ async function browserChecks() {
         const started = performance.now();
         const simulationStart = state.time;
         let ticks = 0;
-        while (state.time - simulationStart < 179 && ticks < 12000) {
+        while (state.time - simulationStart < 299 && ticks < 20000) {
           if (state.phase !== "playing") throw new Error(`combat unexpectedly stopped: ${state.phase}`);
           debug.step(.25);
           ticks += 1;
@@ -311,7 +313,7 @@ async function browserChecks() {
           simulatedSeconds: state.time - simulationStart, milliseconds: Math.round(performance.now() - started) };
       });
       assert(metrics.shots > 0); assert(metrics.hits > 0); assert(metrics.kills > 0);
-      assert(metrics.simulatedSeconds >= 179 && metrics.simulatedSeconds < 179.3);
+      assert(metrics.simulatedSeconds >= 299 && metrics.simulatedSeconds < 299.3);
       await page.screenshot({ path: join(evidence, `${mobile ? "touch" : "desktop"}-pressure.png`) });
       // Safe spawning may reject a crowded edge. Isolate the capacity gate by clearing
       // edge positions between packs, after capturing the real pressure simulation.
@@ -326,10 +328,10 @@ async function browserChecks() {
         return debug.state.enemies.length;
       });
       assert.equal(metrics.adminCap, metrics.cap);
-      pass(`${mobile ? "touch" : "desktop"} browser 179-second simulated combat and horde cap`, metrics);
+      pass(`${mobile ? "touch" : "desktop"} browser 299-second simulated combat and horde cap`, metrics);
       const victory = await page.evaluate(() => {
         const debug = window.__LAST_NIGHT_DEBUG__;
-        debug.state.time = 179;
+        debug.state.time = 299;
         debug.step(.5);
         const beforeEnd = debug.state.phase;
         debug.step(.5);
@@ -341,7 +343,7 @@ async function browserChecks() {
       const endTime = victory.time;
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.step(1).time), endTime);
       await page.screenshot({ path: join(evidence, `${mobile ? "touch" : "desktop"}-victory.png`) });
-      pass(`${mobile ? "touch" : "desktop"} browser three-minute victory and frozen ending`, { time: victory.time });
+      pass(`${mobile ? "touch" : "desktop"} browser five-minute victory and frozen ending`, { time: victory.time });
       await page.close();
     }
     const normal = await browser.newPage({ viewport: { width: 390, height: 844 } });

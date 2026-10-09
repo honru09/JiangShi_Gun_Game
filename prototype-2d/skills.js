@@ -87,6 +87,53 @@
     }
   ]
 
+  // 投掷道具是世界物资箱的唯一技能池。它们仍占用战术槽位，
+  // 因而可以和旧版本的核心技能共用升级、品质和边缘技能栏逻辑。
+  const THROWABLE_SKILLS = [
+    {
+      id: "grenade",
+      name: "破片手雷",
+      short: "手雷",
+      icon: "雷",
+      group: "core",
+      tag: "自动投掷",
+      max: 5,
+      description: "自动向感染者投掷手雷，落点产生范围爆炸。"
+    },
+    {
+      id: "molotov",
+      name: "燃烧瓶",
+      short: "燃烧瓶",
+      icon: "焰",
+      group: "core",
+      tag: "自动投掷",
+      max: 5,
+      description: "自动投掷燃烧瓶，在落点留下持续灼烧区域。"
+    },
+    {
+      id: "bearTrap",
+      name: "捕兽夹",
+      short: "捕兽夹",
+      icon: "夹",
+      group: "core",
+      tag: "自动布设",
+      max: 5,
+      description: "自动在身前布设捕兽夹，触发后造成伤害并限制感染者。"
+    },
+    {
+      id: "extinguisher",
+      name: "灭火器",
+      short: "灭火器",
+      icon: "灭",
+      group: "core",
+      tag: "自动喷射",
+      max: 5,
+      description: "自动向前方喷出扇形冷却剂，造成少量伤害并留下 40% 减速区域。"
+    }
+  ]
+
+  CORE_SKILLS.push(...THROWABLE_SKILLS)
+
   const BOOST_SKILLS = [
     {
       id: "trailBoots",
@@ -233,7 +280,9 @@
       if (!this.active || !skill || skill.group === "fixed") return false
       if (this.has(id)) return this.level(id) < skill.max
       const selected = skill.group === "core" ? this.selectedCore : this.selectedBoost
-      return selected.length < (skill.group === "core" ? 3 : 2)
+      // Four passive item slots are available on the edge of the screen;
+      // boosts keep their separate two-slot capacity.
+      return selected.length < (skill.group === "core" ? 4 : 2)
     }
 
     upgrade(id) {
@@ -241,7 +290,7 @@
     }
 
     isComplete() {
-      return this.active && this.selectedCore.length === 3 && this.selectedBoost.length === 2
+      return this.active && this.selectedCore.length === 4 && this.selectedBoost.length === 2
         && this.selectedSkills().every(skill => this.level(skill.id) >= skill.max)
     }
 
@@ -268,6 +317,7 @@
   window.WASTELAND_SKILLS = Object.freeze({
     fixed: FIXED_SKILLS,
     core: CORE_SKILLS,
+    throwable: THROWABLE_SKILLS,
     boost: BOOST_SKILLS,
     all: ALL_SKILLS,
     byId(id) {
