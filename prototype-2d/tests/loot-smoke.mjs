@@ -83,6 +83,15 @@ function collect(debug, id, quality = "common") {
   assert(!debug.loot.some(item => item.id === ball.id), "touching a ball consumes it");
   return ball;
 }
+let syntheticSupplyId = 900000;
+function collectSupply(debug, itemId) {
+  const item = { id: syntheticSupplyId++, kind: "supply", supply: true, itemId,
+    x: debug.state.player.x, y: debug.state.player.y };
+  debug.state.loot.push(item);
+  assert.equal(debug.tryCollectLoot(item.id), true, `${itemId} supply is collectible`);
+  assert(!debug.loot.some(candidate => candidate.id === item.id), `${itemId} supply leaves the ground after pickup`);
+  return item;
+}
 function doorDirection(house) {
   return DOOR_VECTORS[house?.door?.side] || DOOR_VECTORS.south;
 }
@@ -219,9 +228,9 @@ export function runLootChecks() {
   console.log("PASS item 4 / boost 2 capacities and level caps consume overflow balls with medical supplies");
 
   const moving = bootPage(); moving.start(); moving.debug.state.godMode = true;
-  moving.key("KeyD");
+  moving.key("KeyD"); moving.key("Space");
   const beforeMoving = moving.debug.state.player.x;
-  moving.debug.step(10); moving.key("KeyD", false);
+  moving.debug.step(10); moving.key("KeyD", false); moving.key("Space", false);
   assert(moving.debug.state.player.x > beforeMoving);
   assert(moving.debug.state.stats.shots > 0);
   assert.equal(moving.debug.state.phase, "playing");
@@ -270,20 +279,37 @@ export function runLootChecks() {
   const ballsBeforeSearch = houseDebug.loot.length;
   assert.equal(houseDebug.interact(), true);
   assert.equal(searched.searched, true);
-  assert(houseDebug.loot.length > ballsBeforeSearch);
-  for (const ball of houseDebug.loot) if (ball.id !== outdoorBall.id) assert(["fine", "rare", "epic"].includes(ball.quality));
-  const indoorBalls = houseDebug.loot.map(ball => ball.id);
+  const searchedSupplies = houseDebug.loot.filter(item => item.id !== outdoorBall.id && item.boxId === searched.id);
+  assert.deepEqual(plain(searched.contents), ["pizza", "milk", "ammo", "junk"], "each supply box reveals the four carryable A Pi items");
+  assert.equal(searchedSupplies.length, searched.contents.length, "searching a supply box reveals every carryable slot");
+  assert.equal(houseDebug.loot.length, ballsBeforeSearch + searchedSupplies.length);
+  assert(searchedSupplies.every(item => item.kind === "supply" && item.supply && houseDebug.supplyItems[item.itemId]), "search only generates known supply items");
+  assert(searchedSupplies.every(item => item.kind !== "skill" && item.kind !== "gun"), "supply searches never generate upgrade balls or firearms");
+  assert.deepEqual(plain(searchedSupplies.map(item => item.itemId)), plain(searched.contents), "supply drops preserve the searched box contents and order");
+  const revealAt = plain(houseDebug.searchPanel.entries.map(entry => Number(entry.revealAt.toFixed(2))));
+  assert.deepEqual(revealAt, [1.25, 2.07, 2.89, 3.31], "search cards reveal in quality-based time order");
+  const firstSupply = searchedSupplies[0];
+  housePage.frame(1.3);
+  assert.equal(houseDebug.takeSearchItem(0), true, "clicking a revealed searched item adds it to the raid backpack");
+  assert.equal(houseDebug.bag.length, 1, "picking up a searched item adds it to the raid backpack");
+  assert.equal(houseDebug.bag[0].itemId, firstSupply.itemId);
+  assert(!houseDebug.loot.some(item => item.id === firstSupply.id), "picked supply leaves the shared world");
+  const indoorLootIds = houseDebug.loot.filter(item => item.id !== outdoorBall.id).map(item => item.id);
   const afterSearch = houseDebug.loot.length;
-  assert.equal(houseDebug.interact(), false);
+  houseDebug.state.player.x = searched.x; houseDebug.state.player.y = searched.y;
+  assert.equal(houseDebug.interact(), true, "a searched box with unclaimed cards can be reopened");
   assert.equal(houseDebug.loot.length, afterSearch, "the same cache cannot be searched twice");
+  assert.equal(houseDebug.searchPanel.boxId, searched.id);
+  houseDebug.closeSearchWindow();
   leave(housePage, house);
   assert(houseDebug.loot.some(ball => ball.id === outdoorBall.id));
-  assert(indoorBalls.every(id => houseDebug.loot.some(ball => ball.id === id)), "indoor loot remains in the shared world after leaving");
+  assert(indoorLootIds.every(id => houseDebug.loot.some(ball => ball.id === id)), "unpicked indoor supplies remain in the shared world after leaving");
   const revisited = enter(housePage, house);
   assert.equal(revisited.containers[0].searched, true);
-  assert.deepEqual(houseDebug.loot.map(ball => ball.id), indoorBalls);
+  assert(indoorLootIds.every(id => houseDebug.loot.some(ball => ball.id === id)));
   houseDebug.state.player.x = searched.x; houseDebug.state.player.y = searched.y;
-  assert.equal(houseDebug.interact(), false);
+  assert.equal(houseDebug.interact(), true, "the same searched box remains available after leaving and returning");
+  houseDebug.closeSearchWindow();
   console.log("PASS walking across a real doorway keeps the city layer; entities, loot and room searches persist across return visits");
 
   housePage.click("pauseRun");
@@ -295,11 +321,17 @@ export function runLootChecks() {
   assert.equal(immutableSimulation(houseDebug), pausedAtCache);
   assert.equal(unopened.searched, false);
   housePage.click("resumeRun");
+  houseDebug.state.player.x = houseDebug.state.extraction.x;
+  houseDebug.state.player.y = houseDebug.state.extraction.y;
+  assert.equal(houseDebug.updateExtractionState(), true, "carried supplies can reach the green extraction zone");
+  const carriedBeforeVictory = plain(houseDebug.bag);
   houseDebug.state.time = 299; houseDebug.step(.5);
   assert.equal(houseDebug.state.phase, "playing");
   houseDebug.step(.5); assert.equal(houseDebug.state.phase, "victory");
+  assert.deepEqual(plain(houseDebug.state.extractedLoot), carriedBeforeVictory, "victory snapshots the backpack as extracted loot");
   const ended = immutableSimulation(houseDebug);
   assert.equal(houseDebug.interact(), false);
+  assert.equal(houseDebug.searchSupplyBox(unopened), false, "victory blocks opening another supply box");
   houseDebug.step(1); assert.equal(immutableSimulation(houseDebug), ended);
   housePage.click("restartRun");
   assert.equal(houseDebug.state.scene, "city");
@@ -310,13 +342,23 @@ export function runLootChecks() {
   assert.equal(houseDebug.state.weapon.quality, "common");
   const resetRoom = enter(housePage, house);
   assert(resetRoom.containers.every(container => !container.searched));
-  assert(!houseDebug.loot.some(ball => indoorBalls.includes(ball.id)));
+  assert.equal(houseDebug.bag.length, 0, "restart clears the raid backpack");
+  assert.equal(houseDebug.state.extractedLoot.length, 0, "restart clears the previous extraction snapshot");
+  assert(!houseDebug.loot.some(ball => indoorLootIds.includes(ball.id)));
   assert.equal(bootPage(false, false).debug, undefined);
   console.log("PASS pause and 300-second victory freeze room searches; restart resets rooms, collected skills and equipped guns");
   const deathPage = bootPage(); deathPage.start();
   const deathDebug = deathPage.debug; deathDebug.state.godMode = false;
   const deathHouse = deathDebug.houses.houses[0];
   enter(deathPage, deathHouse);
+  const deathSupplyBox = deathDebug.state.room.containers[0];
+  deathDebug.state.player.x = deathSupplyBox.x; deathDebug.state.player.y = deathSupplyBox.y;
+  assert.equal(deathDebug.interact(), true, "a live survivor can search a supply box");
+  const deathSupply = deathDebug.loot.find(item => item.boxId === deathSupplyBox.id);
+  assert(deathSupply && deathDebug.supplyItems[deathSupply.itemId]);
+  deathPage.frame(1.3);
+  assert.equal(deathDebug.takeSearchItem(0), true, "the death fixture can take one revealed searched supply");
+  assert.equal(deathDebug.bag.length, 1, "the death fixture starts with carried supply");
   const deathCache = deathDebug.state.room.containers[1];
   deathDebug.state.player.x = deathCache.x; deathDebug.state.player.y = deathCache.y;
   deathDebug.state.player.hp = 1;
@@ -324,12 +366,38 @@ export function runLootChecks() {
     baseSpeed: 0, speed: 0, damage: 100, attackCooldown: 0 }];
   deathDebug.step(1 / 60);
   assert.equal(deathDebug.state.phase, "gameover");
+  assert.equal(deathDebug.bag.length, 0, "death drops all carried supplies");
+  assert.equal(deathDebug.state.extractedLoot.length, 0, "death does not preserve extracted loot");
   assert.equal(deathDebug.interact(), false, "death blocks searching a nearby unopened cache");
+  assert.equal(deathDebug.searchSupplyBox(deathCache), false, "death blocks opening another supply box");
   assert.equal(deathDebug.spawnLoot("scatterModule"), null, "death blocks new drops");
   const deadSnapshot = immutableSimulation(deathDebug);
   deathDebug.step(1);
   assert.equal(immutableSimulation(deathDebug), deadSnapshot, "death freezes room loot and search state");
   console.log("PASS death freezes nearby pickup and search actions");
+
+  const supplyPage = bootPage(); supplyPage.start();
+  const supplyDebug = supplyPage.debug; supplyDebug.state.godMode = true;
+  const ammoBefore = supplyDebug.state.weapon.ammoReserve;
+  collectSupply(supplyDebug, "ammo");
+  assert.equal(supplyDebug.state.weapon.ammoReserve, ammoBefore + supplyDebug.supplyItems.ammo.amount, "ammo supplies refill the equipped reserve");
+  supplyDebug.state.player.hp = 1;
+  collectSupply(supplyDebug, "pizza");
+  collectSupply(supplyDebug, "milk");
+  collectSupply(supplyDebug, "junk");
+  assert.equal(supplyDebug.bag.length, 4, "supply pickups occupy backpack slots");
+  assert(supplyDebug.state.player.hp > 1, "food supplies heal while entering the backpack");
+  assert.deepEqual(plain(supplyDebug.bag.map(item => item.itemId)), ["ammo", "pizza", "milk", "junk"]);
+  assert(supplyDebug.bag.every(item => supplyDebug.supplyItems[item.itemId]), "backpack entries retain supply metadata");
+  assert.equal(supplyDebug.reorderBag(0, 3), true, "backpack entries can be reordered between slots");
+  assert.deepEqual(plain(supplyDebug.bag.map(item => item.itemId)), ["pizza", "milk", "junk", "ammo"]);
+  assert.equal(supplyDebug.dropBagItem(3), true, "dragging an entry outside the backpack drops it back into the world");
+  assert.deepEqual(plain(supplyDebug.bag.map(item => item.itemId)), ["pizza", "milk", "junk"]);
+  assert(supplyDebug.loot.some(item => item.kind === "supply" && item.itemId === "ammo" && item.droppedFromBag), "dropped backpack entries remain collectible on the shared map");
+  supplyDebug.state.player.x = supplyDebug.state.extraction.x;
+  supplyDebug.state.player.y = supplyDebug.state.extraction.y;
+  assert.equal(supplyDebug.updateExtractionState(), true);
+  console.log("PASS supply pickup routes ammo, food, junk and backpack entries into the extraction flow");
 
   const consumablePage = bootPage(); consumablePage.start();
   const consumableDebug = consumablePage.debug; consumableDebug.state.godMode = true;
@@ -347,7 +415,7 @@ export function runLootChecks() {
   const killDebug = killPage.debug; killDebug.state.godMode = true; killDebug.state.density = 0;
   killDebug.state.lootTimer = Infinity; killDebug.state.hordeTimer = Infinity; killDebug.state.spawnBudget = 0; killDebug.state.loot = []; killDebug.state.combatDrops = [];
   const target = { ...killDebug.state.enemies[0], x: killDebug.state.player.x + 110, y: killDebug.state.player.y, hp: 1, maxHp: 1, xp: 100, speed: 0, baseSpeed: 0, contactTimer: Infinity, dead: false };
-  killDebug.state.enemies = [target]; killDebug.step(1);
+  killDebug.state.enemies = [target]; killPage.key("Space"); killDebug.step(1); killPage.key("Space", false);
   assert(killDebug.state.kills >= 1, "the kill fixture is defeated");
   assert(killDebug.loot.every(item => item.kind !== "gun" && item.kind !== "skill"), "kills never create weapons or permanent upgrade balls");
   assert(killDebug.combatDrops.every(item => item.kind === "consumable"), "every kill drop is a temporary combat consumable");
@@ -376,7 +444,9 @@ export function runLootChecks() {
   const boxContainer = boxDebug.state.room.containers[0];
   boxDebug.state.player.x = boxContainer.x; boxDebug.state.player.y = boxContainer.y;
   assert.equal(boxDebug.interact(), true);
-  assert(THROWABLE_IDS.has(boxDebug.loot.at(-1)?.itemId), "house item boxes only contain supported throwable passives");
+  const boxSupplies = boxDebug.loot.filter(item => item.boxId === boxContainer.id);
+  assert.deepEqual(plain(boxSupplies.map(item => item.itemId)), ["pizza", "milk", "ammo", "junk"], "house boxes contain the four fixed supply items");
+  assert(boxSupplies.every(item => item.kind === "supply" && boxDebug.supplyItems[item.itemId]), "house searches only generate carryable supply items");
 
   for (const throwableId of THROWABLE_IDS) {
     const pickupPage = bootPage(); pickupPage.start();
@@ -432,8 +502,8 @@ export function runLootChecks() {
     assert(picked.itemId === throwableId);
   }
   console.log("PASS rare combat consumables apply temporary effects once; large categorized rooms expose furniture and collision");
-  console.log("PASS random and house boxes restrict drops to supported throwable passives; each pickup auto-releases its passive effect");
-  return { checks: 13, simulated: true };
+  console.log("PASS timed drops contain supported throwable passives; house boxes contain supplies; passive pickups auto-release their effects");
+  return { checks: 14, simulated: true };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) runLootChecks();

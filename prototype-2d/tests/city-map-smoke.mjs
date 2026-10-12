@@ -30,7 +30,7 @@ function boot() {
   class Element {
     constructor(id) {
       this.id = id; this.value = "1"; this.hidden = false; this.style = {};
-      this.width = id === "gameCanvas" ? 720 : 0; this.height = id === "gameCanvas" ? 1280 : 0;
+      this.width = id === "gameCanvas" ? 1280 : 0; this.height = id === "gameCanvas" ? 720 : 0;
       this.innerHTML = ""; this.textContent = ""; this.handlers = new Map();
       this.classList = { add: noop, remove: noop };
     }
@@ -216,7 +216,7 @@ function unitChecks() {
   const map = debug.map;
   assert.equal(map.width, 1440);
   assert.equal(map.height, 2560);
-  assert.equal(map.width * map.height / (720 * 1280), 4);
+  assert.equal(map.width * map.height / (1280 * 720), 4);
   assert.equal(debug.config.worldWidth, map.width);
   assert.equal(debug.config.worldHeight, map.height);
   assert.equal(map.buildings.length, 6, "enlarged houses replace the fifteen small buildings");
@@ -339,12 +339,13 @@ function unitChecks() {
     debug.state.player.x = x; debug.state.player.y = y; debug.step(1 / 60);
     const camera = debug.snapshot().camera;
     assert(camera.x >= 0 && camera.y >= -debug.config.cameraTopGutter);
-    assert(camera.x <= map.width - 720 && camera.y <= map.height - 1280 + debug.config.cameraBottomGutter);
-    assert.equal(camera.x, x < 720 ? 0 : map.width - 720);
-    assert.equal(camera.y, y < 1280 ? -debug.config.cameraTopGutter : map.height - 1280 + debug.config.cameraBottomGutter);
+    assert(camera.x <= map.width - 1280 && camera.y <= map.height - 720 + debug.config.cameraBottomGutter);
+    assert.equal(camera.x, x < 1280 ? 0 : map.width - 1280);
+    assert.equal(camera.y, y < 720 ? -debug.config.cameraTopGutter : map.height - 720 + debug.config.cameraBottomGutter);
     debug.state.enemies = [];
     game.click("adminHorde");
     assert(debug.state.enemies.length > 0);
+    const spawnCamera = debug.snapshot().camera;
     for (const spawned of debug.state.enemies) {
       const indoorWalkable = debug.houses.houses.some(candidate => {
         const room = debug.houses.createRoom(candidate);
@@ -354,8 +355,9 @@ function unitChecks() {
       assert(map.isFree(spawned.x, spawned.y, spawned.radius) || indoorWalkable,
         "spawned infected remains walkable on either the street or its shared floor plan");
       assert(Math.hypot(spawned.x - x, spawned.y - y) > spawned.radius + debug.state.player.radius);
-      assert(Math.abs(spawned.x - x) <= 900 && Math.abs(spawned.y - y) <= 1500,
-        "spawn pressure remains near the current camera");
+      assert(spawned.x >= spawnCamera.x - 120 && spawned.x <= spawnCamera.x + 1280 + 120
+        && spawned.y >= spawnCamera.y - 120 && spawned.y <= spawnCamera.y + 720 + 120,
+        "spawn pressure remains near the current landscape camera");
     }
   }
   pass("walking crosses a real doorway on one city layer, then follows the camera and clamps all four corners", { entry, exit });
@@ -387,10 +389,12 @@ function unitChecks() {
   debug.state.player.x = fixture.left.x; debug.state.player.y = fixture.left.y;
   const hidden = { ...pursuing, x: fixture.right.x, y: fixture.right.y, baseSpeed: 0, hp: 100000, dead: false };
   debug.state.enemies = [hidden];
+  game.key("Space");
   debug.state.player.fireTimer = 0;
-  const shotsBefore = debug.state.stats.shots;
+  const hitsBefore = debug.state.stats.hits;
   debug.step(.1);
-  assert.equal(debug.state.stats.shots, shotsBefore, "automatic aim excludes a target behind a solid house");
+  assert.equal(debug.state.stats.hits, hitsBefore, "manual fire cannot hit a target behind a solid house");
+  game.key("Space", false);
   debug.state.player.fireTimer = Infinity;
   debug.state.projectiles = [{ id: -1, x: fixture.left.x, y: fixture.left.y,
     vx: (fixture.right.x - fixture.left.x) * 60, vy: 0, life: 2, damage: 100,
@@ -399,7 +403,7 @@ function unitChecks() {
   debug.step(1 / 60);
   assert.equal(hidden.hp, hiddenHp, "a fast projectile cannot tunnel through a house");
   assert.equal(debug.state.projectiles.length, 0);
-  pass("automatic aim excludes enemies behind houses and projectile sweeps stop at the wall");
+  pass("manual fire cannot hit enemies behind houses and projectile sweeps stop at the wall");
 }
 
 async function browserChecks() {
@@ -431,8 +435,8 @@ async function browserChecks() {
       return { width: canvas.width, height: canvas.height, hud: { x: hud.x, y: hud.y, width: hud.width, height: hud.height },
         camera: window.__LAST_NIGHT_DEBUG__.snapshot().camera };
     });
-    assert.equal(initial.width, 720);
-    assert.equal(initial.height, 1280);
+    assert.equal(initial.width, 1280);
+    assert.equal(initial.height, 720);
     await page.screenshot({ path: join(evidence, "mobile-central-city.png") });
     let moved;
     for (const [index, corner] of [{ right: false, bottom: false }, { right: true, bottom: false },
@@ -448,7 +452,7 @@ async function browserChecks() {
         const hud = document.querySelector(".hud").getBoundingClientRect();
         const dock = document.getElementById("skillDock").getBoundingClientRect();
         const canvas = document.getElementById("gameCanvas").getBoundingClientRect();
-        const scale = canvas.height / 1280;
+        const scale = canvas.height / 720;
         const playerScreenY = canvas.y + (debug.state.player.y - camera.y) * scale;
         const playerScreenX = canvas.x + (debug.state.player.x - camera.x) * scale;
         const controls = ["joystick", "pauseRun"].map(id => {

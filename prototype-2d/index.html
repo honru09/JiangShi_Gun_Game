@@ -43,8 +43,8 @@
     .page-shell { min-height: 100dvh; display: grid; place-items: center; }
     .game-shell {
       position: relative;
-      width: min(100vw, 540px, calc(100dvh * .5625));
-      aspect-ratio: 9 / 16;
+      width: min(100vw, 960px, calc(100dvh * 1.7778));
+      aspect-ratio: 16 / 9;
       overflow: hidden;
       isolation: isolate;
       background: #131a16;
@@ -105,8 +105,10 @@
     .xp-track { height: 6px; margin-top: 5px; border-color: #43504688; }
     .xp-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), var(--acid)); transition: width .16s ease; }
     .equipment-row { margin-top: 6px; font-size: 10px; font-weight: 800; }
+    .ammo-row, .bag-row { margin-top: 3px; font-size: 9px; font-weight: 800; color: #d8dfc8; font-variant-numeric: tabular-nums; }
+    .bag-row { color: #d7c884; }
     .scene-copy { margin-top: 3px; font-size: 9px; color: #bdc7b3; }
-    .interact-action { position: absolute; z-index: 9; right: 14px; bottom: calc(76px + var(--safe-bottom)); min-height: 44px; max-width: 160px; padding: 9px 12px; border: 1px solid var(--hazard); border-radius: 5px; background: #18241aee; color: var(--bone); font-size: 11px; font-weight: 900; cursor: pointer; }
+    .interact-action { position: absolute; z-index: 9; right: 14px; bottom: calc(132px + var(--safe-bottom)); min-height: 44px; max-width: 160px; padding: 9px 12px; border: 1px solid var(--hazard); border-radius: 5px; background: #18241aee; color: var(--bone); font-size: 11px; font-weight: 900; cursor: pointer; }
 
     .skill-dock {
       position: absolute;
@@ -145,8 +147,8 @@
     .touch-zone {
       position: absolute;
       z-index: 7;
-      left: 14px;
-      bottom: calc(70px + var(--safe-bottom));
+      left: 22px;
+      bottom: calc(22px + var(--safe-bottom));
       display: none;
       width: 94px;
       height: 94px;
@@ -160,6 +162,125 @@
 
     .touch-zone::after { content: "移动"; position: absolute; inset: 0; display: grid; place-items: center; color: #c8ceb83d; font-size: 10px; font-weight: 900; letter-spacing: .12em; }
     .touch-stick { position: absolute; z-index: 1; left: 50%; top: 50%; width: 42px; height: 42px; margin: -21px; border: 2px solid #eff7c6aa; border-radius: 50%; background: #b8d745cc; box-shadow: 0 6px 18px #0009; pointer-events: none; }
+
+    .fire-action {
+      position: absolute;
+      z-index: 9;
+      right: 22px;
+      bottom: calc(22px + var(--safe-bottom));
+      display: grid;
+      place-items: center;
+      width: 94px;
+      height: 94px;
+      border: 2px solid #f3d28aaa;
+      border-radius: 50%;
+      background: #b94e3dcc;
+      color: #fff5d9;
+      box-shadow: inset 0 0 0 10px #ffffff09, 0 6px 18px #0009;
+      font-size: 13px;
+      font-weight: 1000;
+      letter-spacing: .08em;
+      cursor: pointer;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .fire-action::after { content: "Space"; display: block; margin-top: 2px; color: #ffe9bf99; font-size: 8px; letter-spacing: .08em; }
+    .fire-action.is-held, .fire-action:active { background: #de7045ee; transform: scale(.95); }
+    .fire-action:focus-visible { outline: 2px solid var(--acid); outline-offset: 3px; }
+    .bag-button {
+      position: absolute;
+      z-index: 9;
+      right: 126px;
+      bottom: calc(45px + var(--safe-bottom));
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border: 1px solid #d8f25a99;
+      border-radius: 50%;
+      background: #17251ddd;
+      color: var(--bone);
+      box-shadow: 0 5px 15px #0009, inset 0 0 0 4px #ffffff08;
+      font-size: 21px;
+      cursor: pointer;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .bag-button::after { content: "背包"; position: absolute; top: 100%; margin-top: 2px; color: #d7dfc7b8; font-size: 8px; font-weight: 900; letter-spacing: .08em; }
+    .bag-button:active, .bag-button.is-open { background: #4f713dcc; transform: scale(.94); }
+    .bag-button:focus-visible { outline: 2px solid var(--acid); outline-offset: 3px; }
+
+    .loot-window, .backpack-window {
+      position: absolute;
+      z-index: 13;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: #0a0f0bd1;
+      backdrop-filter: blur(3px);
+      touch-action: none;
+    }
+    .loot-sheet, .backpack-sheet {
+      width: min(560px, calc(100% - 20px));
+      max-height: calc(100% - 28px);
+      overflow: auto;
+      padding: 15px;
+      border: 1px solid #738270;
+      background: linear-gradient(145deg, #29382df7, #101a14f7);
+      box-shadow: 0 22px 64px #000d, inset 0 1px #ffffff18;
+    }
+    .loot-head, .backpack-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .loot-head strong, .backpack-head strong { color: var(--acid); font-size: 16px; letter-spacing: .08em; }
+    .loot-head small, .backpack-head small { color: #aab7a6; font-size: 9px; }
+    .window-close { min-width: 46px; min-height: 28px; border: 1px solid #657466; background: #17231b; color: var(--bone); font-size: 10px; font-weight: 900; cursor: pointer; }
+    .loot-progress { margin: 12px 0 9px; color: #becbb7; font-size: 10px; line-height: 1.45; }
+    .loot-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+    .loot-card {
+      min-width: 0;
+      min-height: 88px;
+      padding: 8px 5px;
+      border: 1px solid #586758;
+      background: #111b15d9;
+      color: var(--bone);
+      text-align: center;
+      cursor: pointer;
+    }
+    .loot-card:disabled { cursor: default; opacity: .76; }
+    .loot-card.ready:hover, .loot-card.ready:focus-visible { border-color: var(--acid); background: #263b29; outline: none; }
+    .loot-card.is-claimed { opacity: .5; filter: saturate(.4); }
+    .loot-card.is-searching { color: #aebbac; border-style: dashed; }
+    .loot-card .loot-icon { display: block; font-size: 22px; font-weight: 1000; line-height: 28px; }
+    .loot-card .loot-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 900; }
+    .loot-card .loot-rarity { display: block; margin-top: 3px; font-size: 8px; }
+    .loot-card .loot-action { display: block; margin-top: 6px; color: #d8f25a; font-size: 8px; font-weight: 900; }
+    .loot-tip, .backpack-tip { margin: 11px 0 0; color: #8e9d8c; font-size: 9px; line-height: 1.5; text-align: center; }
+    .backpack-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+    .bag-slot {
+      position: relative;
+      min-height: 72px;
+      padding: 7px 5px;
+      border: 1px solid #596759;
+      background: #111b15dc;
+      color: var(--bone);
+      text-align: center;
+      cursor: grab;
+      touch-action: none;
+    }
+    .bag-slot:active, .bag-slot.is-dragging { cursor: grabbing; border-color: var(--acid); background: #2b422d; }
+    .bag-slot.empty { color: #68766b; border-style: dashed; cursor: default; }
+    .bag-slot .bag-icon { display: block; font-size: 21px; font-weight: 1000; line-height: 25px; }
+    .bag-slot .bag-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; font-weight: 900; }
+    .bag-slot .bag-meta { display: block; margin-top: 3px; color: #b3c29d; font-size: 8px; }
+    .bag-slot .bag-index { position: absolute; top: 3px; left: 4px; color: #879687; font: 8px Consolas, monospace; }
+    @media (max-width: 720px) {
+      .bag-button { right: 120px; bottom: calc(47px + var(--safe-bottom)); width: 44px; height: 44px; font-size: 19px; }
+      .loot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .loot-sheet, .backpack-sheet { padding: 12px; }
+    }
+    .orientation-hint { display: none; position: absolute; z-index: 20; inset: 0; place-items: center; padding: 18px; background: #101712b8; color: var(--bone); font-size: 12px; font-weight: 900; text-align: center; pointer-events: none; }
 
     .wave-callout {
       position: absolute;
@@ -340,7 +461,10 @@
     .admin-range input { min-width: 0; accent-color: var(--acid); }
     .event-log { margin-top: 9px; padding-top: 8px; border-top: 1px solid #39453c; color: #7f9083; font: 8px/1.55 Consolas, monospace; }
 
-    @media (pointer: coarse), (max-width: 720px) { .touch-zone { display: block; } }
+    @media (pointer: coarse), (max-width: 720px) { .touch-zone, .fire-action { display: grid; } }
+    @media (orientation: portrait) and (pointer: coarse) { .orientation-hint { display: grid; } }
+    @media (orientation: landscape) { .orientation-hint { display: none; } }
+    @media (pointer: fine) and (min-width: 721px) { .touch-zone, .fire-action { opacity: .68; } }
     @media (max-height: 650px) { .sheet { padding-block: 18px 15px; } .brief { margin: 12px 0; } .lead { margin-top: 11px; } .upgrade-card { min-height: 80px; padding: 9px; } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
   </style>
@@ -348,8 +472,9 @@
 </head>
 <body>
   <div class="page-shell">
-    <main class="game-shell" id="gameShell" aria-label="尸潮：最后一夜竖屏生存战斗">
-      <canvas id="gameCanvas" width="720" height="1280" tabindex="0" aria-label="战斗区域，使用方向键或摇杆移动幸存者"></canvas>
+    <main class="game-shell" id="gameShell" aria-label="尸潮：最后一夜横屏生存战斗">
+      <canvas id="gameCanvas" width="1280" height="720" tabindex="0" aria-label="横屏战斗区域，使用方向键或左侧摇杆移动，按住右侧按钮开火"></canvas>
+      <div class="orientation-hint" aria-hidden="true">请旋转设备至横屏游玩</div>
 
       <header class="hud" aria-live="polite">
         <div class="hud-top">
@@ -360,29 +485,50 @@
         <div class="stat-row"><span>等级 <strong id="levelValue">1</strong></span><span>击倒 <strong id="killValue">0</strong></span><span>场上 <strong id="enemyValue">0</strong></span></div>
         <div class="xp-track"><div class="xp-fill" id="xpFill"></div></div>
         <div class="equipment-row" id="weaponValue">普通 · 突击步枪</div>
+        <div class="ammo-row" id="ammoValue">弹匣 30 / 90 · R 换弹</div>
+        <div class="bag-row" id="bagValue">背包 0 / 6 · 物资箱搜索后拾取</div>
         <div class="scene-copy" id="sceneValue">室外街区 · 普通 / 精良掉落</div>
       </header>
 
       <div class="wave-callout" id="waveCallout">尸潮 01</div>
       <div class="toast" id="toast"></div>
-      <div class="touch-zone" id="joystick" aria-label="移动摇杆"><div class="touch-stick" id="stick"></div></div>
+      <div class="touch-zone" id="joystick" aria-label="左侧移动摇杆"><div class="touch-stick" id="stick"></div></div>
+      <button class="bag-button" id="bagButton" type="button" aria-label="打开背包" title="打开背包">🎒</button>
+      <button class="fire-action" id="shootButton" type="button" aria-label="按住手动开火">开火</button>
       <div class="skill-dock" id="skillDock" aria-label="屏幕边缘主武器 1 格与道具 4 格"></div>
       <button class="interact-action" id="interactRun" type="button" hidden>搜索物资 · E</button>
+
+      <section class="loot-window" id="searchWindow" hidden aria-label="物资箱搜索窗口">
+        <div class="loot-sheet">
+          <div class="loot-head"><div><strong id="searchTitle">物资箱</strong><small id="searchSubtitle">搜索中…</small></div><button class="window-close" id="searchClose" type="button">关闭</button></div>
+          <div class="loot-progress" id="searchProgress">正在逐项识别物资…</div>
+          <div class="loot-grid" id="searchGrid"></div>
+          <p class="loot-tip">物资按等级逐项显现；点击已识别物资带入背包。背包满时可先打开背包整理。</p>
+        </div>
+      </section>
+
+      <section class="backpack-window" id="bagPanel" hidden aria-label="背包窗口">
+        <div class="backpack-sheet">
+          <div class="backpack-head"><div><strong>背包</strong><small id="bagPanelCount">0 / 6 格</small></div><button class="window-close" id="bagClose" type="button">关闭</button></div>
+          <div class="backpack-grid" id="bagGrid"></div>
+          <p class="backpack-tip">按住物资拖动可调整格子；拖出背包范围会丢回地面。背包物资带到绿色撤离区才会保留。</p>
+        </div>
+      </section>
 
       <section class="overlay" id="introOverlay">
         <div class="sheet">
           <p class="eyebrow">WASTELAND SURVIVAL PROTOTYPE</p>
           <h1 class="logo">尸潮：最后一夜<span>LAST NIGHT SURVIVOR</span></h1>
-          <p class="lead">在城市街区坚持五分钟，等撤离车到达。武器自动射击，移动拾取道具球；进入商店、住宅等房屋搜索更高品质的道具与枪械。</p>
+          <p class="lead">在城市街区坚持五分钟，等撤离车到达。按住 Space 或右侧开火按钮手动射击；进入商店、住宅等房屋搜索物资箱，把披萨、牛奶、弹药和杂物装进背包带回撤离区。</p>
           <div class="brief">
-            <div class="brief-item"><strong>自动瞄准</strong><span>清晰弹道</span></div>
+              <div class="brief-item"><strong>手动开火</strong><span>瞄准辅助</span></div>
             <div class="brief-item"><strong>城市街区</strong><span>四倍地图 · 镜头跟随</span></div>
             <div class="brief-item"><strong>拾取升级</strong><span>同类道具 · 等级叠加</span></div>
           </div>
           <button class="primary-action" id="startRun" type="button" disabled>正在加载场景…</button>
           <p class="lead" id="assetLoadStatus" role="status">正在准备手绘场景与角色，请稍候。</p>
           <p class="hint">开局主武器与求生本能，拾取手雷、燃烧瓶、捕兽夹或灭火器，填入屏幕边缘的 4 格道具栏；重复拾取强化效果。击杀感染者有 0.5% 概率掉落一次性战斗物。</p>
-          <p class="hint">WASD / 方向键移动 · 靠近门直接走入走出 · E 只用于搜索物资 · 手机用摇杆与右下按钮</p>
+          <p class="hint">WASD / 方向键移动 · Space 或按住右侧按钮开火 · 靠近门直接走入走出 · E 搜索物资箱 · R 换弹</p>
         </div>
       </section>
 
@@ -433,10 +579,13 @@
       return
     }
 
-    const WIDTH = 720
-    const HEIGHT = 1280
-    const WORLD_WIDTH = WIDTH * 2
-    const WORLD_HEIGHT = HEIGHT * 2
+    // The viewport is landscape while the city remains the established
+    // 1440×2560 shared world. Gameplay coordinates and house geometry stay
+    // in world space; only the camera window changes to 1280×720.
+    const WIDTH = 1280
+    const HEIGHT = 720
+    const WORLD_WIDTH = 1440
+    const WORLD_HEIGHT = 2560
     const FIXED_STEP = 1 / 60
     const RUN_SECONDS = 300
     const coarsePointer = matchMedia("(pointer: coarse)").matches
@@ -448,6 +597,9 @@
       lootCap: 24,
       worldLootCap: 48,
       combatDropCap: 10,
+      bagCapacity: 6,
+      ammoReserveCap: 240,
+      extractionRadius: 92,
       combatDropChance: .005,
       indoorEnemyCap: 18,
       firstLootTime: 3,
@@ -461,8 +613,8 @@
       worldWidth: WORLD_WIDTH,
       worldHeight: WORLD_HEIGHT,
       worldMargin: 24,
-      cameraTopGutter: 260,
-      cameraBottomGutter: 310,
+      cameraTopGutter: 150,
+      cameraBottomGutter: 170,
       mapAreaScale: 4,
       firstHordeTime: 20,
       hordeInterval: 12,
@@ -474,10 +626,10 @@
     const canvas = document.getElementById("gameCanvas")
     const context = canvas.getContext("2d", { alpha: false, desynchronized: true })
     const ui = Object.fromEntries([
-      "introOverlay", "gameOverOverlay", "pauseOverlay", "pauseRun", "resumeRun", "startRun", "restartRun", "interactRun", "weaponValue", "sceneValue",
+      "introOverlay", "gameOverOverlay", "pauseOverlay", "pauseRun", "resumeRun", "startRun", "restartRun", "interactRun", "bagButton", "bagPanel", "bagClose", "bagGrid", "bagPanelCount", "searchWindow", "searchClose", "searchTitle", "searchSubtitle", "searchProgress", "searchGrid", "weaponValue", "ammoValue", "bagValue", "sceneValue",
       "pauseSkills",
       "timeValue", "waveValue", "healthFill", "healthValue", "levelValue", "killValue", "enemyValue", "xpFill",
-      "waveCallout", "toast", "skillDock", "joystick", "stick", "gameOverSummary", "resultTitle", "resultEyebrow",
+      "waveCallout", "toast", "skillDock", "joystick", "stick", "shootButton", "gameOverSummary", "resultTitle", "resultEyebrow",
       "adminToggle", "adminPanel", "adminClose", "adminMetrics", "densityRange", "densityValue",
       "adminPause", "adminStep", "adminHorde", "adminLevel", "adminClear", "adminGod", "adminHitbox", "adminCopy", "adminRestart", "eventLog"
     ].map(id => [id, document.getElementById(id)]))
@@ -487,6 +639,7 @@
     const testerId = query.get("tester") || "local"
     const keys = new Set()
     const touchInput = { x: 0, y: 0 }
+    const fireInput = { held: false, pointerId: null, keyboard: false }
     const frameTimes = []
     const eventLog = []
     const build = new Skills.BuildSystem()
@@ -505,6 +658,33 @@
     function formatTime(totalSeconds) { const value = Math.max(0, Math.floor(totalSeconds)); return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}` }
     function id() { entityId += 1; return entityId }
 
+    function weaponState(weaponId = "assaultRifle", quality = "common", ammoInMag, ammoReserve) {
+      const weapon = Loot.weapons[weaponId] || Loot.weapons.assaultRifle
+      return {
+        id: weapon.id,
+        name: weapon.name,
+        quality: Loot.qualities[quality] ? quality : "common",
+        ammoType: weapon.ammoType,
+        magazineSize: weapon.magazine,
+        ammoInMag: Number.isFinite(ammoInMag) ? Math.max(0, Math.min(weapon.magazine, ammoInMag)) : weapon.magazine,
+        ammoReserve: Number.isFinite(ammoReserve) ? Math.max(0, Math.min(CONFIG.ammoReserveCap, ammoReserve)) : weapon.reserve
+      }
+    }
+
+    function supplyDescription(itemId) { return Loot.supplyItems[itemId] || Loot.supplyItems.junk }
+
+    function supplyQuality(itemId) {
+      return typeof Loot.supplyQuality === "function" ? Loot.supplyQuality(itemId) : supplyDescription(itemId).quality || "common"
+    }
+
+    function supplyRevealDelay(itemId) {
+      return typeof Loot.supplyRevealDelay === "function" ? Loot.supplyRevealDelay(itemId) : Number(supplyDescription(itemId).revealDelay) || .6
+    }
+
+    function qualityLabel(quality) {
+      return Loot.qualities[quality]?.name || Loot.qualities.common.name
+    }
+
     function roundedPath(target, x, y, width, height, radius) {
       const limited = Math.min(radius, width / 2, height / 2)
       target.beginPath()
@@ -520,6 +700,16 @@
     const city = City.create(WORLD_WIDTH, WORLD_HEIGHT, art)
     const terrain = city.terrain
     let houseSystem = Houses.create(city)
+
+    function extractionPoint() {
+      const candidates = [
+        { x: WORLD_WIDTH - 96, y: WORLD_HEIGHT - 120 },
+        { x: WORLD_WIDTH / 2, y: WORLD_HEIGHT - 120 },
+        { x: city.spawn.x, y: city.spawn.y + 150 },
+        { x: 96, y: WORLD_HEIGHT - 120 }
+      ]
+      return candidates.find(point => city.isFree(point.x, point.y, CONFIG.extractionRadius * .42)) || candidates[0]
+    }
 
     const browserArt = typeof Image === "function"
     const visualAssets = { status: browserArt ? "loading" : "unavailable", ready: !browserArt, startedAt: performance.now() }
@@ -612,7 +802,10 @@
         bodyAngle: 0,
         armAngle: -Math.PI / 2,
         targetId: null,
+        manualFire: false,
         recoil: 0,
+        reloadTimer: 0,
+        reloadQueued: false,
         arcTimer: 0
       }
     }
@@ -657,7 +850,19 @@
         slowZones: extinguisherZones,
         traps: [],
         floaters: [],
-        weapon: { id: "assaultRifle", name: "突击步枪", quality: "common" },
+        weapon: weaponState(),
+        // A Pi style raid bag: searched items are carried until the run ends;
+        // defeat clears it while successful extraction snapshots it.
+        bag: [],
+        bagCapacity: CONFIG.bagCapacity,
+        // Search and backpack windows live on top of the shared city canvas.
+        // They do not create a second scene; the world keeps running while
+        // the player identifies or rearranges supplies.
+        searchPanel: null,
+        bagPanelOpen: false,
+        bagDrag: null,
+        extractedLoot: [],
+        extraction: { ...extractionPoint(), radius: CONFIG.extractionRadius, reached: false },
         worldLayer: "city",
         // The street and every first-floor plan live in one world. `room` is
         // only the currently visible/collision context; it is derived from
@@ -721,6 +926,8 @@
       houseSystem = Houses.create(city)
       accumulator = 0
       state = createState("playing")
+      if (ui.searchWindow) ui.searchWindow.hidden = true
+      if (ui.bagPanel) ui.bagPanel.hidden = true
       // Prebuild every floor plan at its exterior footprint. This makes the
       // indoor geometry part of the same map before the player reaches a door;
       // entering only reveals the matching overlay and collision context.
@@ -733,8 +940,8 @@
       ui.waveCallout.classList.remove("show")
       void ui.waveCallout.offsetWidth
       ui.waveCallout.classList.add("show")
-      toast("手雷 / 燃烧瓶 / 捕兽夹 / 灭火器会自动释放 · 击杀感染者有极低概率掉落一次性战斗物 · 靠近门直接走入", 3)
-      logEvent("尸潮开始 · 移动拾取道具球")
+      toast("物资箱搜索披萨 / 牛奶 / 弹药 / 杂物 · 击杀感染者仅有0.5%概率掉落临时增益", 3)
+      logEvent("尸潮开始 · 搜索物资箱并带回撤离区")
     }
 
     function syncPlayerStats(healAdded = false) {
@@ -859,6 +1066,268 @@
       return null
     }
 
+    function renderBagPanel() {
+      if (!ui.bagPanel || !ui.bagGrid || !ui.bagPanelCount || !state) return
+      const bag = state.bag || []
+      const capacity = state.bagCapacity || CONFIG.bagCapacity
+      ui.bagPanelCount.textContent = `${bagUsed()} / ${capacity} 格`
+      // Keep the live drag target in the DOM until pointerup/dragend. The HUD
+      // refreshes several times per second; replacing innerHTML during a drag
+      // would release pointer capture and make an item disappear instead of
+      // being reordered or dropped outside the backpack.
+      if (state.bagDrag) {
+        ui.bagPanel.hidden = !state.bagPanelOpen
+        return
+      }
+      ui.bagGrid.innerHTML = Array.from({ length: capacity }, (_, index) => {
+        const item = bag[index]
+        if (!item) return `<div class="bag-slot empty" data-bag-index="${index}" aria-label="空背包格"><span class="bag-index">${index + 1}</span><span class="bag-icon">＋</span><span class="bag-name">空格</span><span class="bag-meta">可放置</span></div>`
+        const data = supplyDescription(item.itemId)
+        const quality = supplyQuality(item.itemId)
+        const meta = data.category === "ammo" ? `+${data.amount} 发 · ${qualityLabel(quality)}` : `${data.category === "food" ? `回复 ${data.heal}` : "可带出"} · ${qualityLabel(quality)}`
+        return `<button class="bag-slot" type="button" draggable="true" data-bag-index="${index}" aria-label="${data.name}，第${index + 1}格，可拖动"><span class="bag-index">${index + 1}</span><span class="bag-icon" style="color:${data.color}">${data.icon}</span><span class="bag-name">${data.name}</span><span class="bag-meta">${meta}</span></button>`
+      }).join("")
+      if (typeof ui.bagButton.classList.toggle === "function") ui.bagButton.classList.toggle("is-open", !!state.bagPanelOpen)
+      else if (state.bagPanelOpen) ui.bagButton.classList.add("is-open")
+      else ui.bagButton.classList.remove("is-open")
+      ui.bagPanel.hidden = !state.bagPanelOpen
+    }
+
+    function searchElapsed(panel = state?.searchPanel) {
+      if (!panel) return 0
+      const clock = typeof performance?.now === "function" ? performance.now() / 1000 : state?.time || 0
+      return Math.max(0, clock - panel.openedAt)
+    }
+
+    function renderSearchWindow() {
+      if (!ui.searchWindow || !ui.searchGrid || !ui.searchProgress || !state) return
+      const panel = state.searchPanel
+      if (!panel) { ui.searchWindow.hidden = true; return }
+      const elapsed = searchElapsed(panel)
+      const entries = panel.entries || []
+      let revealed = 0
+      let claimed = 0
+      ui.searchGrid.innerHTML = entries.map((entry, index) => {
+        const item = supplyDescription(entry.itemId)
+        const quality = supplyQuality(entry.itemId)
+        const isRevealed = entry.claimed || elapsed >= entry.revealAt
+        if (isRevealed) revealed += 1
+        if (entry.claimed) claimed += 1
+        if (entry.claimed) return `<button class="loot-card is-claimed" type="button" disabled aria-label="${item.name}已带走"><span class="loot-icon" style="color:${item.color}">${item.icon}</span><span class="loot-name">${item.name}</span><span class="loot-rarity" style="color:${Loot.qualities[quality]?.color || item.color}">${qualityLabel(quality)}</span><span class="loot-action">已带走</span></button>`
+        if (!isRevealed) {
+          const remaining = Math.max(0, entry.revealAt - elapsed)
+          return `<button class="loot-card is-searching" type="button" disabled aria-label="正在搜索第${index + 1}件物资"><span class="loot-icon">?</span><span class="loot-name">识别中</span><span class="loot-rarity">${remaining.toFixed(1)}秒</span><span class="loot-action">搜索中…</span></button>`
+        }
+        const drop = state.loot.find(candidate => candidate.id === entry.lootId)
+        const full = bagUsed() + Math.max(1, Number(item.weight) || 1) > (state.bagCapacity || CONFIG.bagCapacity)
+        return `<button class="loot-card ready" type="button" data-search-index="${index}" aria-label="带走${item.name}"><span class="loot-icon" style="color:${item.color}">${item.icon}</span><span class="loot-name">${item.name}</span><span class="loot-rarity" style="color:${Loot.qualities[quality]?.color || item.color}">${qualityLabel(quality)}${drop ? "" : " · 已拾取"}</span><span class="loot-action">${drop && !full ? "带入背包" : drop ? "背包已满" : "已拾取"}</span></button>`
+      }).join("")
+      const allVisible = revealed >= entries.length
+      ui.searchTitle.textContent = `物资箱 · ${panel.houseName || "搜索"}`
+      ui.searchSubtitle.textContent = allVisible ? "识别完成" : "逐项搜索中…"
+      ui.searchProgress.textContent = `搜索进度 ${revealed} / ${entries.length} · 已带走 ${claimed} 件 · 稀有物资需要更长识别时间`
+      ui.searchWindow.hidden = false
+    }
+
+    function openSearchWindow(container) {
+      if (!state || !container) return false
+      const contents = Array.isArray(container.contents) ? container.contents : []
+      let elapsed = 0
+      const entries = contents.map((itemId, index) => {
+        elapsed += supplyRevealDelay(itemId)
+        const lootId = container.lootIds?.[index] || null
+        return { index, itemId, lootId, revealAt: elapsed, claimed: Boolean(lootId && !state.loot.some(item => item.id === lootId)) }
+      })
+      state.searchPanel = { boxId: container.id, houseName: state.room?.name || "房屋物资", openedAt: (typeof performance?.now === "function" ? performance.now() / 1000 : state.time || 0), entries }
+      state.bagPanelOpen = false
+      ui.bagPanel.hidden = true
+      releaseInput()
+      renderSearchWindow()
+      return true
+    }
+
+    function closeSearchWindow() {
+      if (!state) return false
+      state.searchPanel = null
+      if (ui.searchWindow) ui.searchWindow.hidden = true
+      return true
+    }
+
+    function takeSearchItem(index) {
+      const panel = state?.searchPanel
+      if (!state || state.phase !== "playing" || state.paused) return false
+      const entry = panel?.entries?.[Number(index)]
+      if (!entry || entry.claimed || searchElapsed(panel) < entry.revealAt) return false
+      const drop = state.loot.find(item => item.id === entry.lootId)
+      if (!drop) { entry.claimed = true; renderSearchWindow(); return false }
+      if (!collectLoot(drop)) { renderSearchWindow(); return false }
+      state.loot = state.loot.filter(item => item !== drop)
+      entry.claimed = true
+      renderSearchWindow()
+      syncHud()
+      return true
+    }
+
+    function toggleBagPanel(force) {
+      if (!state || state.phase === "intro") return false
+      const open = typeof force === "boolean" ? force : !state.bagPanelOpen
+      if (open) {
+        closeSearchWindow()
+        releaseInput()
+      }
+      state.bagPanelOpen = open
+      renderBagPanel()
+      return open
+    }
+
+    function reorderBag(fromIndex, toIndex) {
+      if (!state || !Array.isArray(state.bag)) return false
+      const from = Number(fromIndex), to = Number(toIndex)
+      if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from >= state.bag.length || to < 0) return false
+      const [item] = state.bag.splice(from, 1)
+      const destination = Math.min(to, state.bag.length)
+      state.bag.splice(destination, 0, item)
+      renderBagPanel(); syncHud()
+      return true
+    }
+
+    function dropBagItem(index) {
+      if (!state || state.phase !== "playing") return false
+      const item = state.bag?.[Number(index)]
+      if (!item) return false
+      const drop = spawnSupplyDrop(item.itemId, state.player, null, 0)
+      if (!drop) { toast("附近没有可丢弃的位置", 1.8); return false }
+      drop.droppedFromBag = true
+      drop.weight = item.weight
+      state.bag.splice(Number(index), 1)
+      toast(`丢弃 ${supplyDescription(item.itemId).name}`, 1.5)
+      logEvent(`丢弃背包物资 · ${supplyDescription(item.itemId).name}`)
+      renderBagPanel(); syncHud(); draw()
+      return true
+    }
+
+    function bagIndexAtPoint(clientX, clientY) {
+      if (!ui.bagGrid?.getBoundingClientRect) return -1
+      const rect = ui.bagGrid.getBoundingClientRect()
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return -1
+      const columns = 3
+      const column = Math.max(0, Math.min(columns - 1, Math.floor((clientX - rect.left) / Math.max(1, rect.width / columns))))
+      const row = Math.max(0, Math.floor((clientY - rect.top) / Math.max(1, rect.height / 2)))
+      return row * columns + column
+    }
+
+    function bagPointerUp(event) {
+      const drag = state?.bagDrag
+      if (!drag || drag.pointerId !== event.pointerId) return
+      const panelRect = ui.bagPanel?.getBoundingClientRect?.()
+      const insidePanel = panelRect && event.clientX >= panelRect.left && event.clientX <= panelRect.right && event.clientY >= panelRect.top && event.clientY <= panelRect.bottom
+      const target = insidePanel ? bagIndexAtPoint(event.clientX, event.clientY) : -1
+      if (target < 0) dropBagItem(drag.index)
+      else if (target !== drag.index) reorderBag(drag.index, target)
+      state.bagDrag = null
+      renderBagPanel()
+    }
+
+    function bagPointerDown(event) {
+      const index = Number(event.target?.closest?.("[data-bag-index]")?.dataset?.bagIndex)
+      if (!Number.isInteger(index) || !state?.bag?.[index]) return
+      event.preventDefault?.()
+      state.bagDrag = { index, pointerId: event.pointerId }
+      event.target.closest?.("[data-bag-index]")?.classList.add("is-dragging")
+      ui.bagGrid.setPointerCapture?.(event.pointerId)
+    }
+
+    function bagPointerCancel(event) {
+      if (!state?.bagDrag || state.bagDrag.pointerId !== event.pointerId) return
+      state.bagDrag = null
+      renderBagPanel()
+    }
+
+    function bagDragEnd(event) { bagPointerUp(event) }
+
+    function bagUsed() {
+      return (state?.bag || []).reduce((total, item) => total + Math.max(1, Number(item.weight) || Number(supplyDescription(item.itemId).weight) || 1), 0)
+    }
+
+    function carrySupply(item) {
+      const data = supplyDescription(item.itemId)
+      const weight = Math.max(1, Number(data.weight) || 1)
+      if (bagUsed() + weight > (state.bagCapacity || CONFIG.bagCapacity)) return false
+      if (!Number.isFinite(state.weapon?.ammoInMag) || !Number.isFinite(state.weapon?.ammoReserve)) state.weapon = weaponState(state.weapon?.id, state.weapon?.quality)
+      const carried = { id: id(), kind: "supply", itemId: data.id, name: data.name, category: data.category, weight, count: 1 }
+      state.bag.push(carried)
+      const player = state.player
+      if (data.category === "ammo") {
+        state.weapon.ammoReserve = Math.min(CONFIG.ammoReserveCap, state.weapon.ammoReserve + data.amount)
+      } else if (data.category === "food" || data.category === "medical") {
+        player.hp = Math.min(player.maxHp, player.hp + (data.heal || 0))
+      } else if (data.category === "armor") {
+        player.armor = Math.min(100, (player.armor || 0) + (data.armor || 0))
+      } else if (data.category === "weapon") {
+        const next = weaponState(data.weaponId, "common")
+        state.weapon = next
+        player.fireTimer = 0
+        toast(`装备 ${next.name} · 弹匣 ${next.ammoInMag}/${next.ammoReserve}`, 2.2)
+      }
+      return true
+    }
+
+    function supplyDropPosition(origin, index) {
+      const offsets = [[-42, -18], [42, -18], [-42, 28], [42, 28], [0, -48]]
+      const preferred = offsets[index % offsets.length]
+      const direct = { x: origin.x + preferred[0], y: origin.y + preferred[1] }
+      if (activeIsFree(direct.x, direct.y, 18) && buildingHitFraction(origin.x, origin.y, direct.x, direct.y, 17) === null) return direct
+      return findLootPosition(origin.x + preferred[0], origin.y + preferred[1]) || findLootPosition(origin.x, origin.y)
+    }
+
+    function spawnSupplyDrop(itemId, origin, boxId, index = 0) {
+      if (!state || state.loot.length >= CONFIG.lootCap + CONFIG.worldLootCap) return null
+      const data = supplyDescription(itemId)
+      const position = supplyDropPosition(origin, index)
+      if (!position) return null
+      const drop = { id: id(), kind: "supply", supply: true, itemId: data.id, type: "supply", x: position.x, y: position.y, scene: state.scene, boxId, born: state.time, weight: data.weight, quality: data.quality || "common", rarity: data.quality || "common" }
+      state.loot.push(drop)
+      return drop
+    }
+
+    function searchSupplyBox(container) {
+      if (!container || !state || state.phase !== "playing") return false
+      if (container.searched) {
+        const remaining = state.loot.some(item => item.boxId === container.id)
+        return remaining ? openSearchWindow(container) : false
+      }
+      const contents = Array.isArray(container.contents) && container.contents.length
+        ? container.contents.slice()
+        : typeof Loot.rollSupplyContents === "function" ? Loot.rollSupplyContents() : ["pizza", "milk", "ammo", "junk"]
+      container.contents = contents.slice()
+      container.lootIds = Array.isArray(container.lootIds) ? container.lootIds.slice() : []
+      let spawned = 0
+      for (let index = 0; index < contents.length; index += 1) {
+        if (container.lootIds[index]) continue
+        const drop = spawnSupplyDrop(contents[index], container, container.id, index)
+        if (!drop) continue
+        container.lootIds[index] = drop.id
+        spawned += 1
+      }
+      container.searched = contents.every((_, index) => Boolean(container.lootIds[index]))
+      const names = contents.map(itemId => supplyDescription(itemId).name).join("、")
+      toast(spawned || container.searched
+        ? `打开物资箱 · 正在识别 ${names} · 点击物资带入背包`
+        : "物资箱空间不足 · 先拾取附近物资再继续搜索", 3.2)
+      logEvent(`搜索物资箱/${container.id} · ${names}`)
+      if (spawned || container.searched) openSearchWindow(container)
+      return spawned > 0 || container.searched
+    }
+
+    function openSupplyBox(containerOrId) {
+      const room = state?.room
+      const container = typeof containerOrId === "string"
+        ? room?.containers?.find(item => item.id === containerOrId)
+        : containerOrId || room?.containers?.find(item => !item.searched)
+      if (!container) return false
+      return searchSupplyBox(container)
+    }
+
     function spawnLoot(typeOrSkillId = "random", quality, x, y) {
       if (!state || state.phase !== "playing" || state.paused) return null
       if (typeOrSkillId && typeof typeOrSkillId === "object") {
@@ -910,6 +1379,24 @@
     }
 
     function collectLoot(ball) {
+      if (ball.kind === "supply" || ball.supply) {
+        const description = Loot.describe(ball)
+        if (!carrySupply(ball)) {
+          if (!Number.isFinite(ball.blockedUntil) || state.time >= ball.blockedUntil) {
+            ball.blockedUntil = state.time + 1
+            toast(`背包已满 · ${description.name} 留在地面`, 2.4)
+          }
+          return false
+        }
+        const data = description.supply || supplyDescription(ball.itemId)
+        const suffix = data.category === "ammo" ? ` · +${data.amount} 发` : data.category === "food" || data.category === "medical" ? ` · 回复 ${data.heal}` : ""
+        particle(ball.x, ball.y, description.color, 12, 110)
+        toast(`拾取 ${description.name}${suffix} · 背包 ${bagUsed()}/${state.bagCapacity}`, 2.2)
+        logEvent(`携带物资 · ${description.name}`)
+        const searchEntry = state.searchPanel?.entries?.find(entry => entry.lootId === ball.id)
+        if (searchEntry) searchEntry.claimed = true
+        return true
+      }
       const description = Loot.describe(ball)
       let message
       if (ball.kind === "gun") {
@@ -920,7 +1407,7 @@
           state.player.hp = Math.min(state.player.maxHp, state.player.hp + 12 * description.quality.multiplier)
           message = `${description.name}${lower ? "品质低于当前枪械" : "已装备"} · 转为医疗补给`
         } else {
-          state.weapon = { id: ball.itemId, name: description.name, quality: ball.quality }
+          state.weapon = weaponState(ball.itemId, ball.quality)
           state.player.fireTimer = 0
           message = `换装 ${description.quality.name} · ${description.name}`
         }
@@ -938,6 +1425,7 @@
       }
       particle(ball.x, ball.y, description.quality.color, 12, 110)
       toast(message, 2.6); logEvent(message); renderSkillDock()
+      return true
     }
 
     function collectCombatDrop(drop) {
@@ -952,10 +1440,29 @@
       logEvent(`战斗消耗物 · ${details.name}`)
     }
 
+    function updateExtractionState() {
+      if (!state?.extraction || !state.player) return false
+      const wasReached = state.extraction.reached
+      state.extraction.reached = distanceSquared(state.player.x, state.player.y, state.extraction.x, state.extraction.y) <= state.extraction.radius ** 2
+      if (state.extraction.reached && !wasReached) {
+        toast(`进入绿色撤离区 · 背包 ${bagUsed()}/${state.bagCapacity}`, 2.4)
+        logEvent(`进入绿色撤离区 · 携带 ${state.bag.length} 件物资`)
+      }
+      return state.extraction.reached
+    }
+
     function interactionTarget() {
       if (!state || state.phase !== "playing" || state.paused) return null
       const room = updateActiveRoom()
-      const container = room && houseSystem.getNearbySearch(room, state.player, 18)
+      let container = room && houseSystem.getNearbySearch(room, state.player, 18)
+      if (!container && room) {
+        // A searched box with unclaimed cards can be reopened after the player
+        // closes the window to rearrange the backpack. This keeps the box and
+        // every loose supply persistent on the shared map.
+        container = (room.containers || []).find(candidate => candidate.searched
+          && state.loot.some(item => item.boxId === candidate.id)
+          && distanceSquared(candidate.x, candidate.y, state.player.x, state.player.y) <= 18 ** 2) || null
+      }
       if (container) return { kind: "search", container, label: "搜索物资箱 · E" }
       // Doors are physical map openings. They never become an E action or a
       // scene transition; only search points keep the convenience button.
@@ -988,7 +1495,7 @@
       state.room = room; state.activeHouseId = room.houseId; state.scene = "city"
       ensureRoomActivity(room)
       if (announce) {
-        toast("当前建筑室内已显示在同一地图 · 门窗可通行 · 搜索高品质物资", 2.4)
+        toast("当前建筑室内已显示在同一地图 · 门窗可通行 · 搜索物资箱", 2.4)
         logEvent(`显示${house.name}室内图层`)
       }
       return true
@@ -1017,15 +1524,11 @@
     function interact() {
       const target = interactionTarget()
       if (!target) return false
-      if (target.kind !== "search" || target.container.searched) return false
-      // Search loot is born at the container's world coordinate. Keeping it
-      // on the same floor plan avoids placing it outside a compact house
-      // footprint after the interior is mapped into the city lot.
-      const ball = spawnLoot("skill", undefined, target.container.x, target.container.y)
-      if (!ball) { toast("当前场景物资太多 · 先拾取道具球"); return false }
-      target.container.searched = true
-      toast(`搜到 ${Loot.describe(ball).quality.name} · ${Loot.describe(ball).name}，走近拾取`, 3)
-      logEvent(`搜索同层室内物资/${target.container.id}`)
+      if (target.kind !== "search") return false
+      // A supply box is searched once, then its carryable contents appear
+      // around the box.  They are not permanent upgrade balls; the player
+      // decides what fits in the raid bag and takes it to the green evac zone.
+      if (!searchSupplyBox(target.container)) return false
       syncHud()
       return true
     }
@@ -1037,14 +1540,20 @@
       const item = ball || drop
       if (!item || distanceSquared(item.x, item.y, state.player.x, state.player.y) > 28 ** 2) return false
       if (ball) {
+        if (!collectLoot(ball)) return false
         state.loot = state.loot.filter(candidate => candidate !== ball)
-        collectLoot(ball)
       } else {
         state.combatDrops = state.combatDrops.filter(candidate => candidate !== drop)
         collectCombatDrop(drop)
       }
       syncHud(); draw()
       return true
+    }
+
+    function takeSupply(dropOrId) {
+      const idValue = typeof dropOrId === "object" ? dropOrId?.id : dropOrId
+      const drop = state?.loot?.find(item => item.id === idValue && (item.kind === "supply" || item.supply))
+      return drop ? tryCollectLoot(drop.id) : false
     }
 
     function enterBuilding(buildingId) {
@@ -1301,8 +1810,36 @@
       return { x: player.x + mount.x + Math.cos(player.armAngle) * reach, y: player.y + mount.y + Math.sin(player.armAngle) * reach }
     }
 
+    function reloadWeapon() {
+      if (!state?.weapon || state.phase !== "playing" || state.paused) return false
+      const weapon = Loot.weapons[state.weapon.id] || Loot.weapons.assaultRifle
+      const missing = Math.max(0, weapon.magazine - state.weapon.ammoInMag)
+      if (!missing || state.weapon.ammoReserve <= 0) return false
+      const loaded = Math.min(missing, state.weapon.ammoReserve)
+      state.weapon.ammoInMag += loaded
+      state.weapon.ammoReserve -= loaded
+      state.player.reloadTimer = .35
+      state.player.reloadQueued = false
+      toast(`换弹完成 · ${state.weapon.ammoInMag}/${state.weapon.ammoReserve}`, 1.2)
+      return true
+    }
+
     function fireRifle(stats) {
       const player = state.player
+      if (!Number.isFinite(state.weapon.ammoInMag) || !Number.isFinite(state.weapon.ammoReserve)) state.weapon = weaponState(state.weapon.id, state.weapon.quality)
+      if (player.reloadTimer > 0) return false
+      if (state.weapon.ammoInMag <= 0) {
+        player.reloadQueued = true
+        if (state.weapon.ammoReserve > 0) {
+          // Holding the mobile fire button must not strand the player with an
+          // empty magazine. Keyboard players can still press R manually; the
+          // automatic path is the touch-friendly equivalent.
+          reloadWeapon()
+          toast("弹匣已空 · 自动换弹", 1.2)
+        } else toast("没有可用弹药", 1.2)
+        return false
+      }
+      state.weapon.ammoInMag -= 1
       player.attack = .1
       player.muzzle = .075
       player.recoil = 1
@@ -1315,6 +1852,7 @@
         state.projectiles.push({ id: id(), x: muzzle.x, y: muzzle.y, oldX: muzzle.x, oldY: muzzle.y, sweepOrigin: { x: player.x + mount.x, y: player.y + mount.y }, vx: Math.cos(angle) * stats.bulletSpeed, vy: Math.sin(angle) * stats.bulletSpeed, life: stats.bulletLife, damage: stats.bulletDamage * (build.level("scatterModule") ? .66 : 1), remaining: stats.pierce + 1, hitIds: new Set(), burn: stats.burn, arc: stats.arc })
       }
       particle(muzzle.x, muzzle.y, "#ffd373", 2, 45)
+      return true
     }
 
     function triggerArc(origin, level) {
@@ -1385,10 +1923,16 @@
       if (player.hp <= 0) {
         state.phase = "gameover"
         state.result = "defeat"
+        state.bag = []
+        state.extractedLoot = []
+        if (state.extraction) state.extraction.reached = false
         releaseInput()
+        closeSearchWindow()
+        if (state) state.bagPanelOpen = false
+        if (ui.bagPanel) ui.bagPanel.hidden = true
         ui.resultTitle.textContent = "撤离前倒下"
         ui.resultEyebrow.textContent = "RUN ENDED"
-        ui.gameOverSummary.textContent = `坚持 ${formatTime(state.time)}，击倒 ${state.kills} 名感染者，达到 Lv.${state.level}。`
+        ui.gameOverSummary.textContent = `坚持 ${formatTime(state.time)}，击倒 ${state.kills} 名感染者，物资已丢失。`
         showOnlyOverlay(ui.gameOverOverlay)
         logEvent("幸存者倒下")
       } else if (player.hp / player.maxHp < .34 && player.instinctReady) {
@@ -1401,8 +1945,10 @@
 
     function updatePlayer(dt, stats) {
       const player = state.player
-      let dx = touchInput.x + Number(keys.has("KeyD") || keys.has("ArrowRight")) - Number(keys.has("KeyA") || keys.has("ArrowLeft"))
-      let dy = touchInput.y + Number(keys.has("KeyS") || keys.has("ArrowDown")) - Number(keys.has("KeyW") || keys.has("ArrowUp"))
+      const modalOpen = gameplayModalOpen()
+      player.manualFire = !modalOpen && fireHeld()
+      let dx = modalOpen ? 0 : touchInput.x + Number(keys.has("KeyD") || keys.has("ArrowRight")) - Number(keys.has("KeyA") || keys.has("ArrowLeft"))
+      let dy = modalOpen ? 0 : touchInput.y + Number(keys.has("KeyS") || keys.has("ArrowDown")) - Number(keys.has("KeyW") || keys.has("ArrowUp"))
       const length = Math.hypot(dx, dy)
       if (length > 1) { dx /= length; dy /= length }
       // Doorways are ordinary walkable openings in the city coordinates.
@@ -1423,6 +1969,7 @@
       player.recoil = Math.max(0, player.recoil - dt * 13)
       player.sinceHit += dt
       if (player.sinceHit > 4) player.hp = Math.min(player.maxHp, player.hp + stats.regen * dt)
+      player.reloadTimer = Math.max(0, player.reloadTimer - dt)
       const target = nearestEnemy(player.x, player.y - 15, null, WIDTH * 1.1, true)
       player.targetId = target?.id ?? null
       if (target) {
@@ -1434,9 +1981,14 @@
         player.aim = aim
         const difference = Math.atan2(Math.sin(player.aim - player.armAngle), Math.cos(player.aim - player.armAngle))
         player.armAngle += difference * Math.min(1, dt * 18)
+      }
+      // The rifle is deliberately manual. Aim assistance still tracks the
+      // nearest visible enemy, but only Space or the held shoot button may
+      // consume the fire interval and create projectiles.
+      if (!modalOpen && fireHeld()) {
         player.fireTimer -= dt
         if (player.fireTimer <= 0) { fireRifle(stats); player.fireTimer = stats.fireInterval }
-      } else player.fireTimer = Math.max(0, player.fireTimer - dt)
+      } else player.fireTimer = Math.min(stats.fireInterval, Math.max(0, player.fireTimer))
     }
 
     function updateEnemies(dt) {
@@ -1782,9 +2334,13 @@
       }
       state.pickups = state.pickups.filter(item => item.value > 0)
       state.loot = state.loot.filter(ball => {
+        // A Pi's search sheet owns the newly revealed cards until the player
+        // explicitly takes one. Without this guard a survivor standing beside
+        // the box would auto-pick the first card before its reveal timer or
+        // click target became visible.
+        if (state.searchPanel?.entries?.some(entry => entry.lootId === ball.id && !entry.claimed)) return true
         if (distanceSquared(ball.x, ball.y, state.player.x, state.player.y) > 28 ** 2 || buildingHitFraction(ball.x, ball.y, state.player.x, state.player.y, 2) !== null) return true
-        collectLoot(ball)
-        return false
+        return !collectLoot(ball)
       })
       state.combatDrops = state.combatDrops.filter(drop => {
         if (distanceSquared(drop.x, drop.y, state.player.x, state.player.y) > 28 ** 2 || buildingHitFraction(drop.x, drop.y, state.player.x, state.player.y, 2) !== null) return true
@@ -1811,10 +2367,14 @@
         state.phase = "victory"
         state.result = "victory"
         state.paused = false
+        state.extractedLoot = state.bag.map(item => ({ ...item }))
         releaseInput()
+        closeSearchWindow()
+        state.bagPanelOpen = false
+        if (ui.bagPanel) ui.bagPanel.hidden = true
         ui.resultTitle.textContent = "撤离成功"
         ui.resultEyebrow.textContent = "SURVIVED · 05:00"
-        ui.gameOverSummary.textContent = `你撑过了五分钟，击倒 ${state.kills} 名感染者，达到 Lv.${state.level}。撤离车已抵达。`
+        ui.gameOverSummary.textContent = `你撑过了五分钟，击倒 ${state.kills} 名感染者，带回 ${state.extractedLoot.length} 件物资。撤离车已抵达。`
         showOnlyOverlay(ui.gameOverOverlay)
         logEvent("五分钟结束 · 撤离成功")
         return
@@ -1826,6 +2386,7 @@
         logEvent("撤离车接近 · 最后30秒")
       }
       state.wave = 1 + Math.floor(state.time / CONFIG.waveSeconds)
+      updateExtractionState()
       if (state.wave !== state.previousWave) {
         state.previousWave = state.wave
         ui.waveCallout.textContent = `尸潮 ${String(state.wave).padStart(2, "0")}`
@@ -2112,6 +2673,20 @@
       // always present, including neighbouring roofs and streets; the active
       // floor plan only replaces pixels inside its own exterior footprint.
       context.drawImage(terrain, 0, 0)
+      if (state.extraction) {
+        const zone = state.extraction
+        const pulse = 1 + Math.sin(state.time * 3) * .04
+        context.save()
+        context.globalAlpha = zone.reached ? .3 : .2
+        context.fillStyle = zone.reached ? "#b8e85b" : "#78d99a"
+        context.beginPath(); context.arc(zone.x, zone.y, zone.radius * pulse, 0, Math.PI * 2); context.fill()
+        context.globalAlpha = .85
+        context.strokeStyle = zone.reached ? "#e3f58d" : "#8fe7aa"; context.lineWidth = 4
+        context.beginPath(); context.arc(zone.x, zone.y, zone.radius * pulse, 0, Math.PI * 2); context.stroke()
+        context.fillStyle = "#112419cc"; context.font = "bold 13px Microsoft YaHei, sans-serif"; context.textAlign = "center"
+        context.fillText(zone.reached ? "已到撤离区" : "绿色撤离区", zone.x, zone.y + 4)
+        context.restore()
+      }
       if (state.room) houseSystem.drawRoom(context, state.room)
       for (const item of state.loot) Loot.draw(context, item, state.time)
       for (const item of state.combatDrops) Loot.draw(context, item, state.time)
@@ -2228,7 +2803,7 @@
         runId: state.runId, phase: state.phase, result: state.result, ended: state.phase === "victory" || state.phase === "gameover", paused: state.paused, time: state.time, remainingSeconds: Math.max(0, RUN_SECONDS - state.time), wave: state.wave,
         level: state.level, xp: state.xp, nextXp: state.nextXp, kills: state.kills,
         enemies: state.enemies.length, projectiles: state.projectiles.length, pickups: state.pickups.length,
-        loot: state.loot.map(item => ({ ...item })), combatDrops: state.combatDrops.map(item => ({ ...item })), scene: state.scene, stage: state.scene, worldVersion: 3, weapon: { ...state.weapon }, modifiers: modifiers(),
+        loot: state.loot.map(item => ({ ...item })), combatDrops: state.combatDrops.map(item => ({ ...item })), bag: state.bag.map(item => ({ ...item })), bagCapacity: state.bagCapacity, bagPanelOpen: !!state.bagPanelOpen, searchPanel: state.searchPanel ? { boxId: state.searchPanel.boxId, entries: state.searchPanel.entries.map(entry => ({ ...entry })), elapsed: searchElapsed(state.searchPanel) } : null, extractedLoot: state.extractedLoot.map(item => ({ ...item })), extraction: state.extraction ? { ...state.extraction } : null, scene: state.scene, stage: state.scene, worldVersion: 3, weapon: { ...state.weapon }, modifiers: modifiers(),
         worldLayer: state.worldLayer,
         activeHouseId: state.activeHouseId,
         houses: [...state.houseRooms.values()].map(room => ({ id: room.houseId, worldBounds: room.worldBounds ? { ...room.worldBounds } : null, roofVisible: state.activeHouseId !== room.houseId, interiorVisible: state.activeHouseId === room.houseId })),
@@ -2236,7 +2811,7 @@
         qualityRules: { outdoor: { common: .8, fine: .2 }, indoor: { fine: .4, rare: .45, epic: .15 }, combatDropChance: CONFIG.combatDropChance },
         particles: state.particles.length, mines: state.mines.length, throwableProjectiles: state.throwableProjectiles.length, fireZones: state.fireZones.length, extinguisherZones: (state.extinguisherZones || []).length, slowZones: (state.slowZones || state.extinguisherZones || []).length, traps: state.traps.length,
         spawnRate: spawnRate(), hordeTimer: state.hordeTimer, density: state.density,
-        config: { ...CONFIG }, stats: { ...state.stats }, player: { ...state.player },
+        config: { ...CONFIG }, stats: { ...state.stats }, controls: { viewport: { width: WIDTH, height: HEIGHT, aspect: WIDTH / HEIGHT }, world: { width: WORLD_WIDTH, height: WORLD_HEIGHT }, fireHeld: fireHeld(), manualFire: !!state.player.manualFire, joystick: { ...touchInput } }, player: { ...state.player },
         artStatus: window.WASTELAND_CHARACTER_ART?.status || "unconfigured",
         atlasReady: !!window.WASTELAND_CHARACTER_ART?.ready,
         environmentArt: art?.status || null, visualAssets: { ...visualAssets },
@@ -2247,6 +2822,7 @@
     }
 
     function syncHud() {
+      if (!Number.isFinite(state.weapon?.ammoInMag) || !Number.isFinite(state.weapon?.ammoReserve)) state.weapon = weaponState(state.weapon?.id, state.weapon?.quality)
       ui.timeValue.textContent = formatTime(Math.ceil(Math.max(0, RUN_SECONDS - state.time)))
       ui.waveValue.textContent = `尸潮 ${String(state.wave).padStart(2, "0")} · ${state.time >= RUN_SECONDS - 30 ? "撤离车接近" : "五分钟撤离"}`
       ui.healthFill.style.width = `${state.player.hp / state.player.maxHp * 100}%`
@@ -2258,11 +2834,15 @@
       const quality = Loot.qualities[state.weapon.quality]
       ui.weaponValue.textContent = `${quality.name} · ${state.weapon.name}`
       ui.weaponValue.style.color = quality.color
-      ui.sceneValue.textContent = state.room ? `${state.room.name || "房屋内部"} · ${state.room.floorLabel || "一楼鸟瞰"} · 精良 / 稀有 / 史诗物资` : "室外街区 · 普通 / 精良掉落"
+      ui.ammoValue.textContent = `弹匣 ${state.weapon.ammoInMag ?? 0} / ${state.weapon.ammoReserve ?? 0} · R 换弹`
+      ui.bagValue.textContent = `背包 ${bagUsed()} / ${state.bagCapacity} · ${state.extraction?.reached ? "已到绿色撤离区" : "搜索物资箱后拾取"}`
+      ui.sceneValue.textContent = state.room ? `${state.room.name || "房屋内部"} · ${state.room.floorLabel || "一楼鸟瞰"} · 箱内：披萨 / 牛奶 / 弹药 / 杂物` : "室外街区 · 普通 / 精良掉落"
       const interaction = interactionTarget()
       ui.interactRun.hidden = !interaction
       ui.interactRun.textContent = interaction?.label || "搜索 · E"
       ui.pauseRun.hidden = state.phase !== "playing" || state.paused
+      renderBagPanel()
+      renderSearchWindow()
       ui.adminPause.textContent = state.paused ? "继续" : "暂停"
       if (adminMode && !ui.adminPanel.hidden) {
         ui.adminMetrics.textContent = `时间 ${formatTime(state.time)} · ${state.phase}${state.paused ? " / 暂停" : ""}\n感染者 ${state.enemies.length}/${CONFIG.enemyCap} · 峰值 ${state.stats.peakEnemies}\n刷怪 ${spawnRate().toFixed(2)}/秒 · FPS ${state.lastFps.toFixed(0)}\n射击 ${state.stats.shots} · 命中 ${state.stats.hits}\n累计伤害 ${Math.round(state.stats.damage)} · 爆炸 ${state.stats.explosions}\n弹丸 ${state.projectiles.length} · 特效 ${state.particles.length}\n玩家 ${state.player.x.toFixed(0)},${state.player.y.toFixed(0)} · ${state.player.movingSpeed.toFixed(0)}px/s`
@@ -2271,6 +2851,18 @@
 
     function releaseInput() {
       keys.clear()
+      releaseFire()
+      releaseJoystick()
+    }
+
+    // Search and backpack sheets are gameplay modals. The simulation keeps
+    // running behind them, but no movement or firing input should leak through
+    // while the player is arranging or claiming supplies.
+    function gameplayModalOpen() {
+      return Boolean(state?.searchPanel || state?.bagPanelOpen)
+    }
+
+    function releaseJoystick() {
       touchInput.x = 0
       touchInput.y = 0
       if (joystickPointer !== null && ui.joystick.hasPointerCapture?.(joystickPointer)) ui.joystick.releasePointerCapture(joystickPointer)
@@ -2278,11 +2870,43 @@
       ui.stick.style.transform = "translate(0px, 0px)"
     }
 
+    function fireHeld() { return fireInput.keyboard || fireInput.pointerId !== null }
+
+    function setFireState(held, pointerId = null) {
+      if (held && state?.phase === "playing" && !state.paused) {
+        fireInput.pointerId = pointerId
+        fireInput.held = true
+        if (state.player) { state.player.manualFire = true; state.player.fireTimer = Math.min(0, state.player.fireTimer) }
+        ui.shootButton.classList.add("is-held")
+      } else if (pointerId === null || fireInput.pointerId === pointerId) {
+        if (pointerId !== null) fireInput.pointerId = null
+        fireInput.held = fireHeld()
+        if (state?.player) state.player.manualFire = fireInput.held
+        if (!fireInput.held) ui.shootButton.classList.remove("is-held")
+      }
+    }
+
+    function releaseFire() {
+      fireInput.keyboard = false
+      fireInput.pointerId = null
+      fireInput.held = false
+      if (state?.player) state.player.manualFire = false
+      ui.shootButton.classList.remove("is-held")
+    }
+
     function togglePause(force) {
       if (!state || state.phase !== "playing") return
       state.paused = typeof force === "boolean" ? force : !state.paused
       releaseInput()
       accumulator = 0
+      if (state.paused) {
+        // Keep the pause sheet above every gameplay modal. Closing the search
+        // and backpack windows also prevents clicks from changing the run
+        // while the simulation is frozen.
+        closeSearchWindow()
+        state.bagPanelOpen = false
+        if (ui.bagPanel) ui.bagPanel.hidden = true
+      }
       showOnlyOverlay(state.paused ? ui.pauseOverlay : null)
       syncHud()
     }
@@ -2290,16 +2914,76 @@
     ui.startRun.addEventListener("click", startRun)
     ui.restartRun.addEventListener("click", startRun)
     ui.interactRun.addEventListener("click", interact)
+    ui.bagButton.addEventListener("click", () => toggleBagPanel())
+    ui.bagClose.addEventListener("click", () => toggleBagPanel(false))
+    ui.searchClose.addEventListener("click", () => closeSearchWindow())
+    ui.searchGrid.addEventListener("click", event => {
+      const card = event.target?.closest?.("[data-search-index]")
+      const index = card?.dataset?.searchIndex
+      if (index !== undefined) takeSearchItem(index)
+    })
+    ui.bagGrid.addEventListener("pointerdown", bagPointerDown)
+    for (const name of ["pointerup", "pointercancel", "lostpointercapture"]) ui.bagGrid.addEventListener(name, name === "pointerup" ? bagPointerUp : bagPointerCancel)
+    ui.bagGrid.addEventListener("dragstart", event => {
+      const index = Number(event.target?.closest?.("[data-bag-index]")?.dataset?.bagIndex)
+      if (!Number.isInteger(index) || !state?.bag?.[index]) return
+      state.bagDrag = { index, pointerId: "native" }
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"
+    })
+    ui.bagGrid.addEventListener("dragover", event => { if (state?.bagDrag) event.preventDefault?.() })
+    ui.bagGrid.addEventListener("drop", event => {
+      event.preventDefault?.()
+      const from = state?.bagDrag?.index
+      const card = event.target?.closest?.("[data-bag-index]")
+      const to = Number(card?.dataset?.bagIndex)
+      if (Number.isInteger(from) && Number.isInteger(to)) reorderBag(from, to)
+      state.bagDrag = null
+      renderBagPanel()
+    })
+    ui.bagGrid.addEventListener("dragend", event => {
+      if (state?.bagDrag?.pointerId === "native") {
+        const rect = ui.bagPanel?.getBoundingClientRect?.()
+        if (rect && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) dropBagItem(state.bagDrag.index)
+        state.bagDrag = null
+        renderBagPanel()
+      }
+    })
     ui.pauseRun.addEventListener("click", () => togglePause(true))
     ui.resumeRun.addEventListener("click", () => togglePause(false))
     const movementKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"])
     window.addEventListener("keydown", event => {
-      if (movementKeys.has(event.code)) { event.preventDefault(); if (state.phase === "playing" && !state.paused) keys.add(event.code) }
-      if ((event.code === "KeyP" || event.code === "Escape") && !event.repeat) { event.preventDefault(); togglePause() }
-      if (event.code === "KeyE" && !event.repeat) { event.preventDefault(); interact() }
+      if (movementKeys.has(event.code)) { event.preventDefault(); if (state.phase === "playing" && !state.paused && !gameplayModalOpen()) keys.add(event.code) }
+      if (event.code === "Space") {
+        event.preventDefault()
+        if (!event.repeat && state.phase === "playing" && !state.paused && !gameplayModalOpen()) {
+          fireInput.keyboard = true
+          fireInput.held = true
+          state.player.manualFire = true
+          state.player.fireTimer = 0
+          ui.shootButton.classList.add("is-held")
+        }
+      }
+      if ((event.code === "KeyP" || event.code === "Escape") && !event.repeat) {
+        event.preventDefault()
+        if (event.code === "Escape" && state.searchPanel) { closeSearchWindow(); return }
+        if (event.code === "Escape" && state.bagPanelOpen) { toggleBagPanel(false); return }
+        togglePause()
+      }
+      if (event.code === "KeyB" && !event.repeat) { event.preventDefault(); toggleBagPanel() }
+      if (event.code === "KeyE" && !event.repeat) { event.preventDefault(); if (!gameplayModalOpen()) interact() }
+      if (event.code === "KeyR" && !event.repeat) { event.preventDefault(); if (!gameplayModalOpen()) { reloadWeapon(); syncHud() } }
       if (adminMode && event.code === "F1") { event.preventDefault(); state.showHitboxes = !state.showHitboxes }
     })
-    window.addEventListener("keyup", event => { if (movementKeys.has(event.code)) { event.preventDefault(); keys.delete(event.code) } })
+    window.addEventListener("keyup", event => {
+      if (movementKeys.has(event.code)) { event.preventDefault(); keys.delete(event.code) }
+      if (event.code === "Space") {
+        event.preventDefault()
+        fireInput.keyboard = false
+        fireInput.held = fireHeld()
+        if (state?.player) state.player.manualFire = fireInput.held
+        if (!fireInput.held) ui.shootButton.classList.remove("is-held")
+      }
+    })
     window.addEventListener("blur", () => { releaseInput(); togglePause(true) })
     document.addEventListener("visibilitychange", () => { if (document.hidden) { releaseInput(); togglePause(true) } })
     function moveJoystick(event) {
@@ -2315,11 +2999,27 @@
       ui.stick.style.transform = `translate(${x}px, ${y}px)`
     }
     ui.joystick.addEventListener("pointerdown", event => {
-      if (state.phase !== "playing" || state.paused || joystickPointer !== null) return
-      event.preventDefault(); joystickPointer = event.pointerId; ui.joystick.setPointerCapture(event.pointerId); moveJoystick(event)
+      if (state.phase !== "playing" || state.paused || gameplayModalOpen() || joystickPointer !== null) return
+      event.preventDefault(); joystickPointer = event.pointerId; ui.joystick.setPointerCapture?.(event.pointerId); moveJoystick(event)
     })
     ui.joystick.addEventListener("pointermove", moveJoystick)
-    for (const name of ["pointerup", "pointercancel", "lostpointercapture"]) ui.joystick.addEventListener(name, event => { if (event.pointerId === joystickPointer) releaseInput() })
+    for (const name of ["pointerup", "pointercancel", "lostpointercapture"]) ui.joystick.addEventListener(name, event => { if (event.pointerId === joystickPointer) releaseJoystick() })
+
+    function beginFirePointer(event) {
+      if (state?.phase !== "playing" || state.paused || gameplayModalOpen() || (fireInput.pointerId !== null && fireInput.pointerId !== event.pointerId)) return
+      event.preventDefault()
+      fireInput.pointerId = event.pointerId
+      setFireState(true, event.pointerId)
+      ui.shootButton.setPointerCapture?.(event.pointerId)
+    }
+    function endFirePointer(event) {
+      if (event.pointerId !== fireInput.pointerId) return
+      event.preventDefault()
+      setFireState(false, event.pointerId)
+      ui.shootButton.releasePointerCapture?.(event.pointerId)
+    }
+    ui.shootButton.addEventListener("pointerdown", beginFirePointer)
+    for (const name of ["pointerup", "pointercancel", "lostpointercapture"]) ui.shootButton.addEventListener(name, endFirePointer)
 
     if (adminMode) {
       ui.adminToggle.hidden = false
@@ -2339,8 +3039,9 @@
         catch { toast("浏览器未提供剪贴板权限") }
       })
       window.__LAST_NIGHT_DEBUG__ = Object.freeze({
-        snapshot, spawnLoot, spawnCombatDrop, tryCollectLoot, interact, enterBuilding, exitBuilding, get state() { return state }, get config() { return { ...CONFIG } }, get build() { return build }, get map() { return city },
-        get loot() { return state.loot }, get combatDrops() { return state.combatDrops }, get houses() { return houseSystem }, get modifiers() { return modifiers() },
+        snapshot, spawnLoot, spawnCombatDrop, tryCollectLoot, takeSupply, interact, searchSupplyBox, openSupplyBox, openSearchWindow, closeSearchWindow, takeSearchItem, toggleBagPanel, reorderBag, dropBagItem, carrySupply, reloadWeapon, updateExtractionState, takeDamage, enterBuilding, exitBuilding, get state() { return state }, get config() { return { ...CONFIG } }, get build() { return build }, get map() { return city },
+        get loot() { return state.loot }, get combatDrops() { return state.combatDrops }, get bag() { return state.bag }, get supplyItems() { return Loot.supplyItems }, get houses() { return houseSystem }, get modifiers() { return modifiers() },
+        get searchPanel() { return state.searchPanel }, get bagPanelOpen() { return !!state.bagPanelOpen },
         get artStatus() { return window.WASTELAND_CHARACTER_ART?.status || "unconfigured" },
         get atlasReady() { return !!window.WASTELAND_CHARACTER_ART?.ready },
         get animationFrame() { return window.WASTELAND_CHARACTER_ART?.animationFrame || null },

@@ -208,7 +208,7 @@
         ctx.fillStyle = "#15231f88"; ctx.fillRect(x + 4, y + 4, 48, 36)
         ctx.fillStyle = container.searched ? "#59645a" : "#3f7769"; ctx.fillRect(x, y, 48, 36)
         ctx.strokeStyle = container.searched ? "#a5af99" : "#f1cf7d"; ctx.lineWidth = 2; ctx.strokeRect(x, y, 48, 36)
-        ctx.fillStyle = container.searched ? "#cad0af" : "#ffe7a5"; ctx.font = "bold 12px Microsoft YaHei, sans-serif"; ctx.textAlign = "center"; ctx.fillText(container.searched ? "已搜" : "搜寻", container.x, container.y + 5)
+        ctx.fillStyle = container.searched ? "#cad0af" : "#ffe7a5"; ctx.font = "bold 12px Microsoft YaHei, sans-serif"; ctx.textAlign = "center"; ctx.fillText(container.searched ? "已搜" : "物资箱", container.x, container.y + 5)
       }
       // The threshold remains a normal opening in this same canvas. Do not
       // paint a return button or imply a scene transition; movement through

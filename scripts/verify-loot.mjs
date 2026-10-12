@@ -81,9 +81,9 @@ async function browserChecks() {
   try {
     browser = await chromium.launch({ channel: process.env.LOOT_BROWSER_CHANNEL || process.env.COMBAT_BROWSER_CHANNEL || "msedge", headless: true });
     const url = `http://127.0.0.1:${server.address().port}/index.html?admin=1&tester=loot`;
-    for (const viewport of [{ width: 390, height: 844 }, { width: 320, height: 568 }]) {
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 960, height: 540 }]) {
       const page = await browser.newPage({ viewport, hasTouch: true, isMobile: true });
-      const prefix = viewport.width === 390 ? "mobile" : "compact";
+      const prefix = viewport.width === 1280 ? "landscape" : "compact-landscape";
       page.on("pageerror", error => errors.push(error.message));
       page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
       await page.goto(url); await page.locator("#startRun").click();
@@ -137,26 +137,45 @@ async function browserChecks() {
       const buttonBox = await page.locator("#interactRun").boundingBox();
       assert(buttonBox.x >= 0 && buttonBox.y >= 0 && buttonBox.x + buttonBox.width <= viewport.width + 1 && buttonBox.y + buttonBox.height <= viewport.height + 1);
       await page.locator("#interactRun").click();
-      const found = await page.evaluate(() => {
+       const found = await page.evaluate(() => {
         const d = window.__LAST_NIGHT_DEBUG__; d.state.paused = true;
-        const ball = d.loot.at(-1);
-        return { ball, searched: d.state.room.containers[0].searched, weapon: d.state.weapon,
+         const supplies = d.loot.filter(item => item.boxId === d.state.room.containers[0].id);
+         return { supplies, searched: d.state.room.containers[0].searched, weapon: d.state.weapon,
           time: d.state.time, scene: d.state.scene };
       });
-      assert(found.searched); assert(found.ball); assert(["fine", "rare", "epic"].includes(found.ball.quality));
-      assert.equal(found.ball.kind, "skill", "the first house cache yields a throwable skill");
-      assert(["grenade", "molotov", "bearTrap", "extinguisher"].includes(found.ball.itemId), "the first house cache yields only a supported throwable");
+       assert(found.searched); assert.equal(found.supplies.length, 4);
+       assert.deepEqual(found.supplies.map(item => item.itemId), ["pizza", "milk", "ammo", "junk"]);
+       assert(found.supplies.every(item => item.kind === "supply" && ["pizza", "milk", "ammo", "junk"].includes(item.itemId)), "the first house cache yields only A Pi supply items");
       assert.equal(found.weapon.id, "assaultRifle", "searching drops the gun rather than instantly equipping it");
       await page.screenshot({ path: join(evidence, `${prefix}-house-search.png`) });
-      const equipped = await page.evaluate(() => {
-        const d = window.__LAST_NIGHT_DEBUG__, ball = d.loot.at(-1);
-        d.state.player.x = ball.x; d.state.player.y = ball.y; d.step(1 / 60);
-        return { weapon: d.state.weapon, scene: d.state.scene, slots: d.build.slots().length, skill: d.build.level(ball.itemId) };
+       const equipped = await page.evaluate(() => {
+         const d = window.__LAST_NIGHT_DEBUG__, ball = d.loot.find(item => item.boxId === d.state.room.containers[0].id);
+         d.closeSearchWindow(); d.state.paused = false; d.state.player.x = ball.x; d.state.player.y = ball.y; d.step(1 / 60);
+         return { picked: ball.itemId, weapon: d.state.weapon, scene: d.state.scene, activeHouseId: d.state.activeHouseId, slots: d.build.slots().length, bag: d.bag.map(item => item.itemId) };
       });
       assert.equal(equipped.weapon.id, "assaultRifle");
-      assert.equal(equipped.scene, houseId); assert.equal(equipped.slots, 3); assert.equal(equipped.skill, 1);
-      await page.screenshot({ path: join(evidence, `${prefix}-house-equipped.png`) });
-      pass(`${prefix} visible touch interaction enters a house, searches higher quality throwable passives and collects on contact`, { viewport, weapon: equipped.weapon, skill: equipped.skill });
+       assert.equal(equipped.scene, "city"); assert.equal(equipped.activeHouseId, houseId); assert.equal(equipped.slots, 3); assert.equal(equipped.bag.length, 1); assert.equal(equipped.bag[0], equipped.picked);
+       await page.screenshot({ path: join(evidence, `${prefix}-house-equipped.png`) });
+       pass(`${prefix} visible touch interaction enters a house, searches A Pi supply items and collects on contact`, { viewport, weapon: equipped.weapon, supply: equipped.picked });
+
+      await page.locator("#bagButton").click();
+      assert(await page.locator("#bagPanel").isVisible(), "the small backpack button opens the backpack window");
+      assert.equal(await page.locator("#bagGrid .bag-slot:not(.empty)").count(), 1, "the carried supply occupies one visible backpack slot");
+      const bagPanelBox = await page.locator("#bagPanel").boundingBox();
+      const bagSlotBox = await page.locator("#bagGrid .bag-slot:not(.empty)").boundingBox();
+      assert(bagPanelBox && bagSlotBox);
+      await page.mouse.move(bagSlotBox.x + bagSlotBox.width / 2, bagSlotBox.y + bagSlotBox.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(bagPanelBox.x + 5, bagPanelBox.y + 5, { steps: 8 });
+      await page.mouse.up();
+      const droppedBag = await page.evaluate(() => {
+        const d = window.__LAST_NIGHT_DEBUG__;
+        return { count: d.bag.length, dropped: d.loot.some(item => item.droppedFromBag && item.kind === "supply") };
+      });
+      assert.equal(droppedBag.count, 0, "dragging outside the backpack removes the carried entry");
+      assert(droppedBag.dropped, "dragging outside the backpack leaves the supply on the shared map");
+      await page.locator("#bagClose").click();
+      pass(`${prefix} backpack button opens six slots and dragging outside drops the carried supply`, { viewport, droppedBag });
 
       await page.evaluate(() => { window.__LAST_NIGHT_DEBUG__.state.paused = false; });
       await page.locator("#pauseRun").click();
@@ -201,10 +220,10 @@ async function browserChecks() {
       pass(`${prefix} real pause freezes search state, physical doorway exit and return preserve caches, victory restart resets the run`, { viewport, entry: entered, exit: exited });
       await page.close();
     }
-    const live = await browser.newPage({ viewport: { width: 390, height: 844 } });
+     const live = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     live.on("pageerror", error => errors.push(error.message)); await live.goto(url); await live.locator("#startRun").click();
     const start = await live.evaluate(() => { const d = window.__LAST_NIGHT_DEBUG__; d.state.godMode = true; return { x: d.state.player.x, shots: d.state.stats.shots, time: d.state.time }; });
-    await live.keyboard.down("KeyD"); await live.waitForTimeout(3500); await live.keyboard.up("KeyD");
+     await live.keyboard.down("KeyD"); await live.keyboard.down("Space"); await live.waitForTimeout(3500); await live.keyboard.up("Space"); await live.keyboard.up("KeyD");
     const end = await live.evaluate(() => { const d = window.__LAST_NIGHT_DEBUG__; d.state.paused = true; return { x: d.state.player.x, shots: d.state.stats.shots, time: d.state.time, phase: d.state.phase, loot: d.loot.length }; });
     assert(end.x > start.x); assert(end.shots > start.shots); assert(end.time > start.time + 2); assert.equal(end.phase, "playing"); assert(end.loot > 0);
     await live.screenshot({ path: join(evidence, "desktop-live-drop.png") });

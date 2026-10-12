@@ -71,7 +71,11 @@ assert.equal(debug.snapshot().nextXp, 5)
 assert.equal(debug.state.enemies.every(enemy => enemy.type === "walker" && enemy.speed === 38), true)
 debug.state.godMode = true
 debug.state.nextXp = 1e9
+debug.step(.5)
+assert.equal(debug.snapshot().stats.shots, 0, "the rifle waits for manual fire input")
+page.key("Space")
 debug.step(5)
+page.key("Space", false)
 assert.ok(debug.snapshot().stats.shots > 0)
 assert.ok(debug.snapshot().stats.hits > 0)
 assert.ok(debug.snapshot().kills > 0)
@@ -132,7 +136,9 @@ const closeEnemy = { ...debug.state.enemies[0], x: debug.state.player.x, y: debu
 debug.state.enemies = [closeEnemy]
 debug.state.player.fireTimer = 0
 const previousHits = debug.state.stats.hits
+page.key("Space")
 debug.step(.1)
+page.key("Space", false)
 assert.ok(debug.state.stats.hits > previousHits)
 assert.ok(closeEnemy.hp < 100)
 console.log("PASS rifle's first collision sweep hits an enemy inside the muzzle reach")
