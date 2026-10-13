@@ -765,17 +765,28 @@
     const visualAssets = { status: browserArt ? "loading" : "unavailable", ready: !browserArt, startedAt: performance.now() }
     const loadLabel = document.getElementById("assetLoadStatus")
     function syncVisualAssets() {
-      if (!browserArt || visualAssets.ready || visualAssets.status === "error") return
-      if (art?.environmentReady && window.WASTELAND_CHARACTER_ART?.ready) {
+      if (!browserArt || visualAssets.ready) return
+      const elapsed = performance.now() - visualAssets.startedAt
+      const environmentReady = Boolean(art?.environmentReady)
+      const characterReady = Boolean(window.WASTELAND_CHARACTER_ART?.ready)
+      const characterFailed = window.WASTELAND_CHARACTER_ART?.status === "error"
+      if (environmentReady && characterReady) {
         visualAssets.ready = true
         visualAssets.status = "ready"
-      } else if ((art?.environmentSettled && !art.environmentReady) || window.WASTELAND_CHARACTER_ART?.status === "error" || performance.now() - visualAssets.startedAt > 30000) {
-        visualAssets.status = "error"
+      } else if (environmentReady && (characterFailed || elapsed > 20000)) {
+        // Character art has an existing vector renderer fallback. Do not block
+        // the playable scene when a slow mobile/tunnel image is still decoding.
+        visualAssets.ready = true
+        visualAssets.status = "fallback-character"
+      } else if ((art?.environmentSettled && !environmentReady && elapsed > 5000) || elapsed > 90000) {
+        // The terrain and gameplay can also run on the generated canvas when a
+        // public tunnel cannot finish transferring the large atlas files.
+        visualAssets.ready = true
+        visualAssets.status = "fallback-generated"
       }
-      const failed = visualAssets.status === "error"
-      ui.startRun.disabled = !visualAssets.ready && !failed
-      ui.startRun.textContent = visualAssets.ready ? "进入街区" : failed ? "重试加载素材" : "正在加载场景…"
-      if (loadLabel) loadLabel.textContent = visualAssets.ready ? "场景与角色已就绪" : failed ? "素材加载失败，请重试。" : "正在准备手绘场景与角色，请稍候。"
+      ui.startRun.disabled = !visualAssets.ready
+      ui.startRun.textContent = visualAssets.ready ? "进入街区" : "正在加载场景…"
+      if (loadLabel) loadLabel.textContent = visualAssets.status === "ready" ? "场景与角色已就绪" : visualAssets.ready ? "素材较慢，已启用内置绘制，可直接进入" : "正在准备手绘场景与角色，请稍候。"
     }
 
     function modifiers() {

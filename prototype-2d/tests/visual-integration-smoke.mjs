@@ -111,15 +111,13 @@ try {
   let fail = true
   await retry.route("**/apocalypse-environment.png", route => fail ? route.abort() : route.continue())
   await retry.goto(url, { waitUntil: "domcontentloaded" })
-  await retry.waitForFunction(() => window.__LAST_NIGHT_DEBUG__?.visualAssets.status === "error")
+  await retry.waitForFunction(() => window.__LAST_NIGHT_DEBUG__?.visualAssets.status === "fallback-generated")
   assert.equal(await retry.evaluate(() => window.__LAST_NIGHT_DEBUG__.snapshot().phase), "intro")
-  assert.equal(await retry.locator("#startRun").textContent(), "重试加载素材")
+  assert.equal(await retry.locator("#startRun").textContent(), "进入街区")
   fail = false
-  await Promise.all([retry.waitForNavigation({ waitUntil: "domcontentloaded" }), retry.locator("#startRun").click()])
-  await retry.waitForFunction(() => window.__LAST_NIGHT_DEBUG__?.visualAssets.ready)
   await retry.locator("#startRun").click()
   assert.equal(await retry.evaluate(() => window.__LAST_NIGHT_DEBUG__.snapshot().phase), "playing")
-  pass("failed environment loading keeps the run closed; retry restores detailed assets")
+  pass("failed environment loading falls back to the generated canvas and keeps the run playable")
   assert.deepEqual(errors, [])
   writeFileSync(join(evidence, "browser-report.json"), JSON.stringify({ results, errors }, null, 2))
 } finally {
