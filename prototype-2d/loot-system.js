@@ -20,12 +20,9 @@
   const throwableSkills = Object.freeze(["grenade", "molotov", "bearTrap", "extinguisher"])
   const ranks = Object.keys(qualities)
 
-  // The supply-box table mirrors the first A Pi adventure search: each box
-  // reveals the same four carryable categories (food, drink, ammunition and
-  // salvage).  They stay separate from upgrade balls and combat drops.
-  // Supply quality is used by the search window as well as the world marker.
-  // The four first-search items stay deterministic, while their quality gives
-  // the player the same readable "identify, then take" rhythm as A Pi's box.
+  // Only these tutorial item names have been observed in public references.
+  // Capacity, sizes, qualities and effect values below are prototype tuning,
+  // not a verified complete catalog or exact rules from A Pi Adventure.
   const supplyItems = Object.freeze({
     pizza: { id: "pizza", name: "披萨", icon: "披", color: "#f2b35e", category: "food", heal: 24, weight: 2, quality: "rare", revealDelay: 1.25 },
     milk: { id: "milk", name: "牛奶", icon: "奶", color: "#e7e2c8", category: "food", heal: 16, weight: 1, quality: "fine", revealDelay: .82 },
@@ -35,7 +32,6 @@
   const supplyPool = Object.freeze([
     ["pizza", .25], ["milk", .25], ["ammo", .25], ["junk", .25]
   ])
-
   function randomSupplyLoot(random = Math.random) {
     let roll = Math.max(0, Math.min(.999999, Number(random()) || 0))
     for (const [id, weight] of supplyPool) {
@@ -45,10 +41,7 @@
     return supplyItems.junk
   }
 
-  function rollSupplyContents(random = Math.random) {
-    // Search results are deliberately deterministic: the player always gets
-    // the four recognizable first-round items, in a stable order that keeps
-    // screenshots and scripted acceptance checks repeatable.
+  function rollSupplyContents() {
     return ["pizza", "milk", "ammo", "junk"]
   }
 

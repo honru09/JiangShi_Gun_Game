@@ -19,7 +19,7 @@ function boot(coarse = false, admin = true) {
     return target[key] || noop
   }, set(target, key, value) { target[key] = value; return true } })
   class Element {
-    constructor(id) { this.id = id; this.value = "1"; this.hidden = false; this.style = {}; this.innerHTML = ""; this.textContent = ""; this.handlers = new Map(); this.classList = { add: noop, remove: noop }; this.capture = null }
+    constructor(id) { this.id = id; this.value = "1"; this.hidden = false; this.style = {}; this.innerHTML = ""; this.textContent = ""; this.handlers = new Map(); this.classList = { add: noop, remove: noop, toggle: noop }; this.capture = null }
     addEventListener(name, handler) { if (!this.handlers.has(name)) this.handlers.set(name, []); this.handlers.get(name).push(handler) }
     emit(name, event = {}) { for (const handler of this.handlers.get(name) || []) handler({ preventDefault: noop, target: this, ...event }) }
     getContext() { return drawing }

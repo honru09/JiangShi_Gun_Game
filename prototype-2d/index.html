@@ -212,7 +212,7 @@
     .bag-button:active, .bag-button.is-open { background: #4f713dcc; transform: scale(.94); }
     .bag-button:focus-visible { outline: 2px solid var(--acid); outline-offset: 3px; }
 
-    .loot-window, .backpack-window {
+    .backpack-window {
       position: absolute;
       z-index: 13;
       inset: 0;
@@ -223,21 +223,25 @@
       backdrop-filter: blur(3px);
       touch-action: none;
     }
-    .loot-sheet, .backpack-sheet {
-      width: min(560px, calc(100% - 20px));
-      max-height: calc(100% - 28px);
-      overflow: auto;
-      padding: 15px;
-      border: 1px solid #738270;
+    .inventory-sheet {
+      display: flex; gap: 16px; width: min(860px, 100%); max-height: 100%; overflow: auto;
+      padding: 16px; border: 1px solid #738270;
       background: linear-gradient(145deg, #29382df7, #101a14f7);
       box-shadow: 0 22px 64px #000d, inset 0 1px #ffffff18;
     }
+    .inventory-sheet:not(.is-searching) { width: min(460px, 100%); }
+    .loot-sheet, .backpack-sheet { flex: 1; min-width: 0; }
+    .loot-sheet { padding-right: 16px; border-right: 1px solid #657466; }
+    .bag-detail { min-height: 36px; margin-top: 10px; color: #c2ccad; font-size: 11px; line-height: 1.5; }
+    .bag-drag-ghost { position: fixed; z-index: 30; pointer-events: none; padding: 10px 18px; border: 1px solid #d8f25a; color: #edf1d4; background: #263b29ef; transform: translate(-50%, -110%); }
+    .bag-slot.is-selected { border-color: var(--acid); box-shadow: inset 0 0 0 1px var(--acid); }
+    .bag-slot.is-target { outline: 2px solid var(--acid); outline-offset: -3px; }
     .loot-head, .backpack-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .loot-head strong, .backpack-head strong { color: var(--acid); font-size: 16px; letter-spacing: .08em; }
     .loot-head small, .backpack-head small { color: #aab7a6; font-size: 9px; }
     .window-close { min-width: 46px; min-height: 28px; border: 1px solid #657466; background: #17231b; color: var(--bone); font-size: 10px; font-weight: 900; cursor: pointer; }
     .loot-progress { margin: 12px 0 9px; color: #becbb7; font-size: 10px; line-height: 1.45; }
-    .loot-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+    .loot-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
     .loot-card {
       min-width: 0;
       min-height: 88px;
@@ -256,14 +260,18 @@
     .loot-card .loot-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 900; }
     .loot-card .loot-rarity { display: block; margin-top: 3px; font-size: 8px; }
     .loot-card .loot-action { display: block; margin-top: 6px; color: #d8f25a; font-size: 8px; font-weight: 900; }
+    .loot-actions { display: flex; justify-content: center; gap: 7px; margin-top: 11px; }
+    .loot-actions button { min-height: 30px; padding: 5px 10px; border: 1px solid #657466; background: #17231b; color: var(--bone); font-size: 9px; font-weight: 900; cursor: pointer; }
+    .loot-actions button.primary { border-color: var(--acid); color: var(--acid); }
+    .loot-actions button:disabled { cursor: default; opacity: .45; }
     .loot-tip, .backpack-tip { margin: 11px 0 0; color: #8e9d8c; font-size: 9px; line-height: 1.5; text-align: center; }
-    .backpack-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+    .backpack-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, 78px); gap: 8px; margin-top: 14px; }
     .bag-slot {
       position: relative;
       min-height: 72px;
       padding: 7px 5px;
       border: 1px solid #596759;
-      background: #111b15dc;
+      background: #111b15;
       color: var(--bone);
       text-align: center;
       cursor: grab;
@@ -278,7 +286,10 @@
     @media (max-width: 720px) {
       .bag-button { right: 120px; bottom: calc(47px + var(--safe-bottom)); width: 44px; height: 44px; font-size: 19px; }
       .loot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .loot-sheet, .backpack-sheet { padding: 12px; }
+      .inventory-sheet { padding: 10px; gap: 10px; }
+      .loot-sheet { padding-right: 10px; }
+      .backpack-grid { gap: 5px; }
+      .backpack-window { padding: 10px; }
     }
     .orientation-hint { display: none; position: absolute; z-index: 20; inset: 0; place-items: center; padding: 18px; background: #101712b8; color: var(--bone); font-size: 12px; font-weight: 900; text-align: center; pointer-events: none; }
 
@@ -498,21 +509,24 @@
       <div class="skill-dock" id="skillDock" aria-label="屏幕边缘主武器 1 格与道具 4 格"></div>
       <button class="interact-action" id="interactRun" type="button" hidden>搜索物资 · E</button>
 
-      <section class="loot-window" id="searchWindow" hidden aria-label="物资箱搜索窗口">
-        <div class="loot-sheet">
-          <div class="loot-head"><div><strong id="searchTitle">物资箱</strong><small id="searchSubtitle">搜索中…</small></div><button class="window-close" id="searchClose" type="button">关闭</button></div>
-          <div class="loot-progress" id="searchProgress">正在逐项识别物资…</div>
-          <div class="loot-grid" id="searchGrid"></div>
-          <p class="loot-tip">物资按等级逐项显现；点击已识别物资带入背包。背包满时可先打开背包整理。</p>
+      <section class="backpack-window" id="bagPanel" hidden aria-label="物资与背包窗口">
+        <div class="inventory-sheet" id="inventorySheet" role="dialog" aria-label="物资与背包">
+          <section class="loot-sheet" id="searchWindow" hidden aria-label="物资箱搜索窗口">
+            <div class="loot-head"><div><strong id="searchTitle">物资箱</strong><small id="searchSubtitle">搜索中…</small></div><button class="window-close" id="searchClose" type="button">收起物资</button></div>
+            <div class="loot-progress" id="searchProgress">正在逐项识别物资…</div>
+            <div class="loot-grid" id="searchGrid"></div>
+            <div class="loot-actions"><button class="primary" id="searchTakeAll" type="button">带走已识别</button></div>
+            <p class="loot-tip">逐项识别，高品质需要更久。未带走的物资保留在箱内，关闭后可继续搜索。</p>
+          </section>
+          <section class="backpack-sheet" aria-label="背包">
+            <div class="backpack-head"><div><strong>背包</strong><small id="bagPanelCount">0 / 6 格</small></div><button class="window-close" id="bagClose" type="button">返回游戏</button></div>
+            <div class="backpack-grid" id="bagGrid"></div>
+            <div class="bag-detail" id="bagDetail">点击物资查看详情</div>
+            <div class="loot-actions"><button class="primary" id="bagUse" type="button" disabled>使用</button><button id="bagDiscard" type="button" disabled>丢弃</button></div>
+            <p class="backpack-tip">按住拖动可移位或交换；拖出整个面板丢回地图。放在标题或说明上会取消移动。</p>
+          </section>
         </div>
-      </section>
-
-      <section class="backpack-window" id="bagPanel" hidden aria-label="背包窗口">
-        <div class="backpack-sheet">
-          <div class="backpack-head"><div><strong>背包</strong><small id="bagPanelCount">0 / 6 格</small></div><button class="window-close" id="bagClose" type="button">关闭</button></div>
-          <div class="backpack-grid" id="bagGrid"></div>
-          <p class="backpack-tip">按住物资拖动可调整格子；拖出背包范围会丢回地面。背包物资带到绿色撤离区才会保留。</p>
-        </div>
+        <div id="bagDragGhost" class="bag-drag-ghost" hidden></div>
       </section>
 
       <section class="overlay" id="introOverlay">
@@ -626,7 +640,7 @@
     const canvas = document.getElementById("gameCanvas")
     const context = canvas.getContext("2d", { alpha: false, desynchronized: true })
     const ui = Object.fromEntries([
-      "introOverlay", "gameOverOverlay", "pauseOverlay", "pauseRun", "resumeRun", "startRun", "restartRun", "interactRun", "bagButton", "bagPanel", "bagClose", "bagGrid", "bagPanelCount", "searchWindow", "searchClose", "searchTitle", "searchSubtitle", "searchProgress", "searchGrid", "weaponValue", "ammoValue", "bagValue", "sceneValue",
+      "introOverlay", "gameOverOverlay", "pauseOverlay", "pauseRun", "resumeRun", "startRun", "restartRun", "interactRun", "bagButton", "bagPanel", "bagClose", "bagGrid", "bagPanelCount", "searchWindow", "searchClose", "searchTitle", "searchSubtitle", "searchProgress", "searchGrid", "searchTakeAll", "inventorySheet", "bagDetail", "bagUse", "bagDiscard", "bagDragGhost", "weaponValue", "ammoValue", "bagValue", "sceneValue",
       "pauseSkills",
       "timeValue", "waveValue", "healthFill", "healthValue", "levelValue", "killValue", "enemyValue", "xpFill",
       "waveCallout", "toast", "skillDock", "joystick", "stick", "shootButton", "gameOverSummary", "resultTitle", "resultEyebrow",
@@ -683,6 +697,32 @@
 
     function qualityLabel(quality) {
       return Loot.qualities[quality]?.name || Loot.qualities.common.name
+    }
+
+    const supplyCategoryLabels = Object.freeze({
+      food: "食物", medical: "药品", ammo: "弹药", armor: "护甲", weapon: "枪械",
+      material: "材料", valuable: "贵重", quest: "任务", junk: "杂物"
+    })
+
+    function supplyCategoryLabel(category) {
+      return supplyCategoryLabels[category] || "物资"
+    }
+
+    function supplyCount(item) {
+      return Math.max(1, Number(item?.count ?? item?.stackCount) || 1)
+    }
+
+    function supplyMeta(item, count = supplyCount(item)) {
+      const data = item?.id && Loot.supplyItems[item.id] ? item : supplyDescription(item?.itemId || item?.id)
+      const category = data.category || "junk"
+      const amount = Number(data.amount) || 0
+      const quantity = count > 1 ? ` ×${count}` : ""
+      if (category === "ammo") return `${supplyCategoryLabel(category)} · +${amount * count} 发${quantity}`
+      if (category === "food" || category === "medical") return `${supplyCategoryLabel(category)} · 回复 ${data.heal || 0}${quantity}`
+      if (category === "armor") return `${supplyCategoryLabel(category)} · +${data.armor || 0} 护甲${quantity}`
+      if (category === "weapon") return `${supplyCategoryLabel(category)} · ${qualityLabel(data.quality || "common")}`
+      if (category === "junk" || category === "material" || category === "valuable" || category === "quest") return `${supplyCategoryLabel(category)} · ${data.value ? `价值 ${data.value}` : "可带出"}${quantity}`
+      return `${supplyCategoryLabel(category)}${quantity}`
     }
 
     function roundedPath(target, x, y, width, height, radius) {
@@ -851,7 +891,7 @@
         traps: [],
         floaters: [],
         weapon: weaponState(),
-        // A Pi style raid bag: searched items are carried until the run ends;
+        // Raid backpack: searched items are carried until used or the run ends;
         // defeat clears it while successful extraction snapshots it.
         bag: [],
         bagCapacity: CONFIG.bagCapacity,
@@ -861,6 +901,7 @@
         searchPanel: null,
         bagPanelOpen: false,
         bagDrag: null,
+        bagSelection: null,
         extractedLoot: [],
         extraction: { ...extractionPoint(), radius: CONFIG.extractionRadius, reached: false },
         worldLayer: "city",
@@ -1066,209 +1107,254 @@
       return null
     }
 
-    function renderBagPanel() {
-      if (!ui.bagPanel || !ui.bagGrid || !ui.bagPanelCount || !state) return
-      const bag = state.bag || []
-      const capacity = state.bagCapacity || CONFIG.bagCapacity
-      ui.bagPanelCount.textContent = `${bagUsed()} / ${capacity} 格`
-      // Keep the live drag target in the DOM until pointerup/dragend. The HUD
-      // refreshes several times per second; replacing innerHTML during a drag
-      // would release pointer capture and make an item disappear instead of
-      // being reordered or dropped outside the backpack.
-      if (state.bagDrag) {
-        ui.bagPanel.hidden = !state.bagPanelOpen
-        return
-      }
-      ui.bagGrid.innerHTML = Array.from({ length: capacity }, (_, index) => {
-        const item = bag[index]
-        if (!item) return `<div class="bag-slot empty" data-bag-index="${index}" aria-label="空背包格"><span class="bag-index">${index + 1}</span><span class="bag-icon">＋</span><span class="bag-name">空格</span><span class="bag-meta">可放置</span></div>`
-        const data = supplyDescription(item.itemId)
-        const quality = supplyQuality(item.itemId)
-        const meta = data.category === "ammo" ? `+${data.amount} 发 · ${qualityLabel(quality)}` : `${data.category === "food" ? `回复 ${data.heal}` : "可带出"} · ${qualityLabel(quality)}`
-        return `<button class="bag-slot" type="button" draggable="true" data-bag-index="${index}" aria-label="${data.name}，第${index + 1}格，可拖动"><span class="bag-index">${index + 1}</span><span class="bag-icon" style="color:${data.color}">${data.icon}</span><span class="bag-name">${data.name}</span><span class="bag-meta">${meta}</span></button>`
-      }).join("")
-      if (typeof ui.bagButton.classList.toggle === "function") ui.bagButton.classList.toggle("is-open", !!state.bagPanelOpen)
-      else if (state.bagPanelOpen) ui.bagButton.classList.add("is-open")
-      else ui.bagButton.classList.remove("is-open")
-      ui.bagPanel.hidden = !state.bagPanelOpen
+    function inventoryMutable() {
+      return Boolean(state && state.phase === "playing" && !state.paused)
     }
 
-    function searchElapsed(panel = state?.searchPanel) {
-      if (!panel) return 0
-      const clock = typeof performance?.now === "function" ? performance.now() / 1000 : state?.time || 0
-      return Math.max(0, clock - panel.openedAt)
+    const BAG_COLUMNS = 3
+    function bagItemSpan(item) {
+      return Math.max(1, Math.min(BAG_COLUMNS, Number(item?.weight) || Number(supplyDescription(item?.itemId).weight) || 1))
     }
+
+    function bagCells(item, slot = item.slot) {
+      const span = bagItemSpan(item)
+      if (!Number.isInteger(slot) || slot < 0 || slot + span > state.bagCapacity || slot % BAG_COLUMNS + span > BAG_COLUMNS) return null
+      return Array.from({ length: span }, (_, offset) => slot + offset)
+    }
+
+    function bagFits(item, slot, excluded = []) {
+      const cells = bagCells(item, slot)
+      return !!cells && !state.bag.some(other => !excluded.includes(other) && (bagCells(other) || []).some(cell => cells.includes(cell)))
+    }
+
+    function freeBagSlot(item) {
+      for (let slot = 0; slot < state.bagCapacity; slot += 1) if (bagFits(item, slot)) return slot
+      return -1
+    }
+
+    function bagUsed() { return (state?.bag || []).reduce((total, item) => total + bagItemSpan(item), 0) }
+
+    function renderBagPanel() {
+      if (!state) return
+      ui.bagPanel.hidden = !state.bagPanelOpen
+      ui.bagButton.classList.toggle("is-open", !!state.bagPanelOpen)
+      ui.inventorySheet.classList.toggle("is-searching", !!state.searchPanel)
+      ui.bagPanelCount.textContent = `${bagUsed()} / ${state.bagCapacity} 格`
+      if (state.bagDrag) return
+      const selected = state.bag.find(item => item.id === state.bagSelection)
+      const data = selected && supplyDescription(selected.itemId)
+      ui.bagDetail.textContent = selected ? `${data.name} · ${supplyMeta(data)} · 占 ${bagItemSpan(selected)} 格${data.category === "ammo" ? ` · 剩余 ${selected.amount ?? data.amount} 发` : ""}` : "点击物资查看详情"
+      ui.bagUse.disabled = !inventoryMutable() || !selected || !["food", "ammo"].includes(data.category)
+      ui.bagDiscard.disabled = !inventoryMutable() || !selected
+      const key = JSON.stringify([state.bag, state.bagSelection])
+      if (ui.bagGrid.renderKey === key) return
+      ui.bagGrid.renderKey = key
+      const cards = []
+      for (let slot = 0; slot < state.bagCapacity; slot += 1) {
+        const occupied = state.bag.some(item => bagCells(item)?.includes(slot))
+        cards.push(`<div class="bag-slot empty" data-bag-cell="${slot}" style="grid-column:${slot % BAG_COLUMNS + 1};grid-row:${Math.floor(slot / BAG_COLUMNS) + 1}" ${occupied ? 'aria-hidden="true"' : `aria-label="背包第${slot + 1}格"`}><span class="bag-index">${slot + 1}</span><span class="bag-icon">＋</span></div>`)
+      }
+      state.bag.forEach((item, index) => {
+        const data = supplyDescription(item.itemId), span = bagItemSpan(item)
+        cards.push(`<button class="bag-slot${item.id === state.bagSelection ? " is-selected" : ""}" type="button" data-bag-index="${index}" data-bag-cell="${item.slot}" aria-label="${data.name}，第${item.slot + 1}格，占${span}格，可拖动" style="grid-column:${item.slot % BAG_COLUMNS + 1} / span ${span};grid-row:${Math.floor(item.slot / BAG_COLUMNS) + 1};z-index:1"><span class="bag-index">${item.slot + 1}</span><span class="bag-icon" style="color:${data.color}">${data.icon}</span><span class="bag-name">${data.name}</span><span class="bag-meta">${qualityLabel(supplyQuality(item.itemId))}${data.category === "ammo" ? ` · ${item.amount ?? data.amount} 发` : ` · ${span} 格`}</span></button>`)
+      })
+      ui.bagGrid.innerHTML = cards.join("")
+    }
+
+    function searchElapsed(panel = state?.searchPanel) { return panel?.elapsed || 0 }
 
     function renderSearchWindow() {
-      if (!ui.searchWindow || !ui.searchGrid || !ui.searchProgress || !state) return
-      const panel = state.searchPanel
-      if (!panel) { ui.searchWindow.hidden = true; return }
-      const elapsed = searchElapsed(panel)
-      const entries = panel.entries || []
-      let revealed = 0
-      let claimed = 0
+      const panel = state?.searchPanel
+      ui.searchWindow.hidden = !panel
+      if (!panel) return
+      const entries = panel.entries, elapsed = searchElapsed(panel)
+      const revealed = entries.filter(entry => elapsed >= entry.revealAt).length
+      const claimed = entries.filter(entry => entry.claimed).length
+      const current = entries.find(entry => elapsed < entry.revealAt)
+      ui.searchTitle.textContent = "物资箱"
+      ui.searchSubtitle.textContent = current ? `识别中 · ${(current.revealAt - elapsed).toFixed(1)} 秒` : "识别完成"
+      ui.searchProgress.textContent = `已识别 ${revealed} / ${entries.length} · 已带走 ${claimed} 件`
+      ui.searchTakeAll.disabled = !inventoryMutable() || !entries.some(entry => !entry.claimed && elapsed >= entry.revealAt && freeBagSlot(entry) >= 0)
+      // Keep card nodes stable between reveals so a pointer press can complete.
+      const key = JSON.stringify([panel.id, revealed, entries.map(entry => entry.claimed), state.bag])
+      if (ui.searchGrid.renderKey === key) return
+      ui.searchGrid.renderKey = key
       ui.searchGrid.innerHTML = entries.map((entry, index) => {
+        if (elapsed < entry.revealAt) return `<button class="loot-card is-searching" type="button" disabled aria-label="未识别物资"><span class="loot-icon">?</span><span class="loot-name">未识别</span><span class="loot-action">${index === revealed ? "正在搜索…" : "等待搜索"}</span></button>`
         const item = supplyDescription(entry.itemId)
-        const quality = supplyQuality(entry.itemId)
-        const isRevealed = entry.claimed || elapsed >= entry.revealAt
-        if (isRevealed) revealed += 1
-        if (entry.claimed) claimed += 1
-        if (entry.claimed) return `<button class="loot-card is-claimed" type="button" disabled aria-label="${item.name}已带走"><span class="loot-icon" style="color:${item.color}">${item.icon}</span><span class="loot-name">${item.name}</span><span class="loot-rarity" style="color:${Loot.qualities[quality]?.color || item.color}">${qualityLabel(quality)}</span><span class="loot-action">已带走</span></button>`
-        if (!isRevealed) {
-          const remaining = Math.max(0, entry.revealAt - elapsed)
-          return `<button class="loot-card is-searching" type="button" disabled aria-label="正在搜索第${index + 1}件物资"><span class="loot-icon">?</span><span class="loot-name">识别中</span><span class="loot-rarity">${remaining.toFixed(1)}秒</span><span class="loot-action">搜索中…</span></button>`
-        }
-        const drop = state.loot.find(candidate => candidate.id === entry.lootId)
-        const full = bagUsed() + Math.max(1, Number(item.weight) || 1) > (state.bagCapacity || CONFIG.bagCapacity)
-        return `<button class="loot-card ready" type="button" data-search-index="${index}" aria-label="带走${item.name}"><span class="loot-icon" style="color:${item.color}">${item.icon}</span><span class="loot-name">${item.name}</span><span class="loot-rarity" style="color:${Loot.qualities[quality]?.color || item.color}">${qualityLabel(quality)}${drop ? "" : " · 已拾取"}</span><span class="loot-action">${drop && !full ? "带入背包" : drop ? "背包已满" : "已拾取"}</span></button>`
+        return `<button class="loot-card ${entry.claimed ? "is-claimed" : "ready"}" type="button" data-search-index="${index}" ${entry.claimed ? "disabled" : ""} aria-label="${entry.claimed ? "已带走" : "带走"}${item.name}"><span class="loot-icon" style="color:${item.color}">${item.icon}</span><span class="loot-name">${item.name}</span><span class="loot-rarity" style="color:${Loot.qualities[supplyQuality(entry.itemId)].color}">${qualityLabel(supplyQuality(entry.itemId))} · ${bagItemSpan(entry)} 格</span><span class="loot-action">${entry.claimed ? "已带走" : freeBagSlot(entry) < 0 ? "空间不足 · 整理背包" : "带入背包"}</span></button>`
       }).join("")
-      const allVisible = revealed >= entries.length
-      ui.searchTitle.textContent = `物资箱 · ${panel.houseName || "搜索"}`
-      ui.searchSubtitle.textContent = allVisible ? "识别完成" : "逐项搜索中…"
-      ui.searchProgress.textContent = `搜索进度 ${revealed} / ${entries.length} · 已带走 ${claimed} 件 · 稀有物资需要更长识别时间`
-      ui.searchWindow.hidden = false
     }
 
     function openSearchWindow(container) {
-      if (!state || !container) return false
-      const contents = Array.isArray(container.contents) ? container.contents : []
-      let elapsed = 0
-      const entries = contents.map((itemId, index) => {
-        elapsed += supplyRevealDelay(itemId)
-        const lootId = container.lootIds?.[index] || null
-        return { index, itemId, lootId, revealAt: elapsed, claimed: Boolean(lootId && !state.loot.some(item => item.id === lootId)) }
-      })
-      state.searchPanel = { boxId: container.id, houseName: state.room?.name || "房屋物资", openedAt: (typeof performance?.now === "function" ? performance.now() / 1000 : state.time || 0), entries }
-      state.bagPanelOpen = false
-      ui.bagPanel.hidden = true
+      if (!inventoryMutable() || !container?.entries) return false
+      cancelBagDrag()
+      state.searchPanel = container
+      state.bagPanelOpen = true
       releaseInput()
-      renderSearchWindow()
+      renderSearchWindow(); renderBagPanel()
       return true
     }
 
     function closeSearchWindow() {
       if (!state) return false
       state.searchPanel = null
-      if (ui.searchWindow) ui.searchWindow.hidden = true
+      ui.searchWindow.hidden = true
+      ui.inventorySheet.classList.remove("is-searching")
       return true
     }
 
     function takeSearchItem(index) {
-      const panel = state?.searchPanel
-      if (!state || state.phase !== "playing" || state.paused) return false
-      const entry = panel?.entries?.[Number(index)]
-      if (!entry || entry.claimed || searchElapsed(panel) < entry.revealAt) return false
-      const drop = state.loot.find(item => item.id === entry.lootId)
-      if (!drop) { entry.claimed = true; renderSearchWindow(); return false }
-      if (!collectLoot(drop)) { renderSearchWindow(); return false }
-      state.loot = state.loot.filter(item => item !== drop)
+      if (!inventoryMutable()) return false
+      const entry = state.searchPanel?.entries?.[Number(index)]
+      if (!entry || entry.claimed || searchElapsed() < entry.revealAt) return false
+      if (!carrySupply(entry)) { toast("没有足够的连续空格 · 请整理背包", 2); return false }
       entry.claimed = true
-      renderSearchWindow()
+      toast(`已放入背包 · ${supplyDescription(entry.itemId).name}`, 1.5)
       syncHud()
       return true
     }
 
+    function takeAllSearchItems() {
+      if (!inventoryMutable()) return 0
+      let taken = 0
+      for (let index = 0; index < (state.searchPanel?.entries.length || 0); index += 1) if (takeSearchItem(index)) taken += 1
+      return taken
+    }
+
     function toggleBagPanel(force) {
-      if (!state || state.phase === "intro") return false
+      if (!state) return false
       const open = typeof force === "boolean" ? force : !state.bagPanelOpen
-      if (open) {
-        closeSearchWindow()
-        releaseInput()
-      }
+      if (open && !inventoryMutable()) return false
+      cancelBagDrag()
+      if (open) releaseInput()
+      else closeSearchWindow()
       state.bagPanelOpen = open
       renderBagPanel()
       return open
     }
 
-    function reorderBag(fromIndex, toIndex) {
-      if (!state || !Array.isArray(state.bag)) return false
-      const from = Number(fromIndex), to = Number(toIndex)
-      if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from >= state.bag.length || to < 0) return false
-      const [item] = state.bag.splice(from, 1)
-      const destination = Math.min(to, state.bag.length)
-      state.bag.splice(destination, 0, item)
-      renderBagPanel(); syncHud()
+    function reorderBag(fromIndex, toSlot) {
+      if (!inventoryMutable()) return false
+      const item = state.bag[Number(fromIndex)], slot = Number(toSlot)
+      if (!item || !bagCells(item, slot)) return false
+      const cells = bagCells(item, slot)
+      const overlaps = state.bag.filter(other => other !== item && bagCells(other).some(cell => cells.includes(cell)))
+      if (overlaps.length > 1) return false
+      if (overlaps.length === 1) {
+        const other = overlaps[0], excluded = [item, other]
+        const swappedCells = bagCells(other, item.slot)
+        if (!bagFits(item, slot, excluded) || !bagFits(other, item.slot, excluded) || swappedCells.some(cell => cells.includes(cell))) return false
+        other.slot = item.slot
+      }
+      item.slot = slot
+      syncHud()
+      return true
+    }
+
+    function useBagItem(index) {
+      if (!inventoryMutable()) return false
+      const item = state.bag[Number(index)]
+      if (!item) return false
+      const data = supplyDescription(item.itemId)
+      if (data.category === "ammo") {
+        const available = item.amount ?? data.amount
+        const used = Math.min(available, Math.max(0, CONFIG.ammoReserveCap - state.weapon.ammoReserve))
+        if (!used) { toast("备弹已满", 1.5); return false }
+        state.weapon.ammoReserve += used
+        item.amount = available - used
+        if (item.amount === 0) state.bag.splice(Number(index), 1)
+        toast(`补充 ${used} 发备弹`, 1.5)
+      } else if (data.category === "food") {
+        if (state.player.hp >= state.player.maxHp) { toast("生命已满", 1.5); return false }
+        state.player.hp = Math.min(state.player.maxHp, state.player.hp + data.heal)
+        state.bag.splice(Number(index), 1)
+        toast(`使用 ${data.name}`, 1.5)
+      } else { toast("这件物资可携带撤离", 1.5); return false }
+      logEvent(`使用背包物资 · ${data.name}`)
+      syncHud(); draw()
       return true
     }
 
     function dropBagItem(index) {
-      if (!state || state.phase !== "playing") return false
-      const item = state.bag?.[Number(index)]
+      if (!inventoryMutable()) return false
+      const item = state.bag[Number(index)]
       if (!item) return false
       const drop = spawnSupplyDrop(item.itemId, state.player, null, 0)
       if (!drop) { toast("附近没有可丢弃的位置", 1.8); return false }
-      drop.droppedFromBag = true
-      drop.weight = item.weight
+      Object.assign(drop, { droppedFromBag: true, pickupArmed: false, amount: item.amount, weight: item.weight })
       state.bag.splice(Number(index), 1)
       toast(`丢弃 ${supplyDescription(item.itemId).name}`, 1.5)
-      logEvent(`丢弃背包物资 · ${supplyDescription(item.itemId).name}`)
-      renderBagPanel(); syncHud(); draw()
+      syncHud(); draw()
       return true
     }
 
-    function bagIndexAtPoint(clientX, clientY) {
-      if (!ui.bagGrid?.getBoundingClientRect) return -1
+    function bagIndexAtPoint(x, y) {
       const rect = ui.bagGrid.getBoundingClientRect()
-      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return -1
-      const columns = 3
-      const column = Math.max(0, Math.min(columns - 1, Math.floor((clientX - rect.left) / Math.max(1, rect.width / columns))))
-      const row = Math.max(0, Math.floor((clientY - rect.top) / Math.max(1, rect.height / 2)))
-      return row * columns + column
+      if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) return -1
+      return Math.floor((y - rect.top) / (rect.height / 2)) * BAG_COLUMNS + Math.floor((x - rect.left) / (rect.width / BAG_COLUMNS))
+    }
+
+    function cancelBagDrag() {
+      const drag = state?.bagDrag
+      if (state) state.bagDrag = null
+      ui.bagDragGhost.hidden = true
+      if (drag && ui.bagGrid.hasPointerCapture?.(drag.pointerId)) ui.bagGrid.releasePointerCapture(drag.pointerId)
+      ui.bagGrid.querySelectorAll?.(".is-dragging, .is-target").forEach(card => { card.classList.remove("is-dragging", "is-target") })
+    }
+
+    function bagPointerDown(event) {
+      if (!inventoryMutable() || !state.bagPanelOpen || state.bagDrag || event.button > 0) return
+      const card = event.target.closest?.("[data-bag-index]")
+      const index = Number(card?.dataset.bagIndex), item = state.bag[index]
+      if (!card || !item) return
+      event.preventDefault()
+      const rect = card.getBoundingClientRect()
+      const offset = Math.max(0, Math.min(bagItemSpan(item) - 1, Math.floor((event.clientX - rect.left) / (rect.width / bagItemSpan(item)))))
+      state.bagDrag = { index, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, offset, moved: false }
+      ui.bagGrid.setPointerCapture?.(event.pointerId)
+    }
+
+    function bagPointerMove(event) {
+      const drag = state?.bagDrag
+      if (!drag || drag.pointerId !== event.pointerId) return
+      if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 7) drag.moved = true
+      if (!drag.moved) return
+      event.preventDefault()
+      ui.bagDragGhost.hidden = false
+      ui.bagDragGhost.textContent = supplyDescription(state.bag[drag.index].itemId).name
+      ui.bagDragGhost.style.left = `${event.clientX}px`
+      ui.bagDragGhost.style.top = `${event.clientY}px`
+      const slot = bagIndexAtPoint(event.clientX, event.clientY) - drag.offset
+      ui.bagGrid.querySelectorAll?.("[data-bag-cell]").forEach(card => card.classList.toggle("is-target", Number(card.dataset.bagCell) === slot))
     }
 
     function bagPointerUp(event) {
       const drag = state?.bagDrag
       if (!drag || drag.pointerId !== event.pointerId) return
-      const panelRect = ui.bagPanel?.getBoundingClientRect?.()
-      const insidePanel = panelRect && event.clientX >= panelRect.left && event.clientX <= panelRect.right && event.clientY >= panelRect.top && event.clientY <= panelRect.bottom
-      const target = insidePanel ? bagIndexAtPoint(event.clientX, event.clientY) : -1
-      if (target < 0) dropBagItem(drag.index)
-      else if (target !== drag.index) reorderBag(drag.index, target)
-      state.bagDrag = null
+      cancelBagDrag()
+      if (!inventoryMutable()) { renderBagPanel(); return }
+      if (!drag.moved) state.bagSelection = state.bag[drag.index]?.id ?? null
+      else {
+        const slot = bagIndexAtPoint(event.clientX, event.clientY)
+        const rect = ui.inventorySheet.getBoundingClientRect()
+        const outside = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom
+        if (outside) dropBagItem(drag.index)
+        else if (slot >= 0 && !reorderBag(drag.index, slot - drag.offset)) toast("放不下 · 物资保留原位", 1.5)
+      }
       renderBagPanel()
-    }
-
-    function bagPointerDown(event) {
-      const index = Number(event.target?.closest?.("[data-bag-index]")?.dataset?.bagIndex)
-      if (!Number.isInteger(index) || !state?.bag?.[index]) return
-      event.preventDefault?.()
-      state.bagDrag = { index, pointerId: event.pointerId }
-      event.target.closest?.("[data-bag-index]")?.classList.add("is-dragging")
-      ui.bagGrid.setPointerCapture?.(event.pointerId)
     }
 
     function bagPointerCancel(event) {
-      if (!state?.bagDrag || state.bagDrag.pointerId !== event.pointerId) return
-      state.bagDrag = null
-      renderBagPanel()
-    }
-
-    function bagDragEnd(event) { bagPointerUp(event) }
-
-    function bagUsed() {
-      return (state?.bag || []).reduce((total, item) => total + Math.max(1, Number(item.weight) || Number(supplyDescription(item.itemId).weight) || 1), 0)
+      if (state?.bagDrag?.pointerId !== event.pointerId) return
+      cancelBagDrag(); renderBagPanel()
     }
 
     function carrySupply(item) {
-      const data = supplyDescription(item.itemId)
-      const weight = Math.max(1, Number(data.weight) || 1)
-      if (bagUsed() + weight > (state.bagCapacity || CONFIG.bagCapacity)) return false
-      if (!Number.isFinite(state.weapon?.ammoInMag) || !Number.isFinite(state.weapon?.ammoReserve)) state.weapon = weaponState(state.weapon?.id, state.weapon?.quality)
-      const carried = { id: id(), kind: "supply", itemId: data.id, name: data.name, category: data.category, weight, count: 1 }
-      state.bag.push(carried)
-      const player = state.player
-      if (data.category === "ammo") {
-        state.weapon.ammoReserve = Math.min(CONFIG.ammoReserveCap, state.weapon.ammoReserve + data.amount)
-      } else if (data.category === "food" || data.category === "medical") {
-        player.hp = Math.min(player.maxHp, player.hp + (data.heal || 0))
-      } else if (data.category === "armor") {
-        player.armor = Math.min(100, (player.armor || 0) + (data.armor || 0))
-      } else if (data.category === "weapon") {
-        const next = weaponState(data.weaponId, "common")
-        state.weapon = next
-        player.fireTimer = 0
-        toast(`装备 ${next.name} · 弹匣 ${next.ammoInMag}/${next.ammoReserve}`, 2.2)
-      }
+      if (!inventoryMutable() || !Loot.supplyItems[item?.itemId]) return false
+      const data = supplyDescription(item.itemId), slot = freeBagSlot(item)
+      if (slot < 0) return false
+      state.bag.push({ id: id(), kind: "supply", itemId: data.id, name: data.name, category: data.category, weight: data.weight, slot, amount: item.amount ?? data.amount })
       return true
     }
 
@@ -1291,32 +1377,21 @@
     }
 
     function searchSupplyBox(container) {
-      if (!container || !state || state.phase !== "playing") return false
-      if (container.searched) {
-        const remaining = state.loot.some(item => item.boxId === container.id)
-        return remaining ? openSearchWindow(container) : false
+      if (!inventoryMutable() || !container) return false
+      if (!container.entries) {
+        const contents = container.contents?.length ? container.contents.slice() : Loot.rollSupplyContents()
+        let elapsed = 0
+        container.contents = contents
+        container.elapsed = 0
+        container.entries = contents.map(itemId => {
+          elapsed += supplyRevealDelay(itemId)
+          return { itemId, revealAt: elapsed, claimed: false }
+        })
+        container.searched = true
+        logEvent(`开始搜索物资箱/${container.id}`)
       }
-      const contents = Array.isArray(container.contents) && container.contents.length
-        ? container.contents.slice()
-        : typeof Loot.rollSupplyContents === "function" ? Loot.rollSupplyContents() : ["pizza", "milk", "ammo", "junk"]
-      container.contents = contents.slice()
-      container.lootIds = Array.isArray(container.lootIds) ? container.lootIds.slice() : []
-      let spawned = 0
-      for (let index = 0; index < contents.length; index += 1) {
-        if (container.lootIds[index]) continue
-        const drop = spawnSupplyDrop(contents[index], container, container.id, index)
-        if (!drop) continue
-        container.lootIds[index] = drop.id
-        spawned += 1
-      }
-      container.searched = contents.every((_, index) => Boolean(container.lootIds[index]))
-      const names = contents.map(itemId => supplyDescription(itemId).name).join("、")
-      toast(spawned || container.searched
-        ? `打开物资箱 · 正在识别 ${names} · 点击物资带入背包`
-        : "物资箱空间不足 · 先拾取附近物资再继续搜索", 3.2)
-      logEvent(`搜索物资箱/${container.id} · ${names}`)
-      if (spawned || container.searched) openSearchWindow(container)
-      return spawned > 0 || container.searched
+      toast("搜索物资箱 · 点击已识别物资带入背包", 2)
+      return openSearchWindow(container)
     }
 
     function openSupplyBox(containerOrId) {
@@ -1388,13 +1463,9 @@
           }
           return false
         }
-        const data = description.supply || supplyDescription(ball.itemId)
-        const suffix = data.category === "ammo" ? ` · +${data.amount} 发` : data.category === "food" || data.category === "medical" ? ` · 回复 ${data.heal}` : ""
         particle(ball.x, ball.y, description.color, 12, 110)
-        toast(`拾取 ${description.name}${suffix} · 背包 ${bagUsed()}/${state.bagCapacity}`, 2.2)
+        toast(`拾取 ${description.name} · 可在背包使用 · 背包 ${bagUsed()}/${state.bagCapacity}`, 2.2)
         logEvent(`携带物资 · ${description.name}`)
-        const searchEntry = state.searchPanel?.entries?.find(entry => entry.lootId === ball.id)
-        if (searchEntry) searchEntry.claimed = true
         return true
       }
       const description = Loot.describe(ball)
@@ -1458,9 +1529,9 @@
       if (!container && room) {
         // A searched box with unclaimed cards can be reopened after the player
         // closes the window to rearrange the backpack. This keeps the box and
-        // every loose supply persistent on the shared map.
+        // contents persistent on the shared map.
         container = (room.containers || []).find(candidate => candidate.searched
-          && state.loot.some(item => item.boxId === candidate.id)
+          && candidate.entries?.some(entry => !entry.claimed)
           && distanceSquared(candidate.x, candidate.y, state.player.x, state.player.y) <= 18 ** 2) || null
       }
       if (container) return { kind: "search", container, label: "搜索物资箱 · E" }
@@ -1540,7 +1611,7 @@
       const item = ball || drop
       if (!item || distanceSquared(item.x, item.y, state.player.x, state.player.y) > 28 ** 2) return false
       if (ball) {
-        if (!collectLoot(ball)) return false
+        if (!groundLootReady(ball) || !collectLoot(ball)) return false
         state.loot = state.loot.filter(candidate => candidate !== ball)
       } else {
         state.combatDrops = state.combatDrops.filter(candidate => candidate !== drop)
@@ -2323,6 +2394,14 @@
       state.mines = state.mines.filter(mine => mine.life > 0)
     }
 
+    function groundLootReady(ball) {
+      if (ball.pickupArmed === false) {
+        if (distanceSquared(ball.x, ball.y, state.player.x, state.player.y) > 70 ** 2) ball.pickupArmed = true
+        return false
+      }
+      return true
+    }
+
     function updateEffects(dt, stats) {
       for (const item of state.pickups) {
         item.pulse += dt * 3
@@ -2334,11 +2413,7 @@
       }
       state.pickups = state.pickups.filter(item => item.value > 0)
       state.loot = state.loot.filter(ball => {
-        // A Pi's search sheet owns the newly revealed cards until the player
-        // explicitly takes one. Without this guard a survivor standing beside
-        // the box would auto-pick the first card before its reveal timer or
-        // click target became visible.
-        if (state.searchPanel?.entries?.some(entry => entry.lootId === ball.id && !entry.claimed)) return true
+        if (!groundLootReady(ball)) return true
         if (distanceSquared(ball.x, ball.y, state.player.x, state.player.y) > 28 ** 2 || buildingHitFraction(ball.x, ball.y, state.player.x, state.player.y, 2) !== null) return true
         return !collectLoot(ball)
       })
@@ -2361,6 +2436,10 @@
 
     function update(dt) {
       if (!state || state.phase !== "playing") return
+      if (state.searchPanel && !state.paused) {
+        const panel = state.searchPanel
+        panel.elapsed = Math.min(panel.entries.at(-1)?.revealAt || 0, panel.elapsed + dt)
+      }
       state.time = Math.min(RUN_SECONDS, state.time + dt)
       if (state.time >= RUN_SECONDS - 1e-8) {
         state.time = RUN_SECONDS
@@ -2803,7 +2882,7 @@
         runId: state.runId, phase: state.phase, result: state.result, ended: state.phase === "victory" || state.phase === "gameover", paused: state.paused, time: state.time, remainingSeconds: Math.max(0, RUN_SECONDS - state.time), wave: state.wave,
         level: state.level, xp: state.xp, nextXp: state.nextXp, kills: state.kills,
         enemies: state.enemies.length, projectiles: state.projectiles.length, pickups: state.pickups.length,
-        loot: state.loot.map(item => ({ ...item })), combatDrops: state.combatDrops.map(item => ({ ...item })), bag: state.bag.map(item => ({ ...item })), bagCapacity: state.bagCapacity, bagPanelOpen: !!state.bagPanelOpen, searchPanel: state.searchPanel ? { boxId: state.searchPanel.boxId, entries: state.searchPanel.entries.map(entry => ({ ...entry })), elapsed: searchElapsed(state.searchPanel) } : null, extractedLoot: state.extractedLoot.map(item => ({ ...item })), extraction: state.extraction ? { ...state.extraction } : null, scene: state.scene, stage: state.scene, worldVersion: 3, weapon: { ...state.weapon }, modifiers: modifiers(),
+        loot: state.loot.map(item => ({ ...item })), combatDrops: state.combatDrops.map(item => ({ ...item })), bag: state.bag.map(item => ({ ...item })), bagCapacity: state.bagCapacity, bagPanelOpen: !!state.bagPanelOpen, searchPanel: state.searchPanel ? { boxId: state.searchPanel.id, entries: state.searchPanel.entries.map(entry => ({ ...entry })), elapsed: searchElapsed(state.searchPanel) } : null, extractedLoot: state.extractedLoot.map(item => ({ ...item })), extraction: state.extraction ? { ...state.extraction } : null, scene: state.scene, stage: state.scene, worldVersion: 3, weapon: { ...state.weapon }, modifiers: modifiers(),
         worldLayer: state.worldLayer,
         activeHouseId: state.activeHouseId,
         houses: [...state.houseRooms.values()].map(room => ({ id: room.houseId, worldBounds: room.worldBounds ? { ...room.worldBounds } : null, roofVisible: state.activeHouseId !== room.houseId, interiorVisible: state.activeHouseId === room.houseId })),
@@ -2835,8 +2914,8 @@
       ui.weaponValue.textContent = `${quality.name} · ${state.weapon.name}`
       ui.weaponValue.style.color = quality.color
       ui.ammoValue.textContent = `弹匣 ${state.weapon.ammoInMag ?? 0} / ${state.weapon.ammoReserve ?? 0} · R 换弹`
-      ui.bagValue.textContent = `背包 ${bagUsed()} / ${state.bagCapacity} · ${state.extraction?.reached ? "已到绿色撤离区" : "搜索物资箱后拾取"}`
-      ui.sceneValue.textContent = state.room ? `${state.room.name || "房屋内部"} · ${state.room.floorLabel || "一楼鸟瞰"} · 箱内：披萨 / 牛奶 / 弹药 / 杂物` : "室外街区 · 普通 / 精良掉落"
+      ui.bagValue.textContent = `背包 ${bagUsed()} / ${state.bagCapacity} · ${state.extraction?.reached ? "已到绿色撤离区" : "搜索识别后带入背包"}`
+      ui.sceneValue.textContent = state.room ? `${state.room.name || "房屋内部"} · ${state.room.floorLabel || "一楼鸟瞰"} · 靠近物资箱搜索` : "室外街区 · 普通 / 精良掉落"
       const interaction = interactionTarget()
       ui.interactRun.hidden = !interaction
       ui.interactRun.textContent = interaction?.label || "搜索 · E"
@@ -2850,6 +2929,7 @@
     }
 
     function releaseInput() {
+      cancelBagDrag()
       keys.clear()
       releaseFire()
       releaseJoystick()
@@ -2922,32 +3002,19 @@
       const index = card?.dataset?.searchIndex
       if (index !== undefined) takeSearchItem(index)
     })
+    ui.searchTakeAll.addEventListener("click", takeAllSearchItems)
+    ui.bagUse.addEventListener("click", () => useBagItem(state.bag.findIndex(item => item.id === state.bagSelection)))
+    ui.bagDiscard.addEventListener("click", () => dropBagItem(state.bag.findIndex(item => item.id === state.bagSelection)))
+    ui.bagGrid.addEventListener("click", event => {
+      // Keyboard activation selects a card. Pointer selection is handled on up.
+      if (event.detail !== 0 || !inventoryMutable()) return
+      const index = Number(event.target?.closest?.("[data-bag-index]")?.dataset.bagIndex)
+      if (state.bag[index]) { state.bagSelection = state.bag[index].id; renderBagPanel() }
+    })
     ui.bagGrid.addEventListener("pointerdown", bagPointerDown)
+    ui.bagGrid.addEventListener("pointermove", bagPointerMove)
     for (const name of ["pointerup", "pointercancel", "lostpointercapture"]) ui.bagGrid.addEventListener(name, name === "pointerup" ? bagPointerUp : bagPointerCancel)
-    ui.bagGrid.addEventListener("dragstart", event => {
-      const index = Number(event.target?.closest?.("[data-bag-index]")?.dataset?.bagIndex)
-      if (!Number.isInteger(index) || !state?.bag?.[index]) return
-      state.bagDrag = { index, pointerId: "native" }
-      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"
-    })
-    ui.bagGrid.addEventListener("dragover", event => { if (state?.bagDrag) event.preventDefault?.() })
-    ui.bagGrid.addEventListener("drop", event => {
-      event.preventDefault?.()
-      const from = state?.bagDrag?.index
-      const card = event.target?.closest?.("[data-bag-index]")
-      const to = Number(card?.dataset?.bagIndex)
-      if (Number.isInteger(from) && Number.isInteger(to)) reorderBag(from, to)
-      state.bagDrag = null
-      renderBagPanel()
-    })
-    ui.bagGrid.addEventListener("dragend", event => {
-      if (state?.bagDrag?.pointerId === "native") {
-        const rect = ui.bagPanel?.getBoundingClientRect?.()
-        if (rect && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) dropBagItem(state.bagDrag.index)
-        state.bagDrag = null
-        renderBagPanel()
-      }
-    })
+    ui.bagGrid.addEventListener("dragstart", event => event.preventDefault())
     ui.pauseRun.addEventListener("click", () => togglePause(true))
     ui.resumeRun.addEventListener("click", () => togglePause(false))
     const movementKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"])
@@ -2965,7 +3032,7 @@
       }
       if ((event.code === "KeyP" || event.code === "Escape") && !event.repeat) {
         event.preventDefault()
-        if (event.code === "Escape" && state.searchPanel) { closeSearchWindow(); return }
+        if (event.code === "Escape" && state.searchPanel) { toggleBagPanel(false); return }
         if (event.code === "Escape" && state.bagPanelOpen) { toggleBagPanel(false); return }
         togglePause()
       }
@@ -3039,7 +3106,7 @@
         catch { toast("浏览器未提供剪贴板权限") }
       })
       window.__LAST_NIGHT_DEBUG__ = Object.freeze({
-        snapshot, spawnLoot, spawnCombatDrop, tryCollectLoot, takeSupply, interact, searchSupplyBox, openSupplyBox, openSearchWindow, closeSearchWindow, takeSearchItem, toggleBagPanel, reorderBag, dropBagItem, carrySupply, reloadWeapon, updateExtractionState, takeDamage, enterBuilding, exitBuilding, get state() { return state }, get config() { return { ...CONFIG } }, get build() { return build }, get map() { return city },
+        snapshot, spawnLoot, spawnCombatDrop, tryCollectLoot, takeSupply, interact, searchSupplyBox, openSupplyBox, openSearchWindow, closeSearchWindow, takeSearchItem, takeAllSearchItems, toggleBagPanel, reorderBag, dropBagItem, useBagItem, carrySupply, reloadWeapon, updateExtractionState, takeDamage, enterBuilding, exitBuilding, get state() { return state }, get config() { return { ...CONFIG } }, get build() { return build }, get map() { return city },
         get loot() { return state.loot }, get combatDrops() { return state.combatDrops }, get bag() { return state.bag }, get supplyItems() { return Loot.supplyItems }, get houses() { return houseSystem }, get modifiers() { return modifiers() },
         get searchPanel() { return state.searchPanel }, get bagPanelOpen() { return !!state.bagPanelOpen },
         get artStatus() { return window.WASTELAND_CHARACTER_ART?.status || "unconfigured" },

@@ -81,9 +81,9 @@ async function browserChecks() {
   try {
     browser = await chromium.launch({ channel: process.env.LOOT_BROWSER_CHANNEL || process.env.COMBAT_BROWSER_CHANNEL || "msedge", headless: true });
     const url = `http://127.0.0.1:${server.address().port}/index.html?admin=1&tester=loot`;
-    for (const viewport of [{ width: 1280, height: 720 }, { width: 960, height: 540 }]) {
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 960, height: 540 }, { width: 844, height: 390 }]) {
       const page = await browser.newPage({ viewport, hasTouch: true, isMobile: true });
-      const prefix = viewport.width === 1280 ? "landscape" : "compact-landscape";
+      const prefix = viewport.width === 1280 ? "landscape" : viewport.width === 960 ? "compact-landscape" : "phone-landscape";
       page.on("pageerror", error => errors.push(error.message));
       page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
       await page.goto(url); await page.locator("#startRun").click();
@@ -137,45 +137,98 @@ async function browserChecks() {
       const buttonBox = await page.locator("#interactRun").boundingBox();
       assert(buttonBox.x >= 0 && buttonBox.y >= 0 && buttonBox.x + buttonBox.width <= viewport.width + 1 && buttonBox.y + buttonBox.height <= viewport.height + 1);
       await page.locator("#interactRun").click();
-       const found = await page.evaluate(() => {
-        const d = window.__LAST_NIGHT_DEBUG__; d.state.paused = true;
-         const supplies = d.loot.filter(item => item.boxId === d.state.room.containers[0].id);
-         return { supplies, searched: d.state.room.containers[0].searched, weapon: d.state.weapon,
-          time: d.state.time, scene: d.state.scene };
+      assert(await page.locator("#searchWindow").isVisible());
+      assert(await page.locator("#bagGrid").isVisible(), "search and backpack are visible together");
+      const found = await page.evaluate(() => {
+        const d = window.__LAST_NIGHT_DEBUG__;
+        return { entries: d.searchPanel.entries, ground: d.loot.filter(item => item.boxId === d.searchPanel.id), bag: d.bag.length };
       });
-       assert(found.searched); assert.equal(found.supplies.length, 4);
-       assert.deepEqual(found.supplies.map(item => item.itemId), ["pizza", "milk", "ammo", "junk"]);
-       assert(found.supplies.every(item => item.kind === "supply" && ["pizza", "milk", "ammo", "junk"].includes(item.itemId)), "the first house cache yields only A Pi supply items");
-      assert.equal(found.weapon.id, "assaultRifle", "searching drops the gun rather than instantly equipping it");
-      await page.screenshot({ path: join(evidence, `${prefix}-house-search.png`) });
-       const equipped = await page.evaluate(() => {
-         const d = window.__LAST_NIGHT_DEBUG__, ball = d.loot.find(item => item.boxId === d.state.room.containers[0].id);
-         d.closeSearchWindow(); d.state.paused = false; d.state.player.x = ball.x; d.state.player.y = ball.y; d.step(1 / 60);
-         return { picked: ball.itemId, weapon: d.state.weapon, scene: d.state.scene, activeHouseId: d.state.activeHouseId, slots: d.build.slots().length, bag: d.bag.map(item => item.itemId) };
-      });
-      assert.equal(equipped.weapon.id, "assaultRifle");
-       assert.equal(equipped.scene, "city"); assert.equal(equipped.activeHouseId, houseId); assert.equal(equipped.slots, 3); assert.equal(equipped.bag.length, 1); assert.equal(equipped.bag[0], equipped.picked);
-       await page.screenshot({ path: join(evidence, `${prefix}-house-equipped.png`) });
-       pass(`${prefix} visible touch interaction enters a house, searches A Pi supply items and collects on contact`, { viewport, weapon: equipped.weapon, supply: equipped.picked });
+      assert.equal(found.entries.length, 4);
+      assert.equal(found.ground.length, 0);
+      assert.equal(found.bag, 0);
+      assert.equal(await page.locator("#searchGrid .is-searching").count(), 4);
+      await page.screenshot({ path: join(evidence, `${prefix}-search-unidentified.png`) });
+      await page.locator('#searchGrid [data-search-index="0"]').click();
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag[0].itemId), "pizza");
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.player.hp), await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.player.maxHp), "carrying food doesn't use it");
+      await page.locator("#bagClose").click();
+      const elapsed = await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.room.containers[0].elapsed);
+      await page.waitForTimeout(250);
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.room.containers[0].elapsed), elapsed);
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag.length), 1);
+      await page.locator("#interactRun").click();
+      assert(await page.locator('#searchGrid [data-search-index="0"]').isDisabled());
+      const sheetBox = await page.locator("#inventorySheet").boundingBox();
+      assert(sheetBox.x >= 0 && sheetBox.y >= 0 && sheetBox.x + sheetBox.width <= viewport.width + 1 && sheetBox.y + sheetBox.height <= viewport.height + 1, "inventory fits landscape viewport");
 
-      await page.locator("#bagButton").click();
-      assert(await page.locator("#bagPanel").isVisible(), "the small backpack button opens the backpack window");
-      assert.equal(await page.locator("#bagGrid .bag-slot:not(.empty)").count(), 1, "the carried supply occupies one visible backpack slot");
-      const bagPanelBox = await page.locator("#bagPanel").boundingBox();
-      const bagSlotBox = await page.locator("#bagGrid .bag-slot:not(.empty)").boundingBox();
-      assert(bagPanelBox && bagSlotBox);
-      await page.mouse.move(bagSlotBox.x + bagSlotBox.width / 2, bagSlotBox.y + bagSlotBox.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(bagPanelBox.x + 5, bagPanelBox.y + 5, { steps: 8 });
-      await page.mouse.up();
+      const drag = async (locator, target) => {
+        const box = await locator.boundingBox();
+        await page.mouse.move(box.x + 14, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(target.x, target.y, { steps: 10 });
+        await page.mouse.up();
+      };
+      const center = box => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+      const cell3 = await page.locator('#bagGrid .empty[data-bag-cell="3"]').boundingBox();
+      await drag(page.locator('#bagGrid [data-bag-index="0"]'), center(cell3));
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag[0].slot), 3, "drag preserves the requested empty cell");
+      const cell2 = await page.locator('#bagGrid .empty[data-bag-cell="2"]').boundingBox();
+      await drag(page.locator('#bagGrid [data-bag-index="0"]'), center(cell2));
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag[0].slot), 3, "invalid edge placement leaves the item in place");
+      const header = await page.locator(".backpack-head strong").boundingBox();
+      await drag(page.locator('#bagGrid [data-bag-index="0"]'), center(header));
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag.length), 1, "releasing over the header is a cancel, not discard");
+
+      // Exercise actual touch pointer capture, then cancellation outside the sheet.
+      const cdp = await page.context().newCDPSession(page);
+      const foodBox = await page.locator('#bagGrid [data-bag-index="0"]').boundingBox();
+      const touch = { x: foodBox.x + 14, y: foodBox.y + foodBox.height / 2 };
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [touch] });
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 5, y: 5 }] });
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag.length), 1, "touch cancellation never discards");
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.bagDrag), null);
+      const cell0 = await page.locator('#bagGrid .empty[data-bag-cell="0"]').boundingBox();
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [touch] });
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [center(cell0)] });
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag[0].slot), 0, "touch drag changes the real cell");
+      await cdp.detach();
+
+      await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.step(4));
+      await page.locator("#searchTakeAll").click();
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag.length), 4);
+      assert.equal(await page.locator("#searchGrid .is-claimed").count(), 4);
+      const ammoBeforeUse = await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.weapon.ammoReserve);
+      assert.equal(ammoBeforeUse, 90, "search transfer doesn't grant ammo immediately");
+      assert.equal(await page.locator("#bagGrid [data-bag-index]").count(), 4, "two-cell items render one card");
+      assert.equal(await page.evaluate(() => document.querySelector("#bagGrid").scrollHeight <= document.querySelector("#bagGrid").clientHeight), true, "inventory never creates phantom extra rows");
+      await page.screenshot({ path: join(evidence, `${prefix}-search-and-backpack.png`) });
+
+      await page.evaluate(() => { window.__LAST_NIGHT_DEBUG__.state.player.hp = 1; });
+      await page.locator('#bagGrid [data-bag-index="1"]').click();
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.player.hp), 1, "clicking selects rather than consumes food");
+      await page.locator("#bagUse").click();
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.player.hp), 17);
+      assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag.length), 3);
+      await page.locator('#bagGrid [data-bag-index="2"]').click();
+      assert(await page.locator("#bagUse").isDisabled(), "junk has no Use action");
+      await drag(page.locator('#bagGrid [data-bag-index="1"]'), { x: 5, y: 5 });
       const droppedBag = await page.evaluate(() => {
         const d = window.__LAST_NIGHT_DEBUG__;
-        return { count: d.bag.length, dropped: d.loot.some(item => item.droppedFromBag && item.kind === "supply") };
+        return { count: d.bag.length, dropped: d.loot.find(item => item.droppedFromBag), reserve: d.state.weapon.ammoReserve };
       });
-      assert.equal(droppedBag.count, 0, "dragging outside the backpack removes the carried entry");
-      assert(droppedBag.dropped, "dragging outside the backpack leaves the supply on the shared map");
+      assert.equal(droppedBag.count, 2);
+      assert.equal(droppedBag.dropped.itemId, "ammo");
+      assert.equal(droppedBag.reserve, ammoBeforeUse);
+      assert.equal(droppedBag.dropped.kind, "supply");
       await page.locator("#bagClose").click();
-      pass(`${prefix} backpack button opens six slots and dragging outside drops the carried supply`, { viewport, droppedBag });
+      await page.locator("#bagButton").click();
+      assert(await page.locator("#bagGrid").isVisible());
+      assert(await page.locator("#searchWindow").isHidden());
+      await page.screenshot({ path: join(evidence, `${prefix}-bag-only.png`) });
+      await page.locator("#bagClose").click();
+      pass(`${prefix} resumable search, shared backpack, mouse/touch moves, cancellation, explicit use and outside discard`, { viewport, droppedBag });
 
       await page.evaluate(() => { window.__LAST_NIGHT_DEBUG__.state.paused = false; });
       await page.locator("#pauseRun").click();
@@ -236,6 +289,6 @@ try {
   mkdirSync(evidence, { recursive: true });
   if (!process.argv.includes("--browser-only")) pass("real page simulation regression", runLootChecks());
   if (!process.argv.includes("--unit-only")) await browserChecks();
-  writeFileSync(join(evidence, "results.json"), JSON.stringify({ date: "2026-10-02", results }, null, 2));
-  console.log("All web loot and house checks passed. Simulation and desktop browser checks are not phone playtests.");
+  writeFileSync(join(evidence, "results.json"), JSON.stringify({ date: new Date().toISOString(), results }, null, 2));
+  console.log("All requested checks passed. See results.json for the checks actually run; simulation is not a phone playtest.");
 } catch (error) { console.error(error.stack); process.exitCode = 1; }

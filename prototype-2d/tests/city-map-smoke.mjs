@@ -32,7 +32,7 @@ function boot() {
       this.id = id; this.value = "1"; this.hidden = false; this.style = {};
       this.width = id === "gameCanvas" ? 1280 : 0; this.height = id === "gameCanvas" ? 720 : 0;
       this.innerHTML = ""; this.textContent = ""; this.handlers = new Map();
-      this.classList = { add: noop, remove: noop };
+      this.classList = { add: noop, remove: noop, toggle: noop };
     }
     addEventListener(name, callback) {
       if (!this.handlers.has(name)) this.handlers.set(name, []);

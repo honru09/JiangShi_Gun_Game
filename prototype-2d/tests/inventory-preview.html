@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>背包交互验收</title>
+<style>
+  * { box-sizing: border-box; } body { margin: 0; padding: 10px; background: #141b16; color: #eee5d0; font: 13px system-ui; }
+  nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+  button, select { padding: 7px; background: #2c4130; color: #eee5d0; border: 1px solid #788b6b; }
+  iframe { display: block; border: 0; max-width: none; } pre { white-space: pre-wrap; margin: 8px 0; }
+</style>
+<nav><strong>背包交互验收</strong><button id="prepare" disabled>布置搜箱场景</button><button id="hurt">设置生命为 1</button><label>画面尺寸 <select id="size"><option value="1280x720">1280 × 720</option><option value="960x540">960 × 540</option><option value="844x390" selected>844 × 390</option></select></label></nav>
+<iframe id="game" title="真实游戏页面" src="../index.html?admin=1&amp;tester=inventory-preview" width="844" height="390"></iframe>
+<pre id="report" aria-live="polite">正在加载实际游戏页面…</pre>
+<script>
+  const frame = document.getElementById("game"), prepare = document.getElementById("prepare"), report = document.getElementById("report");
+  const debug = () => frame.contentWindow?.__LAST_NIGHT_DEBUG__;
+  const status = () => {
+    const d = debug();
+    prepare.disabled = !d || frame.contentDocument.getElementById("startRun").disabled;
+    if (!d) return;
+    const container = d.state.room?.containers[0];
+    report.textContent = `状态：${d.state.phase} / ${d.state.paused ? "暂停" : "运行"}　生命：${d.state.player.hp}　备弹：${d.state.weapon.ammoReserve}\n箱内：${container ? container.entries?.map((e, i) => `${i + 1}:${e.claimed ? "已带走" : container.elapsed >= e.revealAt ? e.itemId : "未识别"}`).join(" | ") || "未打开" : "无"}\n背包：${d.bag.map(e => `${e.itemId}@第${e.slot + 1}格${e.amount != null ? `(${e.amount}发)` : ""}`).join(" | ") || "空"}\n地面丢弃：${d.loot.filter(e => e.droppedFromBag).map(e => `${e.itemId} / ${e.pickupArmed ? "可拾取" : "等待离开再返回"}`).join(" | ") || "无"}`;
+  };
+  prepare.onclick = () => {
+    frame.contentDocument.getElementById("startRun").click();
+    const d = debug();
+    d.state.godMode = true; d.state.density = 0; d.state.lootTimer = Infinity; d.state.hordeTimer = Infinity; d.state.spawnBudget = 0;
+    d.enterBuilding(d.houses.houses[0].id);
+    const cache = d.state.room.containers[0];
+    d.state.player.x = cache.x; d.state.player.y = cache.y; d.state.enemies = [];
+    d.step(1 / 60); d.searchSupplyBox(cache); status();
+  };
+  document.getElementById("hurt").onclick = () => { if (debug()?.state.phase === "playing") debug().state.player.hp = 1; status(); };
+  document.getElementById("size").onchange = event => { const [width, height] = event.target.value.split("x"); frame.width = width; frame.height = height; };
+  setInterval(status, 100);
+</script>
+</html>
