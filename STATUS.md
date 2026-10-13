@@ -43,7 +43,7 @@
 - 新临时公网：PASS，HTTP 200，响应内容与当前 `prototype-2d/index.html` 完全一致，`Cache-Control: no-store`。
 - `node scripts/verify-loot.mjs --browser-only`：**未完成**，Edge 启动权限请求未获批准。新增的 3 尺寸与触屏取消自动验收尚未完整执行，不能沿用上轮浏览器 PASS。
 - 微信真机、真人五分钟试玩、原作逐项对照：**NOT RUN**。
-- `git diff --check`：PASS。已在当前任务分支保留本轮本地提交；本机仍无 Git 远程，未推送、未创建 PR、未更新 `main`。
+- `git diff --check`：PASS。当前任务分支已推送到 `https://github.com/honru09/JiangShi_Gun_Game.git` 的 `work/codex/firearms-integration`；未更新 `main`。
 
 改动文件：`prototype-2d/index.html`、`loot-system.js`、`README.md`、`tests/loot-smoke.mjs`、`tests/combat-smoke.mjs`、`tests/city-map-smoke.mjs`、`tests/inventory-preview.html`、`scripts/verify-loot.mjs`、`STATUS.md`。
 
@@ -75,7 +75,7 @@
 - 原项目未提交文件已保存到 `work/integration-backup-20261009/` 与名为`Preserve pre-integration root edits 2026-10-09`的Git stash；历史未跟踪设计、证据、个人文件保留。
 - 当前目录分支`work/codex/firearms-integration`正在整合横屏、枪械弹药和阿皮式物资箱更新；本轮改动尚未更新`main`。
 - 所有窗口每次更新必须验收、提交、推送任务分支并创建/更新PR，见 `AGENTS.md` 和 `COLLABORATION.md`。
-- GitHub上传/PR：**BLOCKED**。本机未配置远程仓库，尚缺用户仓库地址与可用认证；根目录公钥只能识别身份，不能独立推送。未推送、未创建PR、未更新`main`。
+- GitHub：已配置 `origin` 为 `https://github.com/honru09/JiangShi_Gun_Game.git`，并成功推送 `work/codex/firearms-integration`。后续继续推进前先推送当前已验收版本；`main` 仍只通过 PR 更新。
 
 ## 上线与限制
 
