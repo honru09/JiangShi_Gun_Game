@@ -37,7 +37,7 @@ export function bootPage(coarse = false, admin = true) {
     }
     getContext() { return drawing; }
     focus() {}
-    getBoundingClientRect() { return { left: 0, top: 0, width: 94, height: 94 }; }
+    getBoundingClientRect() { return { left: 0, top: 0, right: 94, bottom: 94, width: 94, height: 94 }; }
     setPointerCapture() {}
     hasPointerCapture() { return false; }
     releasePointerCapture() {}
@@ -275,6 +275,7 @@ export function runLootChecks() {
   houseDebug.step(.5);
   assert(houseDebug.state.time > timeBeforeRoom, "the run timer continues inside houses");
   const searched = room.containers[0];
+  searched.contents = ["pizza", "milk", "ammo", "junk"];
   houseDebug.state.player.x = searched.x; houseDebug.state.player.y = searched.y;
   const ballsBeforeSearch = houseDebug.loot.length;
   assert.equal(houseDebug.interact(), true);
@@ -356,6 +357,7 @@ export function runLootChecks() {
   const deathHouse = deathDebug.houses.houses[0];
   enter(deathPage, deathHouse);
   const deathSupplyBox = deathDebug.state.room.containers[0];
+  deathSupplyBox.contents = ["pizza", "milk", "ammo", "junk"];
   deathDebug.state.player.x = deathSupplyBox.x; deathDebug.state.player.y = deathSupplyBox.y;
   assert.equal(deathDebug.interact(), true, "a live survivor can search a supply box");
   assert.equal(deathSupplyBox.entries.length, 4);
@@ -380,7 +382,7 @@ export function runLootChecks() {
   console.log("PASS death freezes nearby pickup and search actions");
 
   const supplyPage = bootPage(); supplyPage.start();
-  const supplyDebug = supplyPage.debug; supplyDebug.state.godMode = true;
+  const supplyDebug = supplyPage.debug; supplyDebug.state.godMode = true; supplyDebug.state.bagCapacity = 10;
   const ammoBefore = supplyDebug.state.weapon.ammoReserve;
   supplyDebug.state.player.hp = 1;
   collectSupply(supplyDebug, "ammo");
@@ -393,15 +395,16 @@ export function runLootChecks() {
   const junkId = supplyDebug.bag[3].id;
   assert.equal(supplyDebug.useBagItem(3), false, "nonconsumable material cannot disappear through Use");
   assert.equal(supplyDebug.bag[3].id, junkId);
-  assert.equal(supplyDebug.reorderBag(0, 5), true, "items can move to exact empty cells");
-  assert.deepEqual(plain(supplyDebug.bag.map(item => item.slot)), [5, 1, 3, 4], "empty cells remain empty instead of compacting");
-  assert.equal(supplyDebug.reorderBag(1, 2), false, "a two-cell item cannot wrap across a row");
+  assert.equal(supplyDebug.reorderBag(0, 9), true, "items can move to exact empty cells");
+  assert.deepEqual(plain(supplyDebug.bag.map(item => item.slot)), [9, 1, 3, 4], "empty cells remain empty instead of compacting");
+  assert.equal(supplyDebug.reorderBag(1, 4), false, "a two-cell item cannot wrap across a row");
   assert.equal(supplyDebug.reorderBag(1, 3), false, "one move cannot overwrite two items");
   assert.equal(supplyDebug.reorderBag(2, 4), true, "single-cell items swap without loss");
-  assert.deepEqual(plain(supplyDebug.bag.map(item => item.slot)), [5, 1, 4, 3]);
+  assert.deepEqual(plain(supplyDebug.bag.map(item => item.slot)), [9, 1, 4, 3]);
   assert.equal(supplyDebug.reorderBag(1, 0), true, "a two-cell item can shift within its own occupied cells");
   assert.equal(supplyDebug.reorderBag(0, 0), false, "swapping a large item into a last-column cell is rejected");
-  assert.deepEqual(plain(supplyDebug.bag.map(item => item.slot)), [5, 0, 4, 3]);
+  assert.deepEqual(plain(supplyDebug.bag.map(item => item.slot)), [9, 0, 4, 3]);
+  for (let n = 0; n < 4; n++) supplyDebug.carrySupply({ itemId: "junk" });
   assert.equal(supplyDebug.carrySupply({ itemId: "pizza" }), false, "total free cells are not enough when the shape cannot fit");
   assert.equal(supplyDebug.dropBagItem(0), true);
   const discarded = supplyDebug.loot.find(item => item.droppedFromBag && item.itemId === "ammo");
@@ -454,7 +457,8 @@ export function runLootChecks() {
 
   const batchPage = bootPage(); batchPage.start();
   const batch = batchPage.debug; batch.state.godMode = true;
-  const batchBox = { id: "batch-fixture" };
+  const batchBox = { id: "batch-fixture", contents: ["pizza", "milk", "ammo", "junk"] };
+  batch.state.bagCapacity = 10;
   batch.searchSupplyBox(batchBox); batch.step(.5);
   const beforePause = batchBox.elapsed;
   batchPage.click("pauseRun");
@@ -468,28 +472,28 @@ export function runLootChecks() {
   assert.equal(batch.bag.length, 4);
   batch.searchSupplyBox(batchBox);
   assert(batchBox.entries.every(entry => entry.claimed), "reopening never regenerates claimed loot");
-  batch.carrySupply({ itemId: "junk" });
-  const extraBox = { id: "full-fixture" }; batch.searchSupplyBox(extraBox); batch.step(4);
-  assert.equal(batch.takeAllSearchItems(), 0, "full bag leaves all items in container");
-  assert(extraBox.entries.every(entry => !entry.claimed));
+  for (let n = 0; n < 5; n++) batch.carrySupply({ itemId: "junk" });
+  const extraBox = { id: "full-fixture", contents: ["pizza", "milk", "ammo", "junk"] }; batch.searchSupplyBox(extraBox); batch.step(4);
+  assert.equal(batch.takeAllSearchItems(), 2, "full bag can still accept compatible milk and ammo stacks");
+  assert(!extraBox.entries[0].claimed && !extraBox.entries[3].claimed, "nonstackable items remain in the box when no cells fit");
   batch.dropBagItem(0);
   assert.equal(batch.takeSearchItem(0), true, "freeing contiguous space lets a box transfer succeed");
   console.log("PASS resumable identification, no close-to-pickup bypass, batch claim and full-bag recovery");
 
   const pointerPage = bootPage(); pointerPage.start();
-  const pointer = pointerPage.debug;
+  const pointer = pointerPage.debug; pointer.state.bagCapacity = 10;
   pointer.state.godMode = true; pointer.state.player.hp = 1;
   pointer.carrySupply({ itemId: "pizza" }); pointer.toggleBagPanel(true);
   const grid = pointerPage.elements.get("bagGrid");
-  grid.getBoundingClientRect = () => ({ left: 0, top: 0, right: 300, bottom: 160, width: 300, height: 160 });
-  pointerPage.elements.get("inventorySheet").getBoundingClientRect = () => ({ left: -30, top: -50, right: 330, bottom: 230 });
-  const card = { dataset: { bagIndex: "0" }, getBoundingClientRect: () => ({ left: 0, width: 200 }), closest() { return this; } };
+  grid.getBoundingClientRect = () => ({ left: 0, top: 0, right: 500, bottom: 160, width: 500, height: 160 });
+  pointerPage.elements.get("inventorySheet").getBoundingClientRect = () => ({ left: -30, top: -50, right: 530, bottom: 230 });
+  const card = { dataset: { bagIndex: "0", gridArea: "bag", itemId: String(pointer.bag[0].id) }, getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 80 }), closest() { return this; } };
   const touchStart = () => grid.emit("pointerdown", { target: card, pointerId: 7, pointerType: "touch", button: 0, clientX: 20, clientY: 30 });
   touchStart(); grid.emit("pointerup", { pointerId: 7, clientX: 21, clientY: 31 });
   assert.equal(pointer.state.player.hp, 1, "a touch tap selects and never consumes food");
   assert.equal(pointer.state.bagSelection, pointer.bag[0].id);
   for (const cancel of ["pointercancel", "lostpointercapture"]) {
-    touchStart(); grid.emit("pointermove", { pointerId: 7, clientX: 500, clientY: 50 });
+    touchStart(); grid.emit("pointermove", { pointerId: 7, clientX: 600, clientY: 50 });
     grid.emit(cancel, { pointerId: 7 });
     assert.equal(pointer.bag.length, 1, `${cancel} outside panel must not discard`);
     assert.equal(pointer.state.bagDrag, null);
@@ -499,14 +503,14 @@ export function runLootChecks() {
   assert.equal(pointer.bag[0].slot, 0, "a release on the panel heading cancels");
   touchStart(); grid.emit("pointermove", { pointerId: 7, clientX: 50, clientY: 120 });
   grid.emit("pointerup", { pointerId: 7, clientX: 50, clientY: 120 });
-  assert.equal(pointer.bag[0].slot, 3, "touch movement uses the requested grid cell");
+  assert.equal(pointer.bag[0].slot, 5, "touch movement uses the requested grid cell");
   assert.equal(pointer.state.player.hp, 1);
-  touchStart(); grid.emit("pointermove", { pointerId: 7, clientX: 500, clientY: 50 });
-  grid.emit("pointerup", { pointerId: 7, clientX: 500, clientY: 50 });
+  touchStart(); grid.emit("pointermove", { pointerId: 7, clientX: 600, clientY: 50 });
+  grid.emit("pointerup", { pointerId: 7, clientX: 600, clientY: 50 });
   assert.equal(pointer.bag.length, 0, "release outside the sheet discards once");
   assert.equal(pointer.loot.filter(item => item.droppedFromBag).length, 1);
-  for (let i = 0; i < 4; i += 1) pointer.carrySupply({ itemId: "junk" });
-  assert.equal(pointer.reorderBag(1, 4), true);
+  for (let i = 0; i < 8; i += 1) pointer.carrySupply({ itemId: "junk" });
+  assert.equal(pointer.reorderBag(1, 9), true);
   assert.equal(pointer.carrySupply({ itemId: "pizza" }), false, "two separate free cells cannot hold one two-cell item");
   console.log("PASS simulated touch tap, drag, cancellation, lost capture, outside discard and fragmented capacity");
   const consumablePage = bootPage(); consumablePage.start();
@@ -555,7 +559,8 @@ export function runLootChecks() {
   boxDebug.state.player.x = boxContainer.x; boxDebug.state.player.y = boxContainer.y;
   assert.equal(boxDebug.interact(), true);
   const boxSupplies = boxContainer.entries;
-  assert.deepEqual(plain(boxSupplies.map(item => item.itemId)), ["pizza", "milk", "ammo", "junk"], "house boxes contain the four fixed supply items");
+  assert(boxSupplies.length >= 2 && boxSupplies.length <= 4, "travel boxes generate varied, shape-fitting contents");
+  assert(boxSupplies.some(item => item.itemId !== "junk"), "boxes use the video catalog");
   assert(boxSupplies.every(item => boxDebug.supplyItems[item.itemId]), "house searches only generate carryable supply items");
 
   for (const throwableId of THROWABLE_IDS) {

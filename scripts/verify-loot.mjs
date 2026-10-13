@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { join, resolve, extname } from "node:path";
 import { runLootChecks } from "../prototype-2d/tests/loot-smoke.mjs";
+import { runInventoryReferenceChecks } from "../prototype-2d/tests/inventory-reference-smoke.mjs";
 
 const root = process.env.GAME_TEST_ROOT ? resolve(process.env.GAME_TEST_ROOT)
   : fileURLToPath(new URL("../", import.meta.url));
@@ -131,6 +132,7 @@ async function browserChecks() {
       });
       await page.evaluate(() => {
         const d = window.__LAST_NIGHT_DEBUG__, cache = d.state.room.containers[0];
+        cache.contents = ["pizza", "milk", "ammo", "junk"]; cache.lootType = "travel";
         d.state.player.x = cache.x; d.state.player.y = cache.y; d.step(1 / 60);
       });
       assert(await page.locator("#interactRun").isVisible(), "the interaction button is reserved for searching, not entering a door");
@@ -146,9 +148,9 @@ async function browserChecks() {
       assert.equal(found.entries.length, 4);
       assert.equal(found.ground.length, 0);
       assert.equal(found.bag, 0);
-      assert.equal(await page.locator("#searchGrid .is-searching").count(), 4);
+      assert.equal(await page.locator("#searchGrid .is-searching").count(), 1);
       await page.screenshot({ path: join(evidence, `${prefix}-search-unidentified.png`) });
-      await page.locator('#searchGrid [data-search-index="0"]').click();
+      await page.locator('#searchGrid [data-search-index="0"]').dblclick();
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag[0].itemId), "pizza");
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.player.hp), await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.player.maxHp), "carrying food doesn't use it");
       await page.locator("#bagClose").click();
@@ -157,7 +159,7 @@ async function browserChecks() {
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.room.containers[0].elapsed), elapsed);
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag.length), 1);
       await page.locator("#interactRun").click();
-      assert(await page.locator('#searchGrid [data-search-index="0"]').isDisabled());
+      assert.equal(await page.locator('#searchGrid [data-search-index="0"]').count(), 0);
       const sheetBox = await page.locator("#inventorySheet").boundingBox();
       assert(sheetBox.x >= 0 && sheetBox.y >= 0 && sheetBox.x + sheetBox.width <= viewport.width + 1 && sheetBox.y + sheetBox.height <= viewport.height + 1, "inventory fits landscape viewport");
 
@@ -169,10 +171,10 @@ async function browserChecks() {
         await page.mouse.up();
       };
       const center = box => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
-      const cell3 = await page.locator('#bagGrid .empty[data-bag-cell="3"]').boundingBox();
+      const cell3 = await page.locator('#bagGrid .grid-cell[data-bag-cell="3"]').boundingBox();
       await drag(page.locator('#bagGrid [data-bag-index="0"]'), center(cell3));
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag[0].slot), 3, "drag preserves the requested empty cell");
-      const cell2 = await page.locator('#bagGrid .empty[data-bag-cell="2"]').boundingBox();
+      const cell2 = await page.locator('#bagGrid .grid-cell[data-bag-cell="4"]').boundingBox();
       await drag(page.locator('#bagGrid [data-bag-index="0"]'), center(cell2));
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag[0].slot), 3, "invalid edge placement leaves the item in place");
       const header = await page.locator(".backpack-head strong").boundingBox();
@@ -188,7 +190,7 @@ async function browserChecks() {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag.length), 1, "touch cancellation never discards");
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.bagDrag), null);
-      const cell0 = await page.locator('#bagGrid .empty[data-bag-cell="0"]').boundingBox();
+      const cell0 = await page.locator('#bagGrid .grid-cell[data-bag-cell="0"]').boundingBox();
       await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [touch] });
       await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [center(cell0)] });
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
@@ -198,11 +200,11 @@ async function browserChecks() {
       await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.step(4));
       await page.locator("#searchTakeAll").click();
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag.length), 4);
-      assert.equal(await page.locator("#searchGrid .is-claimed").count(), 4);
+      assert.equal(await page.locator("#searchGrid [data-item-id]").count(), 0);
       const ammoBeforeUse = await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.state.weapon.ammoReserve);
       assert.equal(ammoBeforeUse, 90, "search transfer doesn't grant ammo immediately");
       assert.equal(await page.locator("#bagGrid [data-bag-index]").count(), 4, "two-cell items render one card");
-      assert.equal(await page.evaluate(() => document.querySelector("#bagGrid").scrollHeight <= document.querySelector("#bagGrid").clientHeight), true, "inventory never creates phantom extra rows");
+      assert.equal(await page.evaluate(() => document.querySelector("#bagScroll").scrollHeight > document.querySelector("#bagScroll").clientHeight), true, "five-column inventory scrolls within its bounded panel");
       await page.screenshot({ path: join(evidence, `${prefix}-search-and-backpack.png`) });
 
       await page.evaluate(() => { window.__LAST_NIGHT_DEBUG__.state.player.hp = 1; });
@@ -287,7 +289,10 @@ async function browserChecks() {
 
 try {
   mkdirSync(evidence, { recursive: true });
-  if (!process.argv.includes("--browser-only")) pass("real page simulation regression", runLootChecks());
+  if (!process.argv.includes("--browser-only")) {
+    pass("real page simulation regression", runLootChecks());
+    pass("video inventory regression", runInventoryReferenceChecks());
+  }
   if (!process.argv.includes("--unit-only")) await browserChecks();
   writeFileSync(join(evidence, "results.json"), JSON.stringify({ date: new Date().toISOString(), results }, null, 2));
   console.log("All requested checks passed. See results.json for the checks actually run; simulation is not a phone playtest.");

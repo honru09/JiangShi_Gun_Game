@@ -9,7 +9,7 @@
   button, select { padding: 7px; background: #2c4130; color: #eee5d0; border: 1px solid #788b6b; }
   iframe { display: block; border: 0; max-width: none; } pre { white-space: pre-wrap; margin: 8px 0; }
 </style>
-<nav><strong>背包交互验收</strong><button id="prepare" disabled>布置搜箱场景</button><button id="hurt">设置生命为 1</button><label>画面尺寸 <select id="size"><option value="1280x720">1280 × 720</option><option value="960x540">960 × 540</option><option value="844x390" selected>844 × 390</option></select></label></nav>
+<nav><strong>背包交互验收</strong><button id="prepare" disabled>布置搜箱场景</button><button id="equipment">装备箱</button><button id="safe">保险箱</button><button id="samples">装入参考物资</button><button id="hurt">设置生命为 1</button><label>画面尺寸 <select id="size"><option value="1280x720">1280 × 720</option><option value="960x540">960 × 540</option><option value="844x390" selected>844 × 390</option></select></label></nav>
 <iframe id="game" title="真实游戏页面" src="../index.html?admin=1&amp;tester=inventory-preview" width="844" height="390"></iframe>
 <pre id="report" aria-live="polite">正在加载实际游戏页面…</pre>
 <script>
@@ -20,7 +20,7 @@
     prepare.disabled = !d || frame.contentDocument.getElementById("startRun").disabled;
     if (!d) return;
     const container = d.state.room?.containers[0];
-    report.textContent = `状态：${d.state.phase} / ${d.state.paused ? "暂停" : "运行"}　生命：${d.state.player.hp}　备弹：${d.state.weapon.ammoReserve}\n箱内：${container ? container.entries?.map((e, i) => `${i + 1}:${e.claimed ? "已带走" : container.elapsed >= e.revealAt ? e.itemId : "未识别"}`).join(" | ") || "未打开" : "无"}\n背包：${d.bag.map(e => `${e.itemId}@第${e.slot + 1}格${e.amount != null ? `(${e.amount}发)` : ""}`).join(" | ") || "空"}\n地面丢弃：${d.loot.filter(e => e.droppedFromBag).map(e => `${e.itemId} / ${e.pickupArmed ? "可拾取" : "等待离开再返回"}`).join(" | ") || "无"}`;
+    report.textContent = `状态：${d.state.phase} / ${d.state.paused ? "暂停" : "运行"}　生命：${d.state.player.hp}　主武器：${d.state.weapon.name}　备弹：${d.availableAmmo()}\n箱内：${container ? container.entries?.map((e, i) => `${i + 1}:${e.claimed ? "已带走" : container.elapsed >= e.revealAt ? e.itemId : "未识别"}`).join(" | ") || "未打开" : "无"}\n背包：${d.bag.map(e => `${e.itemId}@第${e.slot + 1}格${e.rotated ? "(旋转)" : ""}${e.amount != null ? `(${e.amount}发)` : ""}`).join(" | ") || "空"}\n安全箱：${d.state.safe.map(e => `${e.itemId}@${e.slot}`).join(" | ") || "空"}\n地面丢弃：${d.loot.filter(e => e.droppedFromBag).map(e => `${e.itemId} / ${e.pickupArmed ? "可拾取" : "等待离开再返回"}`).join(" | ") || "无"}`;
   };
   prepare.onclick = () => {
     frame.contentDocument.getElementById("startRun").click();
@@ -28,10 +28,15 @@
     d.state.godMode = true; d.state.density = 0; d.state.lootTimer = Infinity; d.state.hordeTimer = Infinity; d.state.spawnBudget = 0;
     d.enterBuilding(d.houses.houses[0].id);
     const cache = d.state.room.containers[0];
+    cache.lootType = "travel"; cache.contents = ["basketball", "hairdryer", "cards", {itemId:"lightAmmo",amount:187}];
     d.state.player.x = cache.x; d.state.player.y = cache.y; d.state.enemies = [];
     d.step(1 / 60); d.searchSupplyBox(cache); status();
   };
-  document.getElementById("hurt").onclick = () => { if (debug()?.state.phase === "playing") debug().state.player.hp = 1; status(); };
+  const showBox = (lootType, contents) => { prepare.onclick(); const d = debug(), cache = d.state.room.containers[0]; d.toggleBagPanel(false); delete cache.entries; delete cache.lock; cache.lootType = lootType; cache.contents = contents; d.searchSupplyBox(cache); status(); };
+  document.getElementById("equipment").onclick = () => showBox("equipment", ["scar", "ks23", "trainingHelmet", {itemId:"lightAmmo",amount:300}, {itemId:"shells",amount:50}]);
+  document.getElementById("safe").onclick = () => showBox("safe", ["actionCamera", "wine", "necklace", "chess", "vacuum"]);
+  document.getElementById("samples").onclick = () => { const d = debug(); if(d?.state.phase !== "playing") return; if(d.state.paused) frame.contentDocument.getElementById("resumeRun").click(); for(const item of [{itemId:"medkit",count:3},{itemId:"lightAmmo",amount:187},{itemId:"lightAmmo",amount:300},{itemId:"scar"},{itemId:"trainingHelmet"},{itemId:"lens"},{itemId:"ks23"},{itemId:"fieldPack"}]) d.carrySupply(item); d.searchSupplyBox(d.state.room.containers[0]); d.step(1/60); status(); };
+  document.getElementById("hurt").onclick = () => { if (debug()?.state.phase === "playing") { const d = debug(); if(d.state.paused) frame.contentDocument.getElementById("resumeRun").click(); d.state.player.hp = 1; d.toggleBagPanel(true); } status(); };
   document.getElementById("size").onchange = event => { const [width, height] = event.target.value.split("x"); frame.width = width; frame.height = height; };
   setInterval(status, 100);
 </script>

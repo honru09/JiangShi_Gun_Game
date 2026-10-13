@@ -99,7 +99,8 @@
       const bounds = { minX: worldOrigin.x + localBounds.minX, minY: worldOrigin.y + localBounds.minY, maxX: worldOrigin.x + localBounds.maxX, maxY: known.door.y + 34 }
       const worldBounds = { minX: known.building.x, minY: known.building.y, maxX: known.building.x + localWidth, maxY: known.building.y + localHeight, width: localWidth, height: localHeight }
       const mappedLayout = Object.fromEntries(["rooms", "obstacles", "walls", "doors", "windows", "invasionPoints"].map(key => [key, layout[key].map(mapPoint)]))
-      const containers = layout.containers.map((point, index) => ({ ...mapPoint(point), id: known.id + "-cache-" + (index + 1), searched: false }))
+      const houseIndex = houses.findIndex(house => house.id === known.id)
+      const containers = layout.containers.map((point, index) => ({ ...mapPoint(point), id: known.id + "-cache-" + (index + 1), lootType: ["travel", "equipment", "tool", "safe"][(Math.max(0, houseIndex) * 2 + index) % 4], searched: false }))
       const entry = { x: known.door.x, y: known.door.y, side: known.door.side }
       const exit = { ...entry }
       const floorCount = Math.max(1, known.floors)
@@ -208,7 +209,7 @@
         ctx.fillStyle = "#15231f88"; ctx.fillRect(x + 4, y + 4, 48, 36)
         ctx.fillStyle = container.searched ? "#59645a" : "#3f7769"; ctx.fillRect(x, y, 48, 36)
         ctx.strokeStyle = container.searched ? "#a5af99" : "#f1cf7d"; ctx.lineWidth = 2; ctx.strokeRect(x, y, 48, 36)
-        ctx.fillStyle = container.searched ? "#cad0af" : "#ffe7a5"; ctx.font = "bold 12px Microsoft YaHei, sans-serif"; ctx.textAlign = "center"; ctx.fillText(container.searched ? "已搜" : "物资箱", container.x, container.y + 5)
+        ctx.fillStyle = container.searched ? "#cad0af" : "#ffe7a5"; ctx.font = "bold 12px Microsoft YaHei, sans-serif"; ctx.textAlign = "center"; ctx.fillText(container.searched ? "已搜" : window.WASTELAND_LOOT?.containerTypes?.[container.lootType]?.name || "物资箱", container.x, container.y + 5)
       }
       // The threshold remains a normal opening in this same canvas. Do not
       // paint a return button or imply a scene transition; movement through
