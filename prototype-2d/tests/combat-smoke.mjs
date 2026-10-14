@@ -123,6 +123,7 @@ const lootBefore = debug.loot.length
 page.click("adminLevel")
 assert.equal(debug.state.phase, "playing")
 assert.equal(debug.loot.length, lootBefore + 1)
+debug.state.loot = []
 const upgradeId = "scatterModule"
 const ball = debug.spawnLoot(upgradeId, "common", debug.state.player.x, debug.state.player.y)
 debug.state.player.x = ball.x; debug.state.player.y = ball.y
@@ -142,6 +143,31 @@ page.key("Space", false)
 assert.ok(debug.state.stats.hits > previousHits)
 assert.ok(closeEnemy.hp < 100)
 console.log("PASS rifle's first collision sweep hits an enemy inside the muzzle reach")
+
+const contactPage = boot()
+contactPage.start()
+const contact = contactPage.debug, contactState = contact.state
+const contactTemplate = { ...contactState.enemies[0] }
+Object.assign(contactState, { godMode: true, density: 0, hordeTimer: Infinity, lootTimer: Infinity, spawnBudget: 0, loot: [], combatDrops: [] })
+contactPage.key("Space")
+for (const weapon of ["assaultRifle", "submachineGun", "shotgun"]) {
+  for (const radius of [8, 17, 24]) for (let direction = 0; direction < 8; direction++) {
+    // Each aim/body-size fixture starts with a fresh magazine; ammunition
+    // depletion is covered separately by the inventory/reload regression.
+    contactState.weapon = { id: weapon, quality: "common" }
+    const player = contactState.player, angle = direction * Math.PI / 4
+    Object.assign(player, { armAngle: angle, aim: angle, fireTimer: 0, throwAction: 0 })
+    const enemy = { ...contactTemplate, id: 100000 + direction, x: player.x, y: player.y,
+      radius, hp: 10000, maxHp: 10000, baseSpeed: 0, speed: 0, burn: 0, dead: false, contactTimer: Infinity }
+    contactState.enemies = [enemy]; contactState.projectiles = []
+    const hits = contactState.stats.hits
+    contact.step(1 / 60)
+    assert.ok(contactState.stats.hits > hits && enemy.hp < 10000,
+      `${weapon} must hit a touching radius-${radius} target while turning from direction ${direction}`)
+  }
+}
+contactPage.key("Space", false)
+console.log("PASS manual fire hits touching enemies with three guns, eight directions and three body sizes")
 
 const fatalPage = boot()
 fatalPage.start()

@@ -113,12 +113,12 @@
     .skill-dock {
       position: absolute;
       z-index: 6;
-      left: 50%;
+      left: 128px;
+      right: 184px;
       bottom: calc(12px + var(--safe-bottom));
       display: flex;
       gap: 8px;
-      width: calc(100% - 18px);
-      transform: translateX(-50%);
+      width: auto;
       pointer-events: none;
     }
 
@@ -130,7 +130,7 @@
       position: relative;
       flex: 1;
       min-width: 0;
-      height: 32px;
+      height: 48px;
       padding: 2px 0;
       border-radius: 3px;
       background: #26322999;
@@ -141,7 +141,10 @@
     .skill-slot.core { color: var(--acid); }
     .skill-slot.boost { color: var(--cyan); }
     .skill-slot.empty { color: #7d897c; background: transparent; }
-    .skill-icon { display: block; font-size: 13px; font-weight: 900; line-height: 17px; }
+    .skill-icon { display: grid; place-items: center; height: 34px; font-size: 13px; font-weight: 900; line-height: 17px; }
+    .item-icon { display: block; width: 100%; height: 100%; max-height: 34px; object-fit: contain; padding: 2px; filter: drop-shadow(0 1px 1px #17140fcc); }
+    .inventory-icon svg { width: 100%; height: 100%; }
+    .pause-skill .item-icon { width: 42px; height: 42px; max-height: 42px; float: left; margin-right: 9px; }
     .skill-level { display: block; font-size: 7px; line-height: 9px; }
 
     .touch-zone {
@@ -581,6 +584,8 @@
   <script src="skills.js"></script>
   <script src="character-atlas.js"></script>
   <script src="character-art.js"></script>
+  <script src="item-art.js"></script>
+  <script src="item-effects.js"></script>
   <script src="loot-system.js"></script>
   <script src="inventory-system.js"></script>
   <script src="inventory-art.js"></script>
@@ -594,9 +599,11 @@
     const City = window.WASTELAND_CITY
     const Loot = window.WASTELAND_LOOT
     const Inventory = window.WASTELAND_INVENTORY
-    const itemArt = window.WASTELAND_ITEM_ART
+    const inventoryArt = window.WASTELAND_INVENTORY_ART
     const Houses = window.WASTELAND_HOUSES
-    if (!Skills || !City || !Loot || !Houses) {
+    const ItemArt = window.WASTELAND_ITEM_ART
+    const ItemEffects = window.WASTELAND_ITEM_EFFECTS
+    if (!Skills || !City || !Loot || !Houses || !ItemArt || !ItemEffects) {
       document.getElementById("introOverlay").innerHTML = '<div class="sheet"><h2>游戏配置未加载</h2><p class="lead">请将所有游戏脚本与 index.html 放在同一目录后重新打开。</p></div>'
       return
     }
@@ -674,6 +681,7 @@
     let hudTimer = 0
     let toastTimer = 0
     let joystickPointer = null
+    let renderedItemArtReady = null
 
     function clamp(value, minimum, maximum) { return Math.max(minimum, Math.min(maximum, value)) }
     function lerp(start, end, amount) { return start + (end - start) * amount }
@@ -852,6 +860,8 @@
         muzzle: 0,
         hurt: 0,
         invulnerable: 0,
+        invulnerableBurstTime: 0,
+        healFlash: 0,
         fireRateBoost: 0,
         ammoBoost: 0,
         sinceHit: 99,
@@ -966,7 +976,17 @@
       for (const element of [ui.introOverlay, ui.gameOverOverlay, ui.pauseOverlay]) element.hidden = element !== target
     }
 
+    function skillIconHtml(skill) {
+      const itemId = skill.id === "assaultRifle" ? state.weapon.id : skill.id
+      const picture = ItemArt.ready ? ItemArt.iconHtml(itemId, "item-icon", skill.name) : ""
+      if (picture) return picture
+      return Loot.supplyItems[itemId]
+        ? '<span class="item-icon inventory-icon">' + inventoryArt(supplyDescription(itemId)) + '</span>'
+        : '<span class="item-icon">' + skill.icon + '</span>'
+    }
+
     function renderSkillDock() {
+      renderedItemArtReady = ItemArt.ready
       const slots = build.slots().map(skill => skill.id === "assaultRifle" && state ? { ...skill, name: state.weapon.name, icon: Loot.weapons[state.weapon.id].icon, quality: state.weapon.quality } : skill)
       // The edge HUD has one main-weapon slot and four passive item slots.
       // Survival instinct remains in the build/pause sheet but is not a
@@ -974,9 +994,9 @@
       ui.skillDock.innerHTML = [{ group: "fixed", label: "武器", count: 1 }, { group: "core", label: "道具", count: 4 }, { group: "boost", label: "增益", count: 2 }].map(({ group, label, count }) => {
         const owned = slots.filter(skill => group === "fixed" ? skill.id === "assaultRifle" : skill.group === group)
         const placeholders = Array.from({ length: count - owned.length }, (_, index) => ({ id: `${group}-empty-${index}`, group, name: `空${label}槽 · 拾取道具球获得`, icon: "＋", level: 0 }))
-        return `<div class="skill-group ${group}"><div class="skill-group-label">${label}${group === "fixed" ? "" : ` ${owned.length}/${count}`}</div><div class="skill-group-slots">${owned.concat(placeholders).map(skill => `<div class="skill-slot ${skill.group} ${skill.level ? "" : "empty"}" data-skill-id="${skill.id}" role="img" aria-label="${skill.name}${skill.level ? ` · Lv.${skill.level} · ${Loot.qualities[skill.quality].name}` : ""}" title="${skill.name}${skill.description ? ` · ${skill.description}` : ""}" style="${skill.level ? `border-bottom:2px solid ${Loot.qualities[skill.quality].color}` : ""}"><span class="skill-icon">${skill.icon}</span><span class="skill-level">${skill.level ? group === "fixed" ? skill.id === "assaultRifle" ? Loot.qualities[skill.quality].name : "本能" : `Lv.${skill.level}` : "待拾取"}</span></div>`).join("")}</div></div>`
+        return `<div class="skill-group ${group}"><div class="skill-group-label">${label}${group === "fixed" ? "" : ` ${owned.length}/${count}`}</div><div class="skill-group-slots">${owned.concat(placeholders).map(skill => `<div class="skill-slot ${skill.group} ${skill.level ? "" : "empty"}" data-skill-id="${skill.id}" role="img" aria-label="${skill.name}${skill.level ? ` · Lv.${skill.level} · ${Loot.qualities[skill.quality].name}` : ""}" title="${skill.name}${skill.description ? ` · ${skill.description}` : ""}" style="${skill.level ? `border-bottom:2px solid ${Loot.qualities[skill.quality].color}` : ""}"><span class="skill-icon">${skill.level ? skillIconHtml(skill) : "＋"}</span><span class="skill-level">${skill.level ? group === "fixed" ? skill.id === "assaultRifle" ? Loot.qualities[skill.quality].name : "本能" : `Lv.${skill.level}` : "待拾取"}</span></div>`).join("")}</div></div>`
       }).join("")
-      ui.pauseSkills.innerHTML = slots.map(skill => `<div class="pause-skill"><strong>${skill.name}</strong><span>${Loot.qualities[skill.quality].name} · Lv.${skill.level}</span><small>${skill.description} ${skill.group === "fixed" ? "" : `当前效果系数 ${skill.effect.toFixed(1)}`}</small></div>`).join("")
+      ui.pauseSkills.innerHTML = slots.map(skill => `<div class="pause-skill">${skillIconHtml(skill)}<strong>${skill.name}</strong><span>${Loot.qualities[skill.quality].name} · Lv.${skill.level}</span><small>${skill.description} ${skill.group === "fixed" ? "" : `当前效果系数 ${skill.effect.toFixed(1)}`}</small></div>`).join("")
     }
 
     function startRun() {
@@ -1023,7 +1043,9 @@
       while (state.xp >= state.nextXp) {
         state.xp -= state.nextXp
         state.level += 1
+        const previousHp = state.player.hp
         state.player.hp = Math.min(state.player.maxHp, state.player.hp + build.effect("rationPack") * 8)
+        if (state.player.hp > previousHp) state.player.healFlash = 1.2
         state.nextXp = Math.round(5 + state.level * 2.1)
         toast(`生存等级 Lv.${state.level} · 永久升级请搜索场景道具球`)
         logEvent(`生存等级 Lv.${state.level} · 战斗继续`)
@@ -1036,17 +1058,70 @@
       return x >= minX - padding && x <= maxX + padding && y >= minY - padding && y <= maxY + padding
     }
 
+    function roomDoors(room) {
+      if (!room) return []
+      const candidates = []
+      const add = (door, fallbackSide) => {
+        if (!door || !Number.isFinite(Number(door.x)) || !Number.isFinite(Number(door.y))) return
+        const side = door.side || fallbackSide || "south"
+        // `room.doors` also contains interior wall doors. Only the explicit
+        // exits (or exterior invasion points) can cross the house shell.
+        if (door.exterior === false || side === "interior") return
+        const normalized = { ...door, x: Number(door.x), y: Number(door.y), side }
+        if (candidates.some(existing => existing.side === side && Math.hypot(existing.x - normalized.x, existing.y - normalized.y) < 2)) return
+        candidates.push(normalized)
+      }
+      for (const door of room.exits || []) add(door)
+      add(room.entry)
+      add(room.exit)
+      for (const entry of room.invasionEntrances || []) if (entry?.kind === "door") add(entry)
+      return candidates
+    }
+
+    function roomDoorForPoint(room, x, y) {
+      const doors = roomDoors(room)
+      if (!doors.length || !Number.isFinite(x) || !Number.isFinite(y)) return null
+      return doors.reduce((nearest, door) => {
+        const distance = (door.x - x) ** 2 + (door.y - y) ** 2
+        return !nearest || distance < nearest.distance ? { door, distance } : nearest
+      }, null)?.door || null
+    }
+
+    function roomDoorPoint(room, door, direction, inset = 0) {
+      if (!door) return null
+      const distance = Number.isFinite(inset) ? inset : 0
+      if (direction === "inside") {
+        if (door.side === "north") return { x: door.x, y: door.y + distance }
+        if (door.side === "south") return { x: door.x, y: door.y - distance }
+        if (door.side === "east") return { x: door.x - distance, y: door.y }
+        return { x: door.x + distance, y: door.y }
+      }
+      if (door.side === "north") return { x: door.x, y: door.y - distance }
+      if (door.side === "south") return { x: door.x, y: door.y + distance }
+      if (door.side === "east") return { x: door.x + distance, y: door.y }
+      return { x: door.x - distance, y: door.y }
+    }
+
+    function roomDoorOffset(door, x, y) {
+      if (!door) return { outward: Infinity, lateral: Infinity }
+      if (door.side === "north") return { outward: door.y - y, lateral: Math.abs(x - door.x) }
+      if (door.side === "south") return { outward: y - door.y, lateral: Math.abs(x - door.x) }
+      if (door.side === "east") return { outward: x - door.x, lateral: Math.abs(y - door.y) }
+      return { outward: door.x - x, lateral: Math.abs(y - door.y) }
+    }
+
     function roomHasDoorwayAccess(room, x, y, radius = 0) {
       if (!room || !Number.isFinite(x) || !Number.isFinite(y)) return false
+      const padding = Math.max(0, Number(radius) || 0)
       const frame = room.worldBounds
-      if (frame && x >= frame.minX - radius && x <= frame.maxX + radius && y >= frame.minY - radius && y <= frame.maxY + radius) return true
-      const door = room.entry || room.exit
-      if (!door) return false
-      const reach = 42 + Math.max(0, radius)
-      if (door.side === "south") return Math.abs(x - door.x) <= reach && y >= door.y - 30 - radius && y <= door.y + 76 + radius
-      if (door.side === "north") return Math.abs(x - door.x) <= reach && y <= door.y + 30 + radius && y >= door.y - 76 - radius
-      if (door.side === "east") return Math.abs(y - door.y) <= reach && x >= door.x - 30 - radius && x <= door.x + 76 + radius
-      return Math.abs(y - door.y) <= reach && x <= door.x + 30 + radius && x >= door.x - 76 - radius
+      if (frame && x >= frame.minX - padding && x <= frame.maxX + padding && y >= frame.minY - padding && y <= frame.maxY + padding) return true
+      const reach = 44 + padding
+      return roomDoors(room).some(door => {
+        if (door.side === "south") return Math.abs(x - door.x) <= reach && y >= door.y - 36 - padding && y <= door.y + 72 + padding
+        if (door.side === "north") return Math.abs(x - door.x) <= reach && y <= door.y + 36 + padding && y >= door.y - 72 - padding
+        if (door.side === "east") return Math.abs(y - door.y) <= reach && x >= door.x - 36 - padding && x <= door.x + 72 + padding
+        return Math.abs(y - door.y) <= reach && x <= door.x + 36 + padding && x >= door.x - 72 - padding
+      })
     }
 
     function roomAtPoint(x, y, radius = 0) {
@@ -1054,6 +1129,28 @@
       for (const room of state.houseRooms.values()) {
         if (pointInRoom(room, x, y, radius) && roomHasDoorwayAccess(room, x, y, radius)) return room
       }
+      return null
+    }
+
+    function actorInsideRoom(room, x, y, radius = 0) {
+      if (!room || !Number.isFinite(x) || !Number.isFinite(y)) return false
+      const frame = room.worldBounds
+      if (!frame) return pointInRoom(room, x, y) && roomHasDoorwayAccess(room, x, y, radius)
+      if (x >= frame.minX && x <= frame.maxX && y >= frame.minY && y <= frame.maxY) return true
+      // The physical collision porch is longer than the visible floor's
+      // occupancy threshold. A survivor who has crossed the outer door marker
+      // is already on the street and must not be clamped back into the room.
+      return roomDoors(room).some(door => {
+        if (door.side === "north") return Math.abs(x - door.x) <= 44 && y >= door.y && y <= frame.minY
+        if (door.side === "south") return Math.abs(x - door.x) <= 44 && y <= door.y && y >= frame.maxY
+        if (door.side === "east") return Math.abs(y - door.y) <= 44 && x <= door.x && x >= frame.maxX
+        return Math.abs(y - door.y) <= 44 && x >= door.x && x <= frame.minX
+      })
+    }
+
+    function interiorRoomAtPoint(x, y, radius = 0) {
+      if (!state?.houseRooms) return null
+      for (const room of state.houseRooms.values()) if (actorInsideRoom(room, x, y, radius)) return room
       return null
     }
 
@@ -1066,12 +1163,12 @@
     function updateActiveRoom() {
       if (!state?.player) return null
       const current = state.room
-      if (current && roomHasDoorwayAccess(current, state.player.x, state.player.y, state.player.radius || 0) && pointInRoom(current, state.player.x, state.player.y, state.player.radius || 0)) {
+      if (current && actorInsideRoom(current, state.player.x, state.player.y, state.player.radius || 0)) {
         state.activeHouseId = current.houseId
         state.scene = "city"
         return current
       }
-      const next = roomAtPoint(state.player.x, state.player.y, state.player.radius || 0)
+      const next = interiorRoomAtPoint(state.player.x, state.player.y, state.player.radius || 0)
       state.room = next
       state.activeHouseId = next?.houseId || null
       state.scene = "city"
@@ -1080,37 +1177,37 @@
     }
 
     function activeIsFree(x, y, radius = 18) {
-      const room = state.room && pointInRoom(state.room, x, y, radius) ? state.room : roomAtPoint(x, y, radius)
-      if (room && roomHasDoorwayAccess(room, x, y, radius)) return houseSystem.isFree(room, x, y, radius)
+      const room = roomAtPoint(x, y, radius)
+      if (room && houseSystem.isFree(room, x, y, radius)) return true
       return city.isFree(x, y, radius)
     }
 
     function moveEntity(entity, dx, dy) {
-      const radius = entity.radius || 18
-      const currentRoom = roomAtPoint(entity.x, entity.y, radius) || (state.room && pointInRoom(state.room, entity.x, entity.y, radius) && roomHasDoorwayAccess(state.room, entity.x, entity.y, radius) ? state.room : null)
-      const targetRoom = roomAtPoint(entity.x + dx, entity.y + dy, radius)
-      const room = currentRoom || targetRoom
-      const door = room?.entry || room?.exit
-      // The doorway is an explicit gap in the roof/wall, so crossing its
-      // short porch must not be fed into the indoor clamp (which would snap a
-      // street coordinate to the first walkable interior point). Move through
-      // the corridor one normal physics step at a time and let the next tick
-      // choose the city or room collision provider.
-      if (room && door && door.side === "south" && Math.abs(entity.x - door.x) <= 50 + radius && Math.abs(dx) <= Math.abs(dy) * 1.8 + .001 && Math.abs(entity.y - door.y) <= 92 + radius) {
-        entity.x += dx
-        entity.y += dy
-        if (entity === state.player) updateActiveRoom()
-        return
-      }
-      if (room) {
-        if (entity === state.player && state.room !== room) {
-          state.room = room
-          state.activeHouseId = room.houseId
-          state.scene = "city"
-          ensureRoomActivity(room)
+      if (!entity || ![entity.x, entity.y, dx, dy].every(Number.isFinite)) return
+      const radius = Number.isFinite(entity.radius) ? Math.max(0, entity.radius) : 18
+      const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / Math.max(8, radius / 2)))
+      const stepX = dx / steps, stepY = dy / steps
+      // Resolve against the union of street and floor collision at each small
+      // axis step. This keeps both doors continuous without bypassing walls,
+      // furniture, or room bounds, and permits an actor to slide off a jamb.
+      for (let step = 0; step < steps; step++) for (const axis of ["x", "y"]) {
+        const amount = axis === "x" ? stepX : stepY
+        if (!amount) continue
+        const start = entity[axis]
+        const maximum = (axis === "x" ? WORLD_WIDTH : WORLD_HEIGHT) - CONFIG.worldMargin - radius
+        const end = clamp(start + amount, CONFIG.worldMargin + radius, maximum)
+        const free = value => activeIsFree(axis === "x" ? value : entity.x, axis === "y" ? value : entity.y, radius)
+        if (free(end)) entity[axis] = end
+        else {
+          let low = 0, high = 1
+          for (let iteration = 0; iteration < 9; iteration++) {
+            const middle = (low + high) / 2
+            if (free(start + (end - start) * middle)) low = middle
+            else high = middle
+          }
+          entity[axis] = start + (end - start) * low
         }
-        houseSystem.move(room, entity, dx, dy)
-      } else city.move(entity, dx, dy)
+      }
       if (entity === state.player) updateActiveRoom()
     }
 
@@ -1160,7 +1257,7 @@
     function inventoryCard(item, area, index, columns) {
       const d = Inventory.data(item), shape = Inventory.size(item), quality = item.quality || d.quality
       const selected = state.bagSelection === item.id && (state.selectionArea || "bag") === area
-      return `<button type="button" class="${area === "search" ? "loot-card ready" : "bag-slot"} item-card${selected ? " is-selected" : ""}${item.rotated ? " rotated" : ""}" data-grid-area="${area}" data-item-id="${item.id}" data-bag-index="${index}" data-bag-cell="${item.slot}" ${area === "search" ? `data-search-index="${index}"` : ""} aria-label="${d.name}，${shape.width}乘${shape.height}格，${Inventory.quantity(item)}件" style="grid-column:${item.slot % columns + 1}/span ${shape.width};grid-row:${Math.floor(item.slot / columns) + 1}/span ${shape.height};--item-tint:${Loot.qualities[quality]?.color || "#adbaa5"}65"><span class="item-name">${d.name}</span>${itemArt(d)}${item.level || d.level ? `<span class="item-level">${item.level || d.level}级</span>` : ""}${Inventory.quantity(item) > 1 ? `<span class="item-count">${Inventory.quantity(item)}</span>` : ""}</button>`
+      return `<button type="button" class="${area === "search" ? "loot-card ready" : "bag-slot"} item-card${selected ? " is-selected" : ""}${item.rotated ? " rotated" : ""}" data-grid-area="${area}" data-item-id="${item.id}" data-bag-index="${index}" data-bag-cell="${item.slot}" ${area === "search" ? `data-search-index="${index}"` : ""} aria-label="${d.name}，${shape.width}乘${shape.height}格，${Inventory.quantity(item)}件" style="grid-column:${item.slot % columns + 1}/span ${shape.width};grid-row:${Math.floor(item.slot / columns) + 1}/span ${shape.height};--item-tint:${Loot.qualities[quality]?.color || "#adbaa5"}65"><span class="item-name">${d.name}</span>${inventoryArt(d)}${item.level || d.level ? `<span class="item-level">${item.level || d.level}级</span>` : ""}${Inventory.quantity(item) > 1 ? `<span class="item-count">${Inventory.quantity(item)}</span>` : ""}</button>`
     }
     function gridBackground(columns, capacity) {
       return Array.from({ length: capacity }, (_, slot) => `<div class="grid-cell" data-grid-cell="${slot}" data-bag-cell="${slot}" style="grid-column:${slot % columns + 1};grid-row:${Math.floor(slot / columns) + 1}" aria-hidden="true"></div>`).join("")
@@ -1192,14 +1289,14 @@
       const weaponKey = JSON.stringify([state.weapon, availableAmmo()])
       if (ui.mainEquipment.renderKey !== weaponKey) {
         ui.mainEquipment.renderKey = weaponKey
-        ui.mainEquipment.innerHTML = `${itemArt(supplyDescription(state.weapon.id))}<div><b>主武器 · ${state.weapon.name}</b><small>${qualityLabel(state.weapon.quality)} · ${state.weapon.ammoInMag} / ${availableAmmo()} 发</small></div>`
+        ui.mainEquipment.innerHTML = `${inventoryArt(supplyDescription(state.weapon.id))}<div><b>主武器 · ${state.weapon.name}</b><small>${qualityLabel(state.weapon.quality)} · ${state.weapon.ammoInMag} / ${availableAmmo()} 发</small></div>`
       }
       const equipKey = JSON.stringify([state.equipment, state.bagSelection])
       if (ui.equipmentGrid.renderKey !== equipKey) {
         ui.equipmentGrid.renderKey = equipKey
         ui.equipmentGrid.innerHTML = Object.entries(equipmentLabels).map(([slot, label]) => {
           const item = state.equipment[slot], d = Inventory.data(item)
-          return `<button class="equipment-slot" type="button" data-equipment-slot="${slot}" aria-label="${label}${item ? `：${d.name}` : "：未装备"}" style="background:${item ? Loot.qualities[item.quality || d.quality].color + "44" : "#3b3d31"}"><span>${item ? d.name : label}</span>${item ? itemArt(d) : "◇"}<small>${d.level ? d.level + "级" : ""}</small></button>`
+          return `<button class="equipment-slot" type="button" data-equipment-slot="${slot}" aria-label="${label}${item ? `：${d.name}` : "：未装备"}" style="background:${item ? Loot.qualities[item.quality || d.quality].color + "44" : "#3b3d31"}"><span>${item ? d.name : label}</span>${item ? inventoryArt(d) : "◇"}<small>${d.level ? d.level + "级" : ""}</small></button>`
         }).join("")
       }
       if (state.bagDrag) return
@@ -1366,6 +1463,7 @@
       } else if (["food", "medical"].includes(d.category)) {
         if (state.player.hp >= state.player.maxHp) { toast("生命已满", 1.5); return false }
         state.player.hp = Math.min(state.player.maxHp, state.player.hp + d.heal)
+        state.player.healFlash = 1.2
         if (Inventory.quantity(item) > 1) Inventory.setQuantity(item, Inventory.quantity(item) - 1); else grid.items.splice(Number(index), 1)
         toast(`使用 ${d.name}`, 1.5)
       } else { toast("这件物资可携带撤离", 1.5); return false }
@@ -1611,6 +1709,7 @@
       }
       const description = Loot.describe(ball)
       let message
+      const previousHp = state.player.hp
       if (ball.kind === "gun") {
         const same = state.weapon.id === ball.itemId
         const better = Loot.ranks.indexOf(ball.quality) > Loot.ranks.indexOf(state.weapon.quality)
@@ -1635,6 +1734,7 @@
           message = `${result.acquired ? "获得" : "强化"}${description.name} · Lv.${result.level} · ${Loot.qualities[result.quality].name}`
         }
       }
+      if (state.player.hp > previousHp) state.player.healFlash = 1.2
       particle(ball.x, ball.y, description.quality.color, 12, 110)
       toast(message, 2.6); logEvent(message); renderSkillDock()
       return true
@@ -1644,7 +1744,10 @@
       const details = Loot.describe(drop)
       const effect = details.consumable
       if (!effect) return
-      if (effect.effect === "invulnerable") state.player.invulnerable = Math.max(state.player.invulnerable, effect.duration)
+      if (effect.effect === "invulnerable") {
+        state.player.invulnerable = Math.max(state.player.invulnerable, effect.duration)
+        state.player.invulnerableBurstTime = effect.duration
+      }
       if (effect.effect === "fireRate") state.player.fireRateBoost = Math.max(state.player.fireRateBoost, effect.duration)
       if (effect.effect === "ammo") state.player.ammoBoost = Math.max(state.player.ammoBoost, effect.duration)
       particle(drop.x, drop.y, details.color, 14, 125)
@@ -1723,12 +1826,14 @@
       return true
     }
 
-    function doorDirection(room) {
-      if (!room?.bounds || !room.exit) return { x: 0, y: 1 }
+    function doorDirection(room, point) {
+      if (!room?.bounds) return { x: 0, y: 1 }
       const centerX = (room.bounds.minX + room.bounds.maxX) / 2
       const centerY = (room.bounds.minY + room.bounds.maxY) / 2
-      const dx = room.exit.x - centerX
-      const dy = room.exit.y - centerY
+      const door = roomDoorForPoint(room, point?.x, point?.y) || roomDoors(room)[0]
+      if (!door) return { x: 0, y: 1 }
+      const dx = door.x - centerX
+      const dy = door.y - centerY
       const length = Math.max(1, Math.hypot(dx, dy))
       return { x: dx / length, y: dy / length }
     }
@@ -1794,7 +1899,12 @@
       if (typeof houseSystem.getInvasionEntrances === "function") sources.push(houseSystem.getInvasionEntrances(room))
       if (Array.isArray(houseSystem.invasionEntrances)) sources.push(houseSystem.invasionEntrances)
       for (const key of ["invasionEntrances", "invasionPoints", "entryPoints"]) if (Array.isArray(room[key])) sources.push(room[key])
-      const entries = sources.find(Array.isArray) || []
+      // Keep every source: older room objects expose only invasionPoints while
+      // the two-door plan exposes exits plus windows. Deduping below keeps a
+      // single north/south doorway even when both APIs describe it.
+      const entries = sources.filter(Array.isArray).flat()
+      for (const door of roomDoors(room)) entries.push({ ...door, kind: "door", exterior: true })
+      const seen = new Set()
       return entries.map((entry, index) => {
         if (!entry || !Number.isFinite(Number(entry.x)) || !Number.isFinite(Number(entry.y))) return null
         const source = entry.source && Number.isFinite(Number(entry.source.x)) ? entry.source : entry
@@ -1804,21 +1914,28 @@
         const x = fromRect ? Number(source.x) + width / 2 : Number(entry.x)
         const y = fromRect ? Number(source.y) + height / 2 : Number(entry.y)
         if (!Number.isFinite(x) || !Number.isFinite(y)) return null
-        return { ...entry, x, y, id: entry.id || `${entry.kind || "entry"}-${index + 1}`, side: entry.side || "interior" }
+        const side = entry.side || "interior"
+        const id = entry.id || `${entry.kind || "entry"}-${side}-${Math.round(x)}-${Math.round(y)}`
+        const key = `${entry.kind || "entry"}:${side}:${Math.round(x)}:${Math.round(y)}`
+        if (seen.has(key)) return null
+        seen.add(key)
+        return { ...entry, x, y, id, side }
       }).filter(Boolean)
     }
 
     function indoorSpawnCandidate(room, entry, radius) {
       const margin = radius + 12
-      let x = entry.x
-      let y = entry.y
+      const door = entry?.side ? entry : roomDoorForPoint(room, entry?.x, entry?.y)
+      let x = Number.isFinite(Number(entry?.x)) ? Number(entry.x) : door?.x
+      let y = Number.isFinite(Number(entry?.y)) ? Number(entry.y) : door?.y
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return { x: room?.bounds?.minX || 0, y: room?.bounds?.minY || 0 }
       // Windows sit on the perimeter; move the spawn point inward so the
       // collision radius remains inside the room. Interior doors keep their
       // center point and are clamped by the room bounds below.
-      if (entry.side === "north") y += margin
-      else if (entry.side === "south") y -= margin
-      else if (entry.side === "west") x += margin
-      else if (entry.side === "east") x -= margin
+      if (door?.side === "north") y += margin
+      else if (door?.side === "south") y -= margin
+      else if (door?.side === "west") x += margin
+      else if (door?.side === "east") x -= margin
       return {
         x: clamp(x, room.bounds.minX + margin, room.bounds.maxX - margin),
         y: clamp(y, room.bounds.minY + margin, room.bounds.maxY - margin)
@@ -1974,30 +2091,17 @@
     }
 
     function buildingHitFraction(ax, ay, bx, by, padding = 0) {
-      const sourceRoom = roomAtPoint(ax, ay, padding) || (state?.room && pointInRoom(state.room, ax, ay, padding) ? state.room : null)
-      if (sourceRoom) {
-        if (typeof houseSystem.segmentHitFraction === "function") return houseSystem.segmentHitFraction(sourceRoom, ax, ay, bx, by, padding)
-        let closest = null
-        for (const obstacle of sourceRoom.obstacles || []) {
-          const hit = segmentRectFraction(ax, ay, bx, by, obstacle, padding)
-          if (hit !== null && (closest === null || hit < closest)) closest = hit
-        }
-        return closest
-      }
       let closest = null
-      for (const building of city.buildings) {
-        let near = 0, far = 1
-        for (const [origin, delta, minimum, maximum] of [[ax, bx - ax, building.x - padding, building.x + building.width + padding], [ay, by - ay, building.y - padding, building.y + building.height + padding]]) {
-          if (Math.abs(delta) < .00001) {
-            if (origin < minimum || origin > maximum) { near = 2; break }
-          } else {
-            const first = (minimum - origin) / delta
-            const second = (maximum - origin) / delta
-            near = Math.max(near, Math.min(first, second))
-            far = Math.min(far, Math.max(first, second))
-          }
-        }
-        if (near <= far && (closest === null || near < closest)) closest = near
+      // Every house shares the street's world coordinates. Use its footprint
+      // only to reject distant rays, then test the actual walls and furniture
+      // from either side of a door. Check all houses so a ray leaving one room
+      // still stops at a neighbouring building.
+      for (const house of houseSystem.houses) {
+        const outlineHit = segmentRectFraction(ax, ay, bx, by, house.building, padding)
+        if (outlineHit === null) continue
+        const room = state?.houseRooms?.get(house.id)
+        const hit = room ? houseSystem.segmentHitFraction(room, ax, ay, bx, by, padding) : outlineHit
+        if (hit !== null && (closest === null || hit < closest)) closest = hit
       }
       return closest
     }
@@ -2067,12 +2171,11 @@
       player.muzzle = .075
       player.recoil = 1
       const muzzle = muzzlePosition()
-      const mount = weaponMount(player)
       state.stats.shots += 1
       for (let pellet = 0; pellet < stats.pellets && state.projectiles.length < CONFIG.projectileCap; pellet += 1) {
         const offset = (pellet - (stats.pellets - 1) / 2) * stats.spread
         const angle = player.armAngle + offset
-        state.projectiles.push({ id: id(), x: muzzle.x, y: muzzle.y, oldX: muzzle.x, oldY: muzzle.y, sweepOrigin: { x: player.x + mount.x, y: player.y + mount.y }, vx: Math.cos(angle) * stats.bulletSpeed, vy: Math.sin(angle) * stats.bulletSpeed, life: stats.bulletLife, damage: stats.bulletDamage * (build.level("scatterModule") ? .66 : 1), remaining: stats.pierce + 1, hitIds: new Set(), burn: stats.burn, arc: stats.arc })
+        state.projectiles.push({ id: id(), x: muzzle.x, y: muzzle.y, oldX: muzzle.x, oldY: muzzle.y, sweepOrigin: { x: player.x, y: player.y }, vx: Math.cos(angle) * stats.bulletSpeed, vy: Math.sin(angle) * stats.bulletSpeed, life: stats.bulletLife, damage: stats.bulletDamage * (build.level("scatterModule") ? .66 : 1), remaining: stats.pierce + 1, hitIds: new Set(), burn: stats.burn, arc: stats.arc })
       }
       particle(muzzle.x, muzzle.y, "#ffd373", 2, 45)
       return true
@@ -2107,7 +2210,8 @@
         bullet.x += bullet.vx * dt
         bullet.y += bullet.vy * dt
         bullet.life -= dt
-        // Sweep the shoulder-to-muzzle segment once so an enemy inside the rifle's reach is hittable.
+        // Sweep from the collision body's centre once so touching enemies stay
+        // hittable as the raised shoulders and short arms turn through a shot.
         // The rendered bullet still begins at the muzzle, then follows normal flight on later ticks.
         const collisionOrigin = bullet.sweepOrigin || { x: bullet.oldX, y: bullet.oldY }
         bullet.sweepOrigin = null
@@ -2188,7 +2292,7 @@
       if (player.movingSpeed > 1) { player.walkCycle += (5 + stride * 8) * dt; player.gait = lerp(player.gait, stride, Math.min(1, dt * 16)) }
       else player.gait = Math.max(0, player.gait - dt * 8)
       player.bodyAngle = 0
-      for (const property of ["attack", "muzzle", "hurt", "invulnerable", "fireRateBoost", "ammoBoost", "instinctFlash", "arcTimer", "throwAction"]) player[property] = Math.max(0, player[property] - dt)
+      for (const property of ["attack", "muzzle", "hurt", "invulnerable", "invulnerableBurstTime", "healFlash", "fireRateBoost", "ammoBoost", "instinctFlash", "arcTimer", "throwAction"]) player[property] = Math.max(0, player[property] - dt)
       player.recoil = Math.max(0, player.recoil - dt * 13)
       player.sinceHit += dt
       if (player.sinceHit > 4) player.hp = Math.min(player.maxHp, player.hp + stats.regen * dt)
@@ -2216,7 +2320,7 @@
 
     function updateEnemies(dt) {
       const player = state.player
-      const playerRoom = city.isFree(player.x, player.y, player.radius) ? null : roomAtPoint(player.x, player.y, player.radius)
+      const playerRoom = interiorRoomAtPoint(player.x, player.y, player.radius)
       city.updateNavigation(player.x, player.y)
       const grid = new Map()
       const cellSize = 58
@@ -2231,31 +2335,55 @@
         enemy.trapTimer = Math.max(0, (enemy.trapTimer || 0) - dt)
         if (enemy.trapTimer <= 0) enemy.trapSlow = 0
         enemy.speed = enemy.baseSpeed * (1 + Math.min(.85, state.time / 240)) * (enemy.trapTimer > 0 ? (enemy.trapSlow || .3) : 1)
-        const enemyRoom = roomAtPoint(enemy.x, enemy.y, enemy.radius) || (state.room && pointInRoom(state.room, enemy.x, enemy.y, enemy.radius) ? state.room : null)
+        const enemyRoom = interiorRoomAtPoint(enemy.x, enemy.y, enemy.radius)
         const onStreet = city.isFree(enemy.x, enemy.y, enemy.radius)
         let streetMovement = false
         let waypoint
         if (enemyRoom && enemyRoom === playerRoom) {
-          const door = enemyRoom.entry
-          // Bridge the open threshold before asking the indoor navigator for
-          // a route; its collision bounds start beyond the outdoor approach.
-          waypoint = Math.abs(enemy.x - door.x) < 32 && enemy.y >= door.y - 58
-            ? { x: door.x, y: door.y - 94 }
-            : houseSystem.steer(enemyRoom, enemy.x, enemy.y, player.x, player.y, enemy.radius)
+          // Both entrances belong to the same floor graph. The navigator can
+          // therefore chase directly, including when one actor is standing in
+          // a north or south threshold.
+          let target = player
+          if (!houseSystem.isFree(enemyRoom, player.x, player.y, enemy.radius)) {
+            // A large infected still reaches contact range when the survivor
+            // hugs furniture with a smaller radius. Pick a standable point
+            // beside the survivor before solving the room's graph.
+            const angle = Math.atan2(enemy.y - player.y, enemy.x - player.x)
+            const approachRadius = Math.min(enemy.radius + player.radius - 4, enemy.radius + 12)
+            const candidates = []
+            for (let index = 0; index < 16; index++) {
+              const direction = angle + index / 16 * Math.PI * 2
+              const point = { x: player.x + Math.cos(direction) * approachRadius, y: player.y + Math.sin(direction) * approachRadius }
+              if (houseSystem.isFree(enemyRoom, point.x, point.y, enemy.radius)) candidates.push(point)
+            }
+            candidates.sort((a, b) => distanceSquared(a.x, a.y, enemy.x, enemy.y) - distanceSquared(b.x, b.y, enemy.x, enemy.y))
+            target = candidates[0] || player
+          }
+          waypoint = houseSystem.steer(enemyRoom, enemy.x, enemy.y, target.x, target.y, enemy.radius)
         } else if (enemyRoom && !onStreet) {
-          const door = enemyRoom.entry
-          // A target outside this floor must be reached through the doorway,
-          // not by steering toward an unreachable point beyond an inner wall.
-          waypoint = Math.abs(enemy.x - door.x) < 32 && enemy.y >= door.y - 58
-            ? { x: door.x, y: enemyRoom.bounds.maxY + enemy.radius + 8 }
-            : houseSystem.steer(enemyRoom, enemy.x, enemy.y, door.x, door.y, enemy.radius)
+          // A target outside this floor must be reached through the nearest
+          // of the two doors, not by steering toward an unreachable point
+          // beyond an inner wall.
+          const door = roomDoorForPoint(enemyRoom, enemy.x, enemy.y) || roomDoors(enemyRoom)[0]
+          const inside = roomDoorPoint(enemyRoom, door, "inside", Math.max(54, enemy.radius + 30)) || { x: enemy.x, y: enemy.y }
+          const outside = roomDoorPoint(enemyRoom, door, "outside", Math.max(42, enemy.radius + 18)) || inside
+          const offset = roomDoorOffset(door, enemy.x, enemy.y)
+          waypoint = offset.lateral < 32 && offset.outward >= -Math.max(54, enemy.radius + 30) - 8
+            ? outside
+            : houseSystem.steer(enemyRoom, enemy.x, enemy.y, inside.x, inside.y, enemy.radius)
         } else {
-          const target = playerRoom?.entry || player
+          const door = playerRoom
+            ? roomDoorForPoint(playerRoom, enemy.x, enemy.y) || roomDoorForPoint(playerRoom, player.x, player.y) || roomDoors(playerRoom)[0]
+            : null
+          const outside = playerRoom ? roomDoorPoint(playerRoom, door, "outside", Math.max(42, enemy.radius + 18)) : null
+          const inside = playerRoom ? roomDoorPoint(playerRoom, door, "inside", Math.max(54, enemy.radius + 30)) : null
+          const target = outside || player
           streetMovement = true
           waypoint = city.steer(enemy.x, enemy.y, target.x, target.y, enemy.radius)
-          if (playerRoom && Math.abs(enemy.x - target.x) < 32 && Math.abs(enemy.y - target.y) < 58) {
+          const offset = roomDoorOffset(door, enemy.x, enemy.y)
+          if (playerRoom && outside && offset.lateral < 32 && offset.outward <= Math.max(42, enemy.radius + 18) + 18) {
             streetMovement = false
-            waypoint = { x: target.x, y: target.y - 94 }
+            waypoint = inside || target
           }
         }
         const dx = waypoint.x - enemy.x
@@ -2285,6 +2413,12 @@
         }
         const gx = Math.floor(enemy.x / cellSize)
         const gy = Math.floor(enemy.y / cellSize)
+        const doorwayRoom = enemyRoom || playerRoom
+        const doorway = roomDoorForPoint(doorwayRoom, enemy.x, enemy.y)
+        const doorwayOffset = roomDoorOffset(doorway, enemy.x, enemy.y)
+        // Separation is a soft crowd preference. At a single-body doorway it
+        // must not overpower forward steering and pin neighbours on the jambs.
+        const separationScale = doorway && doorwayOffset.lateral < 64 && Math.abs(doorwayOffset.outward) < 104 ? .12 : 1
         for (let x = gx - 1; x <= gx + 1; x += 1) for (let y = gy - 1; y <= gy + 1; y += 1) {
           for (const other of grid.get(`${x},${y}`) || []) {
             if (other === enemy || other.dead) continue
@@ -2292,7 +2426,7 @@
             const gapY = enemy.y - other.y
             const gap = Math.hypot(gapX, gapY)
             const spacing = (enemy.radius + other.radius) * .8
-            if (gap > 0 && gap < spacing) { vx += gapX / gap * (spacing - gap) * 3; vy += gapY / gap * (spacing - gap) * 3 }
+            if (gap > 0 && gap < spacing) { vx += gapX / gap * (spacing - gap) * 3 * separationScale; vy += gapY / gap * (spacing - gap) * 3 * separationScale }
           }
         }
         const previousX = enemy.x
@@ -2329,8 +2463,15 @@
     function launchThrowable(kind, level, target) {
       if (!target || (kind !== "extinguisher" && state.throwableProjectiles.length >= 18)) return false
       const player = state.player
-      const startX = player.x + Math.cos(player.aim) * 14
-      const startY = player.y + Math.sin(player.aim) * 14 - 16
+      // One support hand uses one tool at a time. Ready cooldowns wait until
+      // this short action finishes instead of spawning four tools in one palm.
+      if (player.throwAction > 0) return false
+      player.throwAction = kind === "extinguisher" ? .3 : .38
+      player.throwKind = kind
+      player.armAngle = Math.atan2(target.y - player.y + 14, target.x - player.x)
+      const releaseHand = window.WASTELAND_CHARACTER_ART.pose("hero", player, { gun: { scaleX: state.weapon.id === "submachineGun" ? .8 : 1 } }).arms[0].end
+      const startX = player.x + releaseHand.x
+      const startY = player.y + releaseHand.y
       let targetX = target.x
       let targetY = target.y
       // The extinguisher is a held tool rather than a thrown object. Start
@@ -2341,8 +2482,8 @@
         // Snap the short spray gesture to the current lock-on target so the
         // nozzle, arm and fan all share one direction on the release frame.
         player.armAngle = direction
-        const handX = player.x + Math.cos(direction) * 30
-        const handY = player.y - 14 + Math.sin(direction) * 30
+        const handX = startX + Math.cos(direction) * 4.8
+        const handY = startY + Math.sin(direction) * 4.8
         player.throwAction = .3
         player.throwKind = kind
         createExtinguisherZone(level, handX, handY, direction)
@@ -2368,7 +2509,6 @@
       })
       player.throwAction = .38
       player.throwKind = kind
-      player.armAngle = Math.atan2(targetY - player.y, targetX - player.x)
       particle(startX, startY, kind === "molotov" ? "#ff8b42" : kind === "bearTrap" ? "#bdc58c" : kind === "extinguisher" ? "#bde8df" : "#ffc15d", 2, 30)
       return true
     }
@@ -2396,6 +2536,35 @@
       state.explosions.push({ x: zone.x + Math.cos(direction) * 72, y: zone.y + Math.sin(direction) * 72, radius: 92 + level * 8, life: .3, maxLife: .3, color: "#bde8df", kind: "extinguisher" })
       particle(zone.x + Math.cos(direction) * 52, zone.y + Math.sin(direction) * 52, "#bde8df", 18, 130)
       return zone
+    }
+
+    function pointInSpray(x, y, zone) {
+      const dx = x - zone.x, dy = y - zone.y
+      const difference = Math.atan2(Math.sin(Math.atan2(dy, dx) - zone.angle), Math.cos(Math.atan2(dy, dx) - zone.angle))
+      return dx * dx + dy * dy <= zone.radius * zone.radius && Math.abs(difference) <= zone.halfAngle
+    }
+
+    function circleTouchesSpray(fire, spray) {
+      if (pointInSpray(fire.x, fire.y, spray)) return true
+      const dx = fire.x - spray.x, dy = fire.y - spray.y, distance = Math.hypot(dx, dy)
+      if (distance <= fire.radius) return true
+      const difference = Math.atan2(Math.sin(Math.atan2(dy, dx) - spray.angle), Math.cos(Math.atan2(dy, dx) - spray.angle))
+      if (Math.abs(difference) <= spray.halfAngle && distance <= spray.radius + fire.radius) return true
+      // Test distance to both finite edges of the sector, so touching its side
+      // extinguishes only the covered fuel instead of deleting the whole fire.
+      for (const side of [-1, 1]) {
+        const angle = spray.angle + side * spray.halfAngle, ux = Math.cos(angle), uy = Math.sin(angle)
+        const reach = clamp(dx * ux + dy * uy, 0, spray.radius)
+        if ((dx - ux * reach) ** 2 + (dy - uy * reach) ** 2 <= fire.radius ** 2) return true
+      }
+      return false
+    }
+
+    function suppressFire(fire, spray) {
+      if (!circleTouchesSpray(fire, spray)) return
+      const masks = fire.suppressed || (fire.suppressed = [])
+      if (!masks.some(mask => mask.x === spray.x && mask.y === spray.y && mask.angle === spray.angle && mask.radius === spray.radius && mask.halfAngle === spray.halfAngle))
+        masks.push({ x: spray.x, y: spray.y, radius: spray.radius, angle: spray.angle, halfAngle: spray.halfAngle })
     }
 
     function resolveThrowable(projectile) {
@@ -2431,40 +2600,35 @@
     }
 
     function updateThrowableZones(dt) {
+      const extinguisherZones = state.extinguisherZones?.length ? state.extinguisherZones : state.slowZones || state.extinguisherZones || []
+      for (const spray of extinguisherZones) if (spray.life > 0)
+        for (const fire of state.fireZones) if (fire.life > 0) suppressFire(fire, spray)
       for (const zone of state.fireZones) {
         zone.life -= dt
         zone.tick -= dt
         if (zone.tick <= 0) {
           zone.tick = .42
-          for (const enemy of state.enemies) if (!enemy.dead && distanceSquared(zone.x, zone.y, enemy.x, enemy.y) < (zone.radius + enemy.radius) ** 2) {
+          for (const enemy of state.enemies) if (!enemy.dead && distanceSquared(zone.x, zone.y, enemy.x, enemy.y) < (zone.radius + enemy.radius) ** 2
+            && !(zone.suppressed || []).some(mask => pointInSpray(enemy.x, enemy.y, mask))) {
             hitEnemy(enemy, 5 + zone.level * 3, "molotov")
             enemy.burn = Math.max(enemy.burn, 1.1 + zone.level * .22)
             enemy.burnLevel = Math.max(enemy.burnLevel, zone.level)
           }
-          particle(zone.x + randomBetween(-zone.radius, zone.radius), zone.y + randomBetween(-zone.radius, zone.radius), "#ff713d", 3, 38)
+          const emberAngle = randomBetween(0, Math.PI * 2), emberRadius = Math.sqrt(Math.random()) * zone.radius * .9
+          const emberX = zone.x + Math.cos(emberAngle) * emberRadius, emberY = zone.y + Math.sin(emberAngle) * emberRadius
+          if (!(zone.suppressed || []).some(mask => pointInSpray(emberX, emberY, mask))) particle(emberX, emberY, "#ff713d", 3, 38)
         }
       }
       state.fireZones = state.fireZones.filter(zone => zone.life > 0)
-      const extinguisherZones = state.extinguisherZones?.length ? state.extinguisherZones : state.slowZones || state.extinguisherZones || []
       for (const zone of extinguisherZones) {
         zone.life -= dt
         zone.tick -= dt
         if (zone.tick > 0) continue
         zone.tick = .24
         for (const enemy of state.enemies) {
-          if (enemy.dead) continue
-          const dx = enemy.x - zone.x
-          const dy = enemy.y - zone.y
-          const distance = Math.hypot(dx, dy)
-          if (distance > zone.radius + enemy.radius) continue
-          const angle = Math.atan2(dy, dx)
-          const difference = Math.atan2(Math.sin(angle - zone.angle), Math.cos(angle - zone.angle))
-          // Expand the cone by the enemy's angular radius so edge contact is
-          // fair, while keeping the fan directional even at point-blank
-          // range. This prevents a zombie behind or beside the nozzle from
-          // receiving damage just because it is close to the player.
-          const angularRadius = distance > 0 ? Math.asin(clamp(enemy.radius / distance, 0, 1)) : Math.PI / 2
-          if (Math.abs(difference) > zone.halfAngle + angularRadius) continue
+          if (enemy.dead || !circleTouchesSpray(enemy, zone)) continue
+          enemy.burn = 0
+          enemy.burnLevel = 0
           // The cone deals light periodic damage while refreshing a 40%
           // speed multiplier for anything standing in the five-second field.
           hitEnemy(enemy, zone.damage, "extinguisher")
@@ -2483,6 +2647,7 @@
           const victim = state.enemies.find(enemy => !enemy.dead && distanceSquared(trap.x, trap.y, enemy.x, enemy.y) < (trap.radius + enemy.radius) ** 2)
           if (victim) {
             trap.triggered = true
+            trap.triggeredAt = state.time
             victim.trapTimer = Math.max(victim.trapTimer || 0, trap.slow)
             victim.trapSlow = Math.max(victim.trapSlow || 0, .26 + trap.level * .025)
             hitEnemy(victim, trap.damage, "bearTrap")
@@ -2670,7 +2835,7 @@
     }
 
     function drawEnemy(enemy) {
-      if (window.WASTELAND_CHARACTER_ART?.drawEnemy(context, enemy, { playerX: state.player.x })) return
+      if (window.WASTELAND_CHARACTER_ART?.drawEnemy(context, enemy, { playerX: state.player.x, statusEffects: false })) return
       if (enemy.motion === "crawl") { drawCrawlerFallback(enemy); return }
       context.save()
       context.translate(enemy.x, enemy.y)
@@ -2712,7 +2877,6 @@
       line(facing * 11, -12, facing * 24, -10 - armBob, "#384632", 8)
       line(facing * 24, -10 - armBob, facing * 38, -12 - armBob, enemy.color, 6)
       line(facing * 38, -12 - armBob, facing * 42, -15 - armBob, enemy.color, 3)
-      if (enemy.burn > 0) { circle(-10, 3, 3, "#ff983a"); circle(7, -7, 4, "#ef5b2f") }
       if (enemy.hp < enemy.maxHp) {
         context.fillStyle = "#070a08"; context.fillRect(-17, -51, 34, 4)
         context.fillStyle = "#dc764c"; context.fillRect(-17, -51, 34 * Math.max(0, enemy.hp / enemy.maxHp), 4)
@@ -2804,11 +2968,31 @@
       context.restore()
     }
 
+    function drawHeldTool(player, hand, angle) {
+      if (player.throwKind !== "extinguisher" || !(player.throwAction > 0)) return
+      // Register the picture at the hose grip, 4.8px behind the spray origin.
+      const rotation = angle - 1.88, gripX = -4.44, gripY = 3.6
+      const pictured = ItemArt.draw(context, player.throwKind,
+        hand.x - Math.cos(rotation) * gripX + Math.sin(rotation) * gripY,
+        hand.y - Math.sin(rotation) * gripX - Math.cos(rotation) * gripY, 24, { angle: rotation })
+      if (!pictured) {
+        context.save(); context.translate(hand.x, hand.y); context.rotate(angle)
+        context.fillStyle = "#b7543e"; context.fillRect(-10, 3, 10, 16)
+        context.strokeStyle = "#30382f"; context.lineWidth = 2
+        context.strokeRect(-10, 3, 10, 16)
+        context.beginPath(); context.moveTo(-5, 3); context.lineTo(-5, -3)
+        context.lineTo(0, -3); context.lineTo(4.8, 0); context.stroke()
+        context.restore()
+      }
+    }
+
     function drawPlayer() {
       const player = state.player
       if (window.WASTELAND_CHARACTER_ART?.drawPlayer(context, player, {
         gun: { scaleX: state.weapon.id === "submachineGun" ? .8 : 1 },
-        drawWeapon: () => drawWeapon(player, false)
+        drawWeapon: () => drawWeapon(player, false),
+        drawHeldItem: (hand, angle) => drawHeldTool(player, hand, angle),
+        statusEffects: false
       })) return
       context.save()
       context.translate(player.x, player.y)
@@ -2817,10 +3001,6 @@
       const lift = Math.abs(Math.sin(player.walkCycle)) * Math.min(1, player.gait)
       context.fillStyle = "#0008"
       context.beginPath(); context.ellipse(0, 26, 22, 9, 0, 0, Math.PI * 2); context.fill()
-      if (player.invulnerable > .7) {
-        context.strokeStyle = "#d8f25aaa"; context.lineWidth = 2
-        context.beginPath(); context.ellipse(0, -3, 29, 44, 0, 0, Math.PI * 2); context.stroke()
-      }
       // Alternating hip/knee/boot motion stretches with actual walk/run speed.
       for (let leg = 0; leg < 2; leg += 1) {
         const side = leg === 0 ? -1 : 1
@@ -2836,7 +3016,14 @@
         line(kneeX - 2, kneeY, kneeX + 2, kneeY, "#8093a0", 2)
       }
       const rearAim = Math.sin(player.armAngle) < -.35
-      if (rearAim) drawWeapon(player)
+      const rig = window.WASTELAND_CHARACTER_ART?.pose("hero", player, {
+        gun: { scaleX: state.weapon.id === "submachineGun" ? .8 : 1 }
+      })
+      if (rig) {
+        const arm = rig.arms[0]
+        line(arm.root.x, arm.root.y, arm.joint.x, arm.joint.y, "#a55d3e", 10)
+      }
+      if (rearAim) drawWeapon(player, !rig)
       context.translate(0, -lift * 1.6)
       roundedPath(context, -16, -20, 32, 30, 7)
       context.fillStyle = player.hurt > 0 ? "#e5b193" : "#a55d3e"
@@ -2854,37 +3041,16 @@
       line(4, -27, 6, -27, "#151d17", 2)
       line(-4, -22, 4, -22, "#795c40", 2)
       context.translate(0, lift * 1.6)
-      if (!rearAim) drawWeapon(player)
+      if (rig) for (const arm of rig.arms) {
+        if (arm.near) line(arm.root.x, arm.root.y, arm.joint.x, arm.joint.y, "#a55d3e", 10)
+        line(arm.joint.x, arm.joint.y, arm.end.x, arm.end.y, "#d4b88b", 7)
+      }
+      if (!rearAim) drawWeapon(player, !rig)
+      if (rig) {
+        drawHeldTool(player, rig.arms[0].end, rig.gun.angle)
+        for (const arm of rig.arms) circle(arm.end.x, arm.end.y, 4, "#d4b88b")
+      }
       context.restore()
-    }
-
-    function drawThrowGesture() {
-      const player = state.player
-      if (!player.throwAction) return
-      const direction = player.armAngle
-      const gestureDuration = player.throwKind === "extinguisher" ? .3 : .38
-      const progress = clamp(1 - player.throwAction / gestureDuration, 0, 1)
-      const handX = player.x + Math.cos(direction) * 30
-      const handY = player.y - 14 + Math.sin(direction) * 30
-      const color = player.throwKind === "molotov" ? "#ff8b42" : player.throwKind === "bearTrap" ? "#bdc58c" : player.throwKind === "extinguisher" ? "#bde8df" : "#ffc15d"
-      line(player.x + Math.cos(direction) * 8, player.y - 10 + Math.sin(direction) * 8, handX, handY, "#d6a47a", 7)
-      if (player.throwKind === "extinguisher") {
-        context.save()
-        context.translate(handX, handY)
-        context.rotate(direction)
-        context.fillStyle = "#d7ece2"; context.strokeStyle = "#568d7f"; context.lineWidth = 2
-        context.fillRect(-9, -6, 18, 12); context.strokeRect(-9, -6, 18, 12)
-        context.fillStyle = "#bde8df"; context.fillRect(7, -2, 8, 4)
-        context.restore()
-        const sprayLength = 32 + progress * 22
-        line(handX + Math.cos(direction) * 10, handY + Math.sin(direction) * 10, handX + Math.cos(direction) * sprayLength, handY + Math.sin(direction) * sprayLength, "#bde8df99", 5)
-        context.strokeStyle = color; context.lineWidth = 2
-        const sprayZones = state.extinguisherZones || []
-        const sprayHalfAngle = sprayZones.length ? sprayZones[sprayZones.length - 1].halfAngle : .48
-        context.beginPath(); context.arc(handX, handY, 9 + progress * 4, direction - sprayHalfAngle, direction + sprayHalfAngle); context.stroke()
-      } else circle(handX, handY, 6, color)
-      context.strokeStyle = color; context.lineWidth = 2
-      if (player.throwKind !== "extinguisher") { context.beginPath(); context.arc(handX, handY, 10 + progress * 5, direction - .7, direction + .7); context.stroke() }
     }
 
     function draw() {
@@ -2897,6 +3063,7 @@
       context.fillStyle = "#20292b"
       context.fillRect(0, 0, WIDTH, HEIGHT)
       if (!state) return
+      if (renderedItemArtReady !== ItemArt.ready) renderSkillDock()
       state.camera = cameraFor(state.player)
       context.save()
       context.translate(-state.camera.x, -state.camera.y)
@@ -2927,45 +3094,11 @@
         context.fillStyle = "#101f1a"; context.fillRect(-6, -6, 12, 12)
         context.fillStyle = "#81dfb0"; context.fillRect(-3, -3, 6, 6); context.restore()
       }
-      for (const mine of state.mines) {
-        circle(mine.x, mine.y, 12, "#101a16"); circle(mine.x, mine.y, 8, "#687751")
-        circle(mine.x, mine.y, 3, mine.age > .65 ? "#f09c40" : "#e6ecaa")
-      }
-      for (const zone of state.fireZones) {
-        context.globalAlpha = .18 + Math.sin(state.time * 8 + zone.x) * .05
-        circle(zone.x, zone.y, zone.radius, "#ff713d")
-        context.globalAlpha = .72
-        context.strokeStyle = "#ffb347"; context.lineWidth = 2
-        context.beginPath(); context.arc(zone.x, zone.y, zone.radius * .8, 0, Math.PI * 2); context.stroke()
-      }
-      for (const zone of (state.extinguisherZones || [])) {
-        const fade = clamp(zone.life / 1.2, .18, 1)
-        context.save()
-        context.globalAlpha = (.16 + Math.sin(state.time * 7 + zone.x * .01) * .035) * fade
-        context.fillStyle = "#bde8df"
-        context.beginPath()
-        context.moveTo(zone.x, zone.y)
-        context.arc(zone.x, zone.y, zone.radius, zone.angle - zone.halfAngle, zone.angle + zone.halfAngle)
-        context.closePath()
-        context.fill()
-        context.globalAlpha = .6 * fade
-        context.strokeStyle = "#bde8df"
-        context.lineWidth = 2
-        context.beginPath()
-        context.moveTo(zone.x, zone.y)
-        context.arc(zone.x, zone.y, zone.radius, zone.angle - zone.halfAngle, zone.angle + zone.halfAngle)
-        context.closePath()
-        context.stroke()
-        context.restore()
-      }
-      context.globalAlpha = 1
-      for (const trap of state.traps) {
-        context.save(); context.translate(trap.x, trap.y)
-        context.fillStyle = trap.triggered ? "#705d51" : "#252f2a"; context.strokeStyle = "#bdc58c"; context.lineWidth = 2
-        context.beginPath(); context.arc(0, 0, trap.radius, 0, Math.PI * 2); context.fill(); context.stroke()
-        context.rotate(Math.PI / 4); context.fillStyle = trap.triggered ? "#98715b" : "#d1d7ae"; context.fillRect(-12, -3, 24, 6)
-        context.restore()
-      }
+      ItemEffects.setViewport({ x: state.camera.x, y: state.camera.y, width: WIDTH, height: HEIGHT })
+      for (const mine of state.mines) ItemEffects.drawMine(context, mine, state.time)
+      for (const zone of state.fireZones) ItemEffects.drawFire(context, zone, state.time)
+      for (const zone of state.extinguisherZones) ItemEffects.drawExtinguisher(context, zone, state.time)
+      for (const trap of state.traps) ItemEffects.drawTrap(context, trap, state.time)
       // Reveal only the occupied roof. Neighbouring houses and outdoor
       // scenery remain in the shared depth order while walking indoors.
       const figures = (city.scenery || [])
@@ -2976,44 +3109,19 @@
       figures.sort((a, b) => a.y - b.y)
       for (const figure of figures) {
         if (figure.scenery) city.drawScenery(context, figure.scenery)
-        else if (figure.player) { drawPlayer(); drawThrowGesture() }
-        else drawEnemy(figure.enemy)
+        else if (figure.player) {
+          drawPlayer()
+          ItemEffects.drawStatus(context, state.player, state.time, id => build.effect(id))
+        } else {
+          drawEnemy(figure.enemy)
+          ItemEffects.drawEnemyStatus(context, figure.enemy, state.time)
+        }
       }
-      for (const drone of dronePositions(modifiers().saw)) {
-        line(state.player.x, state.player.y, drone.x, drone.y, "#a3ad5b20", 1)
-        circle(drone.x, drone.y, 15, "#1a2927"); circle(drone.x, drone.y, 10, "#a5b7a0")
-        context.save(); context.translate(drone.x, drone.y); context.rotate(state.time * 15)
-        for (let index = 0; index < 6; index += 1) { context.rotate(Math.PI / 3); line(8, 0, 17, 0, "#d8f25a", 3) }
-        context.restore(); circle(drone.x, drone.y, 4, "#34413a")
-      }
-      for (const bullet of state.projectiles) {
-        const length = Math.hypot(bullet.vx, bullet.vy)
-        line(bullet.x - bullet.vx / length * 24, bullet.y - bullet.vy / length * 24, bullet.x, bullet.y, "#efbd5066", 6)
-        line(bullet.x - bullet.vx / length * 15, bullet.y - bullet.vy / length * 15, bullet.x, bullet.y, "#ffe599", 2.5)
-      }
-      for (const projectile of state.throwableProjectiles) {
-        const color = projectile.kind === "molotov" ? "#ff8b42" : projectile.kind === "bearTrap" ? "#bdc58c" : projectile.kind === "extinguisher" ? "#bde8df" : "#ffc15d"
-        line(projectile.startX, projectile.startY, projectile.x, projectile.y, color + "55", 5)
-        context.save(); context.translate(projectile.x, projectile.y)
-        context.fillStyle = "#1b2520"; context.strokeStyle = color; context.lineWidth = 2
-        if (projectile.kind === "bearTrap") { context.rotate(Math.PI / 4); context.fillRect(-10, -3, 20, 6); context.strokeRect(-10, -3, 20, 6) }
-        else if (projectile.kind === "extinguisher") { context.rotate(projectile.direction || 0); context.fillRect(-7, -5, 14, 10); context.strokeRect(-7, -5, 14, 10); context.fillStyle = "#e7fff9"; context.fillRect(4, -2, 6, 4) }
-        else { context.beginPath(); context.arc(0, 0, 8, 0, Math.PI * 2); context.fill(); context.stroke(); if (projectile.kind === "molotov") { context.fillStyle = "#ff713d"; context.fillRect(-2, -14, 4, 7) } }
-        context.restore()
-      }
-      for (const arc of state.arcs) {
-        const dx = arc.tx - arc.x
-        const dy = arc.ty - arc.y
-        line(arc.x, arc.y, arc.x + dx * .4 - dy * .08, arc.y + dy * .4 + dx * .08, "#84f1e3", 3)
-        line(arc.x + dx * .4 - dy * .08, arc.y + dy * .4 + dx * .08, arc.tx, arc.ty, "#dcfff9", 2)
-      }
-      for (const effect of state.explosions) {
-        const progress = 1 - effect.life / effect.maxLife
-        context.globalAlpha = effect.life / effect.maxLife
-        circle(effect.x, effect.y, effect.radius * progress, effect.color + "55")
-        context.strokeStyle = effect.color; context.lineWidth = 6 * (1 - progress) + 1
-        context.beginPath(); context.arc(effect.x, effect.y, effect.radius * progress, 0, Math.PI * 2); context.stroke()
-      }
+      for (const drone of dronePositions(modifiers().saw)) ItemEffects.drawDrone(context, drone, state.time)
+      for (const bullet of state.projectiles) ItemEffects.drawBullet(context, bullet, state.time)
+      for (const projectile of state.throwableProjectiles) ItemEffects.drawThrowable(context, projectile, state.time)
+      for (const arc of state.arcs) ItemEffects.drawArc(context, arc, state.time)
+      for (const effect of state.explosions) ItemEffects.drawExplosion(context, effect, state.time)
       context.globalAlpha = 1
       for (const spark of state.particles) { context.globalAlpha = Math.min(1, spark.life * 5); circle(spark.x, spark.y, spark.size, spark.color) }
       context.globalAlpha = 1
@@ -3046,7 +3154,7 @@
         config: { ...CONFIG }, stats: { ...state.stats }, controls: { viewport: { width: WIDTH, height: HEIGHT, aspect: WIDTH / HEIGHT }, world: { width: WORLD_WIDTH, height: WORLD_HEIGHT }, fireHeld: fireHeld(), manualFire: !!state.player.manualFire, joystick: { ...touchInput } }, player: { ...state.player },
         artStatus: window.WASTELAND_CHARACTER_ART?.status || "unconfigured",
         atlasReady: !!window.WASTELAND_CHARACTER_ART?.ready,
-        environmentArt: art?.status || null, visualAssets: { ...visualAssets },
+        itemArtStatus: ItemArt.status, itemArtReady: ItemArt.ready, environmentArt: art?.status || null, visualAssets: { ...visualAssets },
         animationFrame: window.WASTELAND_CHARACTER_ART?.animationFrame || null,
         camera: cameraFor(state.player), map: { width: WORLD_WIDTH, height: WORLD_HEIGHT, areaScale: 4, buildingCount: city.buildings.length },
         muzzlePosition: muzzlePosition(), build: build.snapshot(), fps: state.lastFps

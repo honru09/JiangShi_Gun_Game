@@ -57,8 +57,18 @@
     function draw(ctx, key, index, x, y, width, height, options = {}) {
       const sheet = loaded[key], rect = sheet?.cells[index]
       if (!rect) return false
-      const crop = Math.max(0, Math.min(.8, options.cropBottom || 0))
-      ctx.drawImage(sheet.image, rect.x, rect.y, rect.width, rect.height * (1 - crop), x, y, width, height)
+      const cropTop = Math.max(0, Math.min(.8, options.cropTop || 0))
+      const cropBottom = Math.max(0, Math.min(.8 - cropTop, options.cropBottom || 0))
+      const sourceHeight = rect.height * (1 - cropTop - cropBottom)
+      let drawWidth = width, drawHeight = height
+      if (options.fit === "width") drawHeight = sourceHeight * width / rect.width
+      else if (options.fit === "contain") {
+        const scale = Math.min(width / rect.width, height / sourceHeight)
+        drawWidth = rect.width * scale; drawHeight = sourceHeight * scale
+      }
+      const drawX = x + (width - drawWidth) * (options.anchorX ?? .5)
+      const drawY = y + (height - drawHeight) * (options.anchorY ?? 1)
+      ctx.drawImage(sheet.image, rect.x, rect.y + rect.height * cropTop, rect.width, sourceHeight, drawX, drawY, drawWidth, drawHeight)
       return true
     }
     return {
@@ -67,7 +77,11 @@
       get environmentSettled() { return Boolean(settled.environment) },
       get isReady() { return Boolean(loaded.environment && loaded.characters) },
       get status() { return Object.fromEntries(Object.keys(sheets).map(key => [key, Boolean(loaded[key])])) },
-      drawEnvironment: (ctx, index, x, y, width, height) => draw(ctx, "environment", index, x, y, width, height),
+      environmentSize(index, options = {}) {
+        const cell = loaded.environment?.cells[index]
+        return cell ? { width: cell.width, height: cell.height * (1 - (options.cropTop || 0) - (options.cropBottom || 0)) } : null
+      },
+      drawEnvironment: (ctx, index, x, y, width, height, options = {}) => draw(ctx, "environment", index, x, y, width, height, { fit: "contain", ...options }),
       drawCharacter: (ctx, index, x, y, width, height, options) => draw(ctx, "characters", index, x, y, width, height, options)
     }
   }
