@@ -7,7 +7,7 @@ const root = process.env.GAME_TEST_ROOT ? resolve(process.env.GAME_TEST_ROOT)
 const publicRoot = join(root, "prototype-2d");
 const { bootPage } = await import(pathToFileURL(join(publicRoot, "tests/loot-smoke.mjs")));
 
-const THROWABLES = Object.freeze(["grenade", "molotov", "bearTrap", "extinguisher"]);
+const THROWABLES = Object.freeze(["grenade", "molotov"]);
 
 function quietPage() {
   const page = bootPage();
@@ -24,8 +24,6 @@ function quietPage() {
     combatDrops: []
   });
   state.player.fireTimer = Infinity;
-  // Keep one visible, stationary target so useThrowable() exercises the real
-  // launch path instead of succeeding only because a counter changed.
   const template = state.enemies[0];
   state.enemies = [{ ...template, id: 900001, x: state.player.x + 105, y: state.player.y,
     speed: 0, baseSpeed: 0, damage: 0, hp: 1000000, maxHp: 1000000,
@@ -49,52 +47,56 @@ const { debug, elements } = page;
 const state = debug.state;
 assert.equal(debug.config.throwableMax, 5, "throwable inventory limit is five per type");
 assert.deepEqual(Object.keys(state.throwables).sort(), [...THROWABLES].sort(),
-  "the inventory contains exactly the four throwable types");
+  "the inventory contains only grenade and molotov");
 assert.equal(state.activeThrowableId, null, "no throwable is selected before the first pickup");
-assert(elements.has("throwableButton"), "the use button exists above the fire control");
-assert(elements.has("throwablePicker"), "the long-press picker exists");
-assert(elements.has("throwablePickerList"), "the picker has a selectable list");
+assert(elements.has("grenadeButton"), "the grenade use button exists");
+assert(elements.has("molotovButton"), "the molotov use button exists");
+assert(!elements.has("throwableButton"), "the legacy single throwable button is gone");
+assert(!elements.has("throwablePicker"), "the legacy long-press picker is gone");
+assert(!elements.has("skillDock"), "the bottom skill dock is gone");
 
-// Each scene pickup increments its own consumable count, and the first pickup
-// becomes the default active choice for the use button.
 for (const [index, itemId] of THROWABLES.entries()) {
   pickup(page, itemId);
   assert.equal(state.throwables[itemId], 1, `${itemId} pickup increments its count`);
-  if (index === 0) assert.equal(state.activeThrowableId, itemId, "the first pickup is selected by default");
+  if (index === 0) assert.equal(state.activeThrowableId, itemId, "the first pickup becomes the default");
 }
-assert.deepEqual({ ...state.throwables }, Object.fromEntries(THROWABLES.map(itemId => [itemId, 1])),
-  "each throwable keeps an independent count");
+assert.deepEqual({ ...state.throwables }, { grenade: 1, molotov: 1 }, "the two counts stay independent");
 
-// Four more grenades reach the cap. A sixth pickup must stay on the ground and
-// must not turn into a different kind of reward.
 for (let count = 0; count < 4; count += 1) pickup(page, "grenade");
 assert.equal(state.throwables.grenade, 5);
 const rejected = debug.spawnLoot("grenade");
-assert.ok(rejected, "a pickup can still appear while its inventory is full");
+assert.ok(rejected, "a full inventory still leaves a scene pickup");
 state.player.x = rejected.x;
 state.player.y = rejected.y;
 debug.step(1 / 60);
 assert.equal(state.throwables.grenade, 5, "the fifth grenade is the hard inventory cap");
-assert(debug.loot.some(item => item.id === rejected.id), "a full inventory rejects rather than consuming the pickup");
-state.loot = [];
-
-// Isolate use semantics with one charge of each type. Every successful use
-// consumes exactly one charge, while the active selection advances to the next
-// stocked type when the current type reaches zero.
-state.throwables = Object.fromEntries(THROWABLES.map(itemId => [itemId, 1]));
-state.activeThrowableId = THROWABLES[0];
-for (let index = 0; index < THROWABLES.length; index += 1) {
-  const itemId = THROWABLES[index];
-  assert.equal(debug.selectThrowable(itemId), true, `${itemId} can be selected from the picker`);
-  assert.equal(state.activeThrowableId, itemId, `${itemId} selection updates active state`);
-  const before = state.throwables[itemId];
-  assert.equal(debug.useThrowable(), true, `${itemId} use launches against the nearest visible target`);
-  assert.equal(state.throwables[itemId], before - 1, `${itemId} use consumes one charge`);
-  assert.equal(state.player.throwKind, itemId, `${itemId} records the throw animation kind`);
-  debug.step(.5);
-  const next = THROWABLES.slice(index + 1).find(candidate => state.throwables[candidate] > 0) || null;
-  assert.equal(state.activeThrowableId, next, `${itemId} depletion advances to the next stocked throwable`);
+assert(debug.loot.some(item => item.id === rejected.id), "a sixth grenade stays on the ground");
+for (const id of ["bearTrap", "extinguisher", "scatterModule", "trailBoots", "survivalInstinct"]) {
+  assert.equal(debug.spawnLoot(id), null, `${id} is not a supported ground drop`);
 }
-assert.equal(debug.useThrowable(), false, "use is rejected when every throwable count is zero");
 
-console.log("PASS four throwable counts, five-item cap, rejected full pickup, one-shot use, default selection and auto-advance");
+state.loot = [];
+state.throwables = { grenade: 1, molotov: 1 };
+state.activeThrowableId = null;
+state.player.throwAction = 0;
+assert.equal(debug.useThrowable("grenade"), true, "the grenade use path launches manually");
+assert.equal(state.throwables.grenade, 0, "grenade use consumes one charge");
+assert.equal(state.player.throwKind, "grenade");
+debug.step(.5);
+assert.equal(debug.useThrowable("molotov"), true, "the molotov use path launches manually");
+assert.equal(state.throwables.molotov, 0, "molotov use consumes one charge");
+assert.equal(state.player.throwKind, "molotov");
+debug.step(.5);
+assert.equal(debug.useThrowable("grenade"), false, "an empty grenade button cannot use another type");
+assert.equal(debug.useThrowable("bearTrap"), false, "legacy throwable IDs cannot be used");
+
+state.throwables = { grenade: 1, molotov: 1 };
+state.activeThrowableId = null;
+state.player.throwAction = 0;
+page.click("grenadeButton");
+assert.equal(state.throwables.grenade, 0, "clicking grenade button uses grenade only");
+debug.step(.5);
+page.click("molotovButton");
+assert.equal(state.throwables.molotov, 0, "clicking molotov button uses molotov only");
+
+console.log("PASS two throwable counts, five-item cap, rejected legacy drops, manual button use and one-shot consumption");

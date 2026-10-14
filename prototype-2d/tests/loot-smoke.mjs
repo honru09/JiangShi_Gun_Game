@@ -68,7 +68,12 @@ export function bootPage(coarse = false, admin = true) {
 }
 
 const plain = value => JSON.parse(JSON.stringify(value));
-const THROWABLE_IDS = new Set(["grenade", "molotov", "bearTrap", "extinguisher"]);
+const THROWABLE_IDS = new Set(["grenade", "molotov"]);
+const PASSIVE_SKILL_IDS = new Set([
+  "scatterModule", "incendiaryMagazine", "arcGenerator", "sawDrone", "proximityMine", "armorPiercingBolt",
+  "trailBoots", "armorLining", "magnetHarness", "fieldBandage", "rationPack", "adrenalineAmpule"
+]);
+const WEAPON_IDS = new Set(["assaultRifle", "submachineGun", "shotgun", "scar", "aug", "mp7", "ks23", "policePistol", "thunder"]);
 const DOOR_VECTORS = {
   south: { outward: { x: 0, y: 1 }, inward: { x: 0, y: -1 }, enter: "KeyW", leave: "KeyS" },
   north: { outward: { x: 0, y: -1 }, inward: { x: 0, y: 1 }, enter: "KeyS", leave: "KeyW" },
@@ -76,6 +81,18 @@ const DOOR_VECTORS = {
   west: { outward: { x: -1, y: 0 }, inward: { x: 1, y: 0 }, enter: "KeyD", leave: "KeyA" }
 };
 function collect(debug, id, quality = "common") {
+  // Non-throwable skill balls are no longer live drops. Exercise the build
+  // contract directly here while keeping ground-pickup assertions for guns
+  // and the two one-shot throwables that players can actually find.
+  if (PASSIVE_SKILL_IDS.has(id)) {
+    const result = debug.build.collect(id, quality);
+    if (!result.accepted) {
+      const multiplier = { common: 1, fine: 1.2, rare: 1.5, epic: 1.9 }[quality] || 1;
+      debug.state.player.hp = Math.min(debug.state.player.maxHp, debug.state.player.hp + 16 * multiplier);
+    }
+    return { id: `synthetic-${id}`, kind: "skill", itemId: id, quality };
+  }
+  assert(THROWABLE_IDS.has(id) || WEAPON_IDS.has(id), `unsupported live pickup fixture ${id}`);
   const ball = debug.spawnLoot(id, quality, debug.state.player.x, debug.state.player.y);
   assert(ball, `cannot create ${id} ball`);
   debug.state.player.x = ball.x; debug.state.player.y = ball.y;
@@ -248,7 +265,7 @@ export function runLootChecks() {
   const houseDebug = housePage.debug; houseDebug.state.godMode = true;
   const house = houseDebug.houses.houses[0];
   assert(house);
-  const outdoorBall = houseDebug.spawnLoot("scatterModule", "common", houseDebug.map.spawn.x, houseDebug.map.spawn.y);
+  const outdoorBall = houseDebug.spawnLoot("grenade", "common", houseDebug.map.spawn.x, houseDebug.map.spawn.y);
   const outdoorEnemyIds = houseDebug.state.enemies.map(enemy => enemy.id);
   const crossed = walkDoor(housePage, house, "enter");
   const room = crossed.room;
@@ -382,7 +399,7 @@ export function runLootChecks() {
   assert.equal(deathDebug.state.extractedLoot.length, 0, "death does not preserve extracted loot");
   assert.equal(deathDebug.interact(), false, "death blocks searching a nearby unopened cache");
   assert.equal(deathDebug.searchSupplyBox(deathCache), false, "death blocks opening another supply box");
-  assert.equal(deathDebug.spawnLoot("scatterModule"), null, "death blocks new drops");
+  assert.equal(deathDebug.spawnLoot("grenade"), null, "death blocks new drops");
   const deadSnapshot = immutableSimulation(deathDebug);
   deathDebug.step(1);
   assert.equal(immutableSimulation(deathDebug), deadSnapshot, "death freezes room loot and search state");
@@ -572,61 +589,32 @@ export function runLootChecks() {
   assert(boxSupplies.some(item => item.itemId !== "junk"), "boxes use the video catalog");
   assert(boxSupplies.every(item => boxDebug.supplyItems[item.itemId]), "house searches only generate carryable supply items");
 
+  const throwablePage = bootPage(); throwablePage.start();
+  const throwableDebug = throwablePage.debug;
+  throwableDebug.state.godMode = true; throwableDebug.state.density = 0;
+  throwableDebug.state.lootTimer = Infinity; throwableDebug.state.hordeTimer = Infinity; throwableDebug.state.spawnBudget = 0;
+  assert.deepEqual(Object.keys(throwableDebug.state.throwables).sort(), [...THROWABLE_IDS].sort(), "only grenade and molotov are carried as drops");
   for (const throwableId of THROWABLE_IDS) {
-    const pickupPage = bootPage(); pickupPage.start();
-    const pickupDebug = pickupPage.debug; pickupDebug.state.godMode = true; pickupDebug.state.density = 0;
-    const picked = collect(pickupDebug, throwableId);
-    assert.equal(pickupDebug.build.level(throwableId), 1, `${throwableId} enters the passive build on pickup`);
-    assert(pickupDebug.build.selectedCore.includes(throwableId), `${throwableId} occupies a core passive slot`);
-    const targetBaseSpeed = throwableId === "extinguisher" ? 100 : 0;
-    const target = { ...pickupDebug.state.enemies[0], x: pickupDebug.state.player.x + 72, y: pickupDebug.state.player.y, hp: 1000, maxHp: 1000, speed: targetBaseSpeed, baseSpeed: targetBaseSpeed, contactTimer: Infinity, dead: false };
-    const outsideRear = { ...target, id: target.id + 10000, x: pickupDebug.state.player.x - 100, y: pickupDebug.state.player.y - 14, hp: 1000, maxHp: 1000, speed: 0, baseSpeed: 0 };
-    const outsideSide = { ...target, id: target.id + 20000, x: pickupDebug.state.player.x + 30, y: pickupDebug.state.player.y + 120, hp: 1000, maxHp: 1000, speed: 0, baseSpeed: 0 };
-    pickupDebug.state.enemies = [target]; pickupDebug.state.player.fireTimer = Infinity;
-    const timerKey = throwableId === "grenade" ? "grenadeTimer"
-      : throwableId === "molotov" ? "molotovTimer"
-        : throwableId === "bearTrap" ? "bearTrapTimer" : "extinguisherTimer";
-    pickupDebug.state.player[timerKey] = 0;
-    const beforeHp = target.hp; const beforeExplosions = pickupDebug.state.stats.explosions;
-    pickupDebug.step(1 / 60);
-    const produced = pickupDebug.state.throwableProjectiles.length + pickupDebug.state.fireZones.length + pickupDebug.state.traps.length;
-    assert(produced > 0 || pickupDebug.state.player.throwAction || pickupDebug.state.extinguisherZones?.length > 0, `${throwableId} auto-releases without manual input`);
-    if (throwableId === "extinguisher") {
-      pickupDebug.step(.4);
-      const zone = pickupDebug.state.extinguisherZones?.[0];
-      assert(zone, "extinguisher resolves into a persistent spray zone");
-      assert(zone.life > 4.1 && zone.life <= 5, "extinguisher spray survives for five seconds");
-      // Freeze the passive timer so the expiry assertion observes this spray
-      // field rather than the next automatic release cycle.
-      pickupDebug.state.player.extinguisherTimer = Infinity;
-      // Add close side/rear fixtures after the direction is locked so the
-      // nearest-target selector cannot turn the spray around during setup.
-      target.speed = 0; target.baseSpeed = 0;
-      outsideRear.x = pickupDebug.state.player.x - 35;
-      outsideRear.y = pickupDebug.state.player.y - 14;
-      outsideSide.x = pickupDebug.state.player.x + 25;
-      outsideSide.y = pickupDebug.state.player.y + 40;
-      pickupDebug.state.enemies.push(outsideRear, outsideSide);
-      const hpBeforeSpray = target.hp;
-      const rearBeforeSpray = outsideRear.hp;
-      const sideBeforeSpray = outsideSide.hp;
-      pickupDebug.step(.3);
-      assert(target.hp < hpBeforeSpray, "extinguisher cone deals periodic light damage");
-      assert(target.trapSlow > 0 && target.trapSlow <= .61, "extinguisher applies a 40% movement slow");
-      assert.equal(outsideRear.hp, rearBeforeSpray, "extinguisher does not hit enemies behind the nozzle");
-      assert.equal(outsideSide.hp, sideBeforeSpray, "extinguisher does not hit enemies outside the fan");
-      pickupDebug.step(5);
-      assert.equal(pickupDebug.state.extinguisherZones.length, 0, "extinguisher spray expires after five seconds");
-      pickupDebug.step(.6);
-      assert.equal(target.trapSlow, 0, "extinguisher slow recovers after the field expires");
-    } else {
-      pickupDebug.step(6);
-      assert(target.hp < beforeHp || pickupDebug.state.stats.explosions > beforeExplosions, `${throwableId} applies an automatic throwable effect`);
-    }
-    assert(picked.itemId === throwableId);
+    const picked = collect(throwableDebug, throwableId);
+    assert.equal(throwableDebug.state.throwables[throwableId], 1, `${throwableId} enters one-shot inventory`);
+    assert.equal(throwableDebug.build.level(throwableId), 0, `${throwableId} does not enter the permanent build`);
+    assert.equal(picked.itemId, throwableId);
+  }
+  const throwableTarget = { ...throwableDebug.state.enemies[0], id: 990001, x: throwableDebug.state.player.x + 72, y: throwableDebug.state.player.y,
+    hp: 1000, maxHp: 1000, speed: 0, baseSpeed: 0, contactTimer: Infinity, dead: false };
+  throwableDebug.state.enemies = [throwableTarget]; throwableDebug.state.player.throwAction = 0;
+  assert.equal(throwableDebug.useThrowable("grenade"), true, "grenade is manually launched from its button");
+  assert.equal(throwableDebug.state.throwables.grenade, 0);
+  throwableDebug.step(.5);
+  assert.equal(throwableDebug.useThrowable("molotov"), true, "molotov is manually launched from its button");
+  assert.equal(throwableDebug.state.throwables.molotov, 0);
+  throwableDebug.step(.6);
+  assert(throwableDebug.state.explosions.length + throwableDebug.state.fireZones.length > 0, "manual throwables create visible effects");
+  for (const id of ["bearTrap", "extinguisher", "scatterModule", "trailBoots", "survivalInstinct"]) {
+    assert.equal(throwableDebug.spawnLoot(id), null, `${id} does not spawn as a ground drop`);
   }
   console.log("PASS rare combat consumables apply temporary effects once; large categorized rooms expose furniture and collision");
-  console.log("PASS timed drops contain supported throwable passives; house boxes contain supplies; passive pickups auto-release their effects");
+  console.log("PASS timed drops contain only grenade/molotov; house boxes contain supplies; throwables are manual one-shot inventory");
   return { simulated: true, inventoryRegression: true };
 }
 
