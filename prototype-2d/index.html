@@ -259,6 +259,9 @@
     .loot-card.ready:hover, .loot-card.ready:focus-visible { border-color: var(--acid); background: #263b29; outline: none; }
     .loot-card.is-claimed { opacity: .5; filter: saturate(.4); }
     .loot-card.is-searching { color: #aebbac; border-style: dashed; }
+    .loot-card.is-unidentified { z-index: 1; cursor: default; }
+    .loot-card.is-unidentified:not(.is-searching) { border: 1px dashed #8e8a73; background: #3b3c32; }
+    .unknown-mark { position: absolute; inset: 0; display: grid; place-items: center; color: #c2c1a5; font-size: 24px; font-weight: 900; }
     .loot-card .loot-icon { display: block; font-size: 22px; font-weight: 1000; line-height: 28px; }
     .loot-card .loot-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 900; }
     .loot-card .loot-rarity { display: block; margin-top: 3px; font-size: 8px; }
@@ -1317,8 +1320,12 @@
       ui.searchWindow.hidden = !panel
       if (!panel) return
       const locked = panel.lock && !panel.lock.open
-      ui.lockPanel.hidden = !locked; ui.searchGrid.hidden = !!locked
+      ui.lockPanel.hidden = !locked; ui.searchGrid.hidden = false
       ui.searchTitle.textContent = panel.name || "旅行箱"
+      const entries = panel.entries, elapsed = locked ? 0 : searchElapsed(panel)
+      const revealed = locked ? 0 : entries.filter(entry => elapsed >= entry.revealAt).length, claimed = entries.filter(entry => entry.claimed).length
+      const current = locked ? null : entries.find(entry => elapsed < entry.revealAt)
+      const countLabel = `箱内共 ${entries.length} 件 · 剩余 ${entries.length - claimed} 件`
       if (locked) {
         const good = Math.abs((panel.lock.elapsed % 1.4) / 1.4 - .5) < .18
         const key = `${panel.lock.pins}/${good}`
@@ -1326,25 +1333,22 @@
           ui.lockReels.renderKey = key
           ui.lockReels.innerHTML = Array.from({ length: 4 }, (_, n) => `<div class="lock-reel ${n < panel.lock.pins ? "locked" : n === panel.lock.pins ? "active" : ""}">${n < panel.lock.pins ? "✓" : n === panel.lock.pins ? good ? "绿" : "·" : "?"}</div>`).join("")
         }
-        ui.searchSubtitle.textContent = `密码 ${panel.lock.pins} / 4`; ui.searchProgress.textContent = good ? "绿色密码到达中央 · 现在锁定" : "等待绿色密码到达中央…"
-        ui.searchTakeAll.disabled = true
-        return
+        ui.searchSubtitle.textContent = `${countLabel} · 密码 ${panel.lock.pins} / 4`
+        ui.searchProgress.textContent = good ? "绿色密码到达中央 · 现在锁定" : "等待绿色密码到达中央…"
+      } else {
+        ui.searchSubtitle.textContent = `${countLabel} · ${current ? "正在搜索物资…" : "搜索完成"}`
+        ui.searchProgress.textContent = `已识别 ${revealed} / ${entries.length} · 已带走 ${claimed} 件${current ? ` · ${(current.revealAt - elapsed).toFixed(1)}秒` : ""}`
       }
-      const entries = panel.entries, elapsed = searchElapsed(panel)
-      const revealed = entries.filter(entry => elapsed >= entry.revealAt).length, claimed = entries.filter(entry => entry.claimed).length
-      const current = entries.find(entry => elapsed < entry.revealAt)
-      ui.searchSubtitle.textContent = current ? "正在搜索物资…" : "搜索完成"
-      ui.searchProgress.textContent = `已识别 ${revealed} / ${entries.length} · 已带走 ${claimed} 件${current ? ` · ${(current.revealAt - elapsed).toFixed(1)}秒` : ""}`
-      ui.searchTakeAll.disabled = !inventoryMutable() || !entries.some(entry => !entry.claimed && elapsed >= entry.revealAt && Inventory.insert(state.bag, entry, BAG_COLUMNS, state.bagCapacity))
+      ui.searchTakeAll.disabled = !!locked || !inventoryMutable() || !entries.some(entry => !entry.claimed && elapsed >= entry.revealAt && Inventory.insert(state.bag, entry, BAG_COLUMNS, state.bagCapacity))
       const grid = inventoryGrid("search"); fitGridSize(grid)
-      const key = JSON.stringify([panel.id, revealed, entries.map(e => [e.claimed, e.slot]), state.bagSelection, state.selectionArea])
+      const key = JSON.stringify([panel.id, !!locked, revealed, entries.map(e => [e.claimed, e.slot]), state.bagSelection, state.selectionArea])
       if (!state.bagDrag && ui.searchGrid.renderKey !== key) {
         ui.searchGrid.renderKey = key
         ui.searchGrid.innerHTML = gridBackground(grid.columns, grid.capacity) + entries.map((entry, index) => {
           if (entry.claimed) return ""
-          if (elapsed >= entry.revealAt) return inventoryCard(entry, "search", index, grid.columns)
-          if (entry !== current) return ""
-          return `<div class="loot-card is-searching" aria-label="未识别物资" style="grid-column:${entry.slot % grid.columns + 1};grid-row:${Math.floor(entry.slot / grid.columns) + 1}"><i class="search-lens"></i><i class="scan-progress"></i></div>`
+          if (!locked && elapsed >= entry.revealAt) return inventoryCard(entry, "search", index, grid.columns)
+          const shape = Inventory.size(entry), scanning = entry === current
+          return `<div class="loot-card is-unidentified${scanning ? " is-searching" : ""}" data-unidentified-index="${index}" aria-label="未识别物资" aria-disabled="true" style="grid-column:${entry.slot % grid.columns + 1}/span ${shape.width};grid-row:${Math.floor(entry.slot / grid.columns) + 1}/span ${shape.height}">${scanning ? '<i class="search-lens"></i><i class="scan-progress"></i>' : '<span class="unknown-mark" aria-hidden="true">?</span>'}</div>`
         }).join("")
       }
       const scan = ui.searchGrid.querySelector?.(".scan-progress")
