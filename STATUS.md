@@ -38,13 +38,15 @@
 - 增援只在世界四周的可通行室外产生，独立于相机和玩家所在房屋；取消原连续生成与房内直接生成。
 - HUD显示准备倒计时、实际波次和下一波倒计时；五分钟结算、后期类型/强度增长、160/104上限及0.5%临时增益掉落保持。
 
-改动文件：`prototype-2d/index.html`、`prototype-2d/tests/spawn-schedule-smoke.mjs`、`tests/combat-smoke.mjs`、`tests/loot-smoke.mjs`、`tests/city-map-smoke.mjs`、`scripts/verify-combat.mjs`、`STATUS.md`（以上三个缩写测试路径均位于`prototype-2d/`）。测试任务独立分支提交 `e70701a` 已集成。
+改动文件：`prototype-2d/index.html`、`prototype-2d/tests/spawn-schedule-smoke.mjs`、`prototype-2d/tests/combat-smoke.mjs`、`prototype-2d/tests/loot-smoke.mjs`、`prototype-2d/tests/city-map-smoke.mjs`、`scripts/verify-combat.mjs`、`STATUS.md`。测试任务独立分支提交 `e70701a` 已集成。
 
 实际验收：`node scripts/validate.mjs`、`node prototype-2d/tests/spawn-schedule-smoke.mjs`、`node prototype-2d/tests/combat-smoke.mjs`、`node scripts/verify-loot.mjs --unit-only`、`node prototype-2d/tests/city-map-smoke.mjs --unit-only`、`node prototype-2d/tests/landscape-controls-smoke.mjs`、`node prototype-2d/tests/character-motion-smoke.mjs`、`node scripts/verify-combat.mjs --browser-only`、`git diff --check` 均 PASS。刷怪脚本包含8轮随机重开、15/35秒边界、每波人数至22只、每屋居民/唤醒、合法世界边缘、密度0/无限计时器、数量上限、暂停/死亡/结算。
 
 Edge实际1280×720及844×390通过开局数量、15秒首波、35秒第二波、暂停、真实键盘穿门、进屋不增加人数、房内玩家时增援仍在世界边缘、素材加载和重开；桌面及触屏另通过299秒模拟战斗、160/104上限、手动射击和300秒结算，页面无脚本错误。浏览器截图/报告保存在忽略目录`work/runtime-current/zombie-waves-*`及本机`evidence/local/`。微信逻辑未修改；微信仅桩测试通过，微信真机与真人五分钟试玩未执行。
 
-上线状态：本轮独立发布地址将在公网验收后记录。旧物资格测试快照与8081服务保留；本轮检查旧域名`vr5kij-ip-66-90-98-34.tunnelmole.net`已返回404、旧隧道进程已结束，不能把它标为仍在线。临时公网依赖本机及隧道进程持续运行。
+新临时公网：[进入本轮试玩](https://z2fepo-ip-66-90-98-34.tunnelmole.net/)。独立8082端口，公开`work/releases/zombie-waves-20261014/prototype-2d`的`4d6a863`静态快照；入口与环境/角色PNG均HTTP 200，禁用缓存，内容与快照一致。公网Edge实际1280×720及844×390通过开局、15/35秒边缘波次、穿门、暂停、重开及素材加载，无页面脚本错误。本机服务进程12668、隧道进程12604，运行信息及证据保存在忽略目录`work/runtime-current/zombie-waves-*`。
+
+旧物资格测试快照与8081服务保留；本轮检查旧域名`vr5kij-ip-66-90-98-34.tunnelmole.net`已返回404、旧隧道进程已结束，不能把它标为仍在线。临时公网依赖本机及隧道进程持续运行。
 
 ## 2026-10-14 物资箱首开显示修复
 
