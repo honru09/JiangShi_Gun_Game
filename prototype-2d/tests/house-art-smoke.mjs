@@ -297,6 +297,7 @@ try {
       const cache = room.containers[0]
       Object.assign(d.state.player, { x: cache.x, y: cache.y })
       const searched = d.interact(), cacheId = cache.id, floorGeometry = JSON.stringify({ bounds: room.bounds, rooms: room.rooms, obstacles: room.obstacles, walls: room.walls, doors: room.doors, windows: room.windows })
+      d.toggleBagPanel(false)
       const canvas = document.createElement("canvas")
       canvas.width = Math.ceil(building.width + 48); canvas.height = Math.ceil(building.height + 48)
       const ctx = canvas.getContext("2d")

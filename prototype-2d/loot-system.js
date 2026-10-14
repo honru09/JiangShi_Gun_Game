@@ -156,27 +156,29 @@
     context.beginPath(); context.ellipse(0, 22 - bounce, 19, 6, 0, 0, Math.PI * 2); context.fill()
     context.shadowColor = color
     context.shadowBlur = 16
-    context.fillStyle = "#152623"
     context.strokeStyle = color
     context.lineWidth = 3
     if (item.kind === "consumable" || item.kind === "supply" || item.supply) {
-      context.fillRect(-18, -18, 36, 36)
       context.strokeRect(-18, -18, 36, 36)
     } else {
-      context.beginPath(); context.arc(0, 0, 18, 0, Math.PI * 2); context.fill(); context.stroke()
+      context.beginPath(); context.arc(0, 0, 18, 0, Math.PI * 2); context.stroke()
     }
     context.shadowBlur = 0
-    context.fillStyle = color
-    context.textAlign = "center"
-    context.font = "bold 18px Microsoft YaHei, sans-serif"
-    context.fillText(details.icon, 0, 6)
-    context.font = "bold 13px Microsoft YaHei, sans-serif"
-    context.fillStyle = "#111c17d9"; context.fillRect(-51, 27, 102, 22)
-    context.fillStyle = color
-    const label = item.kind === "consumable" || item.kind === "supply" || item.supply
-      ? details.name
-      : `${details.quality.name} · ${item.kind === "gun" ? "枪械" : "道具"}`
-    context.fillText(label, 0, 43)
+    const pictured = window.WASTELAND_ITEM_ART?.draw(context, item.itemId, 0, 0, 32)
+    if (!pictured) {
+      // Keep every pickup identifiable while pictures are loading or unavailable.
+      context.fillStyle = color
+      context.textAlign = "center"
+      context.font = "bold 18px Microsoft YaHei, sans-serif"
+      context.fillText(details.icon, 0, 6)
+      context.font = "bold 13px Microsoft YaHei, sans-serif"
+      context.fillStyle = "#111c17d9"; context.fillRect(-51, 27, 102, 22)
+      context.fillStyle = color
+      const label = item.kind === "consumable" || item.kind === "supply" || item.supply
+        ? details.name
+        : `${details.quality.name} · ${item.kind === "gun" ? "枪械" : "道具"}`
+      context.fillText(label, 0, 43)
+    }
     context.restore()
   }
 

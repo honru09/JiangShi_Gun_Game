@@ -29,6 +29,23 @@
       end: point(root.x + ux * reach, root.y + uy * reach), upperLength, lowerLength }
   }
 
+  function solveHeroArm(root, target) {
+    const limb = solveLimb(root, target, 13, 14)
+    const dx = limb.end.x - root.x, dy = limb.end.y - root.y, reach = Math.hypot(dx, dy)
+    const ux = dx / reach, uy = dy / reach
+    const along = (13 ** 2 - 14 ** 2 + reach ** 2) / (2 * reach)
+    const radius = Math.sqrt(Math.max(0, 13 ** 2 - along ** 2))
+    // Keep the elbow underneath the shoulder/hand line. Around a vertical aim
+    // it turns toward the camera instead of snapping to the other IK branch.
+    // Depth preserves the actual 13/14 bone lengths while their projection
+    // foreshortens naturally; neither arm has to fold upward behind the head.
+    const bend = dx / Math.hypot(dx, 5)
+    limb.joint = { x: root.x + ux * along - uy * radius * bend,
+      y: root.y + uy * along + ux * radius * bend,
+      z: radius * Math.sqrt(Math.max(0, 1 - bend * bend)) }
+    return limb
+  }
+
   function animation(actor, type) {
     const phase = ((Number(actor.gaitPhase ?? actor.walkCycle) || 0) % TAU + TAU) % TAU
     let amount = clamp(Number(actor.gait ?? actor.moveAmount ?? (Number(actor.speed) > 0 ? 1 : 0)) || 0, 0, 1)
@@ -89,7 +106,7 @@
   }
 
   function heroShoulders(body) {
-    return [bodyPoint(body, -body.width * .25, 6 - body.height * .29), bodyPoint(body, body.width * .25, 6 - body.height * .29)]
+    return [bodyPoint(body, -body.width * .25, 6 - body.height * .39), bodyPoint(body, body.width * .25, 6 - body.height * .39)]
   }
 
   function weaponPose(actor, options = {}) {
@@ -158,7 +175,18 @@
       for (const support of [true, false]) {
         const shoulder = shoulders[support ? 0 : 1]
         const hand = gunPoint(gun, support ? gun.support : gun.grip)
-        rig.arms.push({ ...solveLimb(shoulder, hand, 13, 14, support ? 1 : -1), near: !support, support, handAngle: gun.angle })
+        if (support && actor.throwAction > 0) {
+          const duration = actor.throwKind === "extinguisher" ? .12 : .38
+          const weight = smooth(clamp(actor.throwAction / duration, 0, 1))
+          const gx = hand.x - shoulder.x, gy = hand.y - shoulder.y
+          const gripAngle = Math.atan2(gy, gx)
+          const turn = Math.atan2(Math.sin(gun.angle - gripAngle), Math.cos(gun.angle - gripAngle))
+          const actionReach = 21 - 4 * Math.max(0, -Math.sin(gun.angle))
+          const reach = lerp(Math.hypot(gx, gy), actionReach, weight), actionAngle = gripAngle + turn * weight
+          hand.x = shoulder.x + Math.cos(actionAngle) * reach
+          hand.y = shoulder.y + Math.sin(actionAngle) * reach
+        }
+        rig.arms.push({ ...solveHeroArm(shoulder, hand), near: !support, support, handAngle: gun.angle })
       }
     } else {
       for (const near of [false, true]) {
@@ -219,6 +247,19 @@
       const b = rig.body
       c.save(); c.translate(b.x, b.y + 3); c.rotate(b.angle); c.scale(b.scaleX, 1)
       if (rig.type !== "crawler") c.scale(b.facing, 1)
+      if (rig.type === "hero") {
+        // The source torso includes fixed rolled sleeves with skin-coloured
+        // cut ends. Keep its head, collar and jacket, and let the articulated
+        // arms supply the sleeves instead of leaving those stumps on screen.
+        const outline = [[0, 0], [1, 0], [1, .53], [.82, .58], [.78, .72], [.88, 1],
+          [.16, 1], [.24, .72], [.27, .58], [0, .53]]
+        c.beginPath()
+        for (let i = 0; i < outline.length; i++) {
+          const x = (outline[i][0] - .5) * b.width, y = 3 - b.height + outline[i][1] * b.height
+          if (i) c.lineTo(x, y); else c.moveTo(x, y)
+        }
+        c.closePath(); c.clip()
+      }
       paint(c, parts.get(`${rig.type}.body`), -b.width / 2, 3 - b.height, b.width, b.height); c.restore()
     }
     function drawLeg(c, rig, chain) {
@@ -283,10 +324,22 @@
       const rig = getPose("hero", actor, options); lastFrame = { ...rig.frame, actor: "player", type: "hero" }
       c.save(); c.translate(actor.x || 0, actor.y || 0)
       if (options.shadow !== false) shadow(c, 24)
-      if (actor.invulnerable > .7) { c.strokeStyle = "#d8f25aaa"; c.lineWidth = 2; c.beginPath(); c.ellipse(0, -16, 34, 54, 0, 0, TAU); c.stroke() }
+      if (options.statusEffects !== false && actor.invulnerable > .7) { c.strokeStyle = "#d8f25aaa"; c.lineWidth = 2; c.beginPath(); c.ellipse(0, -16, 34, 54, 0, 0, TAU); c.stroke() }
       behind(c, rig); torso(c, rig)
-      for (const arm of rig.arms) drawArm(c, rig, arm)
+      // The far upper arm stays behind the chest. Only its forearm crosses in
+      // front to the support grip; redrawing the entire arm made a second
+      // shoulder and a bent sleeve appear through the jacket while turning.
+      for (const arm of rig.arms) {
+        if (arm.near) drawArm(c, rig, arm)
+        else {
+          stroke(c, arm.joint, arm.end, INK, 10)
+          stroke(c, arm.joint, arm.end, PALETTE.hero[2], 7)
+          stroke(c, point(lerp(arm.joint.x, arm.end.x, .24), lerp(arm.joint.y, arm.end.y, .24) - .6),
+            point(lerp(arm.joint.x, arm.end.x, .68), lerp(arm.joint.y, arm.end.y, .68) - .6), PALETTE.hero[3], 1.8)
+        }
+      }
       options.drawWeapon?.()
+      if (options.drawHeldItem && actor.throwAction > 0) options.drawHeldItem(rig.arms[0].end, rig.gun.angle)
       for (const arm of rig.arms) hand(c, rig, arm)
       c.restore(); return true
     }
@@ -303,7 +356,7 @@
         else { stroke(c, arm.joint, arm.end, INK, 10); stroke(c, arm.joint, arm.end, PALETTE[type][2], 7) }
         hand(c, rig, arm)
       }
-      if (actor.burn > 0) { dot(c, point(-10, 1), 3, "#ff983a"); dot(c, point(8, -7), 3, "#ff983a") }
+      if (options.statusEffects !== false && actor.burn > 0) { dot(c, point(-10, 1), 3, "#ff983a"); dot(c, point(8, -7), 3, "#ff983a") }
       if (options.healthBar !== false && actor.hp < actor.maxHp) {
         const top = type === "crawler" ? -39 : 1 - rig.body.height
         c.fillStyle = "#20100b"; c.fillRect(-21, top, 42, 4); c.fillStyle = "#dc764c"; c.fillRect(-21, top, 42 * Math.max(0, actor.hp / actor.maxHp), 4)

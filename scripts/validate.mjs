@@ -57,6 +57,8 @@ checkJavaScript("prototype-2d/character-art.js");
 checkJavaScript("prototype-2d/city-map.js");
 checkJavaScript("prototype-2d/house-system.js");
 checkJavaScript("prototype-2d/loot-system.js");
+checkJavaScript("prototype-2d/item-art.js");
+checkJavaScript("prototype-2d/item-effects.js");
 checkJavaScript("prototype-2d/inventory-system.js");
 checkJavaScript("prototype-2d/inventory-art.js");
 checkJavaScript("wechat-miniprogram/miniprogram/app.js");

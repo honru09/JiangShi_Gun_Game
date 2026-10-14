@@ -26,6 +26,7 @@ function near(actual, expected, label, tolerance = EPSILON) {
     `${label}: ${actual} expected ${expected} (tolerance ${tolerance})`)
 }
 function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y) }
+function boneDistance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y, (a.z ?? 0) - (b.z ?? 0)) }
 function pointNear(a, b, label) {
   near(a.x, b.x, `${label}.x`); near(a.y, b.y, `${label}.y`)
 }
@@ -45,10 +46,13 @@ function chain(limb, label) {
   for (const field of ["root", "joint", "end", "target"]) {
     assert.ok(limb[field], `${label}: missing ${field}`)
     assert.ok(Number.isFinite(limb[field].x) && Number.isFinite(limb[field].y), `${label}.${field}: invalid coordinates`)
+    assert.ok(limb[field].z === undefined || Number.isFinite(limb[field].z), `${label}.${field}: invalid depth`)
   }
   assert.ok(limb.upperLength > 0 && limb.lowerLength > 0, `${label}: nonpositive bone length`)
-  near(distance(limb.root, limb.joint), limb.upperLength, `${label}: upper bone stretched`)
-  near(distance(limb.joint, limb.end), limb.lowerLength, `${label}: lower bone stretched`)
+  // A rotated arm may look shorter on screen. Its actual bones include depth;
+  // socket and grip alignment remain screen-space checks below.
+  near(boneDistance(limb.root, limb.joint), limb.upperLength, `${label}: upper bone stretched`)
+  near(boneDistance(limb.joint, limb.end), limb.lowerLength, `${label}: lower bone stretched`)
 }
 function inspect(rig, baseline, label) {
   checkedPoses++
@@ -65,7 +69,7 @@ function inspect(rig, baseline, label) {
       const partLabel = `${label}.${group}.${key(limb)}`
       chain(limb, partLabel)
       if (group === "arms") {
-        const cosine = (limb.upperLength ** 2 + limb.lowerLength ** 2 - distance(limb.root, limb.end) ** 2)
+        const cosine = (limb.upperLength ** 2 + limb.lowerLength ** 2 - boneDistance(limb.root, limb.end) ** 2)
           / (2 * limb.upperLength * limb.lowerLength)
         const innerAngle = Math.acos(Math.max(-1, Math.min(1, cosine))) * 180 / Math.PI
         assert.ok(innerAngle >= 20 - EPSILON, `${partLabel}: elbow overfolded to ${innerAngle} degrees (minimum 20)`)
@@ -179,7 +183,7 @@ test("walk/run/crawl remain continuous through pose frames, support changes and 
       const after = art.pose(type, { ...actor, gaitPhase: cycle * TAU + 1e-6 })
       for (const group of ["arms", "legs"]) for (let i = 0; i < 2; i++) {
         for (const joint of ["root", "joint", "end"]) {
-          assert.ok(distance(before[group][i][joint], after[group][i][joint]) < .001,
+          assert.ok(boneDistance(before[group][i][joint], after[group][i][joint]) < .001,
             `${type}/${motion} cycle=${cycle} ${group}[${i}].${joint}: teleports across phase boundary`)
         }
       }
@@ -187,15 +191,42 @@ test("walk/run/crawl remain continuous through pose frames, support changes and 
   }
 })
 
-test("hero: shoulders, elbows and palms do not swap or snap when aim changes sides", () => {
-  for (const gait of [0, 1]) for (let i = 0; i <= SAMPLES; i++) {
+test("hero: shoulders, elbows and palms remain continuous in projection and depth through all aim directions", () => {
+  const actions = [{ throwAction: 0 }, { throwKind: "grenade", throwAction: .19 },
+    { throwKind: "extinguisher", throwAction: .06 }, { throwKind: "extinguisher", throwAction: .3 }]
+  for (const gait of [0, 1]) for (const action of actions) for (let i = 0; i <= SAMPLES; i++) {
     const angle = -Math.PI + i / SAMPLES * TAU
-    const actor = { motion: "run", gait, gaitPhase: 1.2, recoil: .5 }
+    const actor = { motion: "run", gait, gaitPhase: 1.2, recoil: .5, ...action }
     const before = art.pose("hero", { ...actor, armAngle: angle - 1e-6 })
     const after = art.pose("hero", { ...actor, armAngle: angle + 1e-6 })
     for (let limb = 0; limb < 2; limb++) for (const joint of ["root", "joint", "end"]) {
-      assert.ok(distance(before.arms[limb][joint], after.arms[limb][joint]) < .001,
-        `hero aim=${angle}: arm[${limb}].${joint} swaps/snaps across aim boundary`)
+      assert.ok(boneDistance(before.arms[limb][joint], after.arms[limb][joint]) < .001,
+        `hero aim=${angle} action=${action.throwKind || "aim"}/${action.throwAction}: arm[${limb}].${joint} swaps/snaps across aim boundary`)
+    }
+  }
+})
+
+test("hero: leftward elbows bend below the arms and raised elbows stay out of the head", () => {
+  const actions = [{ throwAction: 0 }, { throwKind: "grenade", throwAction: .19 },
+    { throwKind: "grenade", throwAction: .38 }, { throwKind: "extinguisher", throwAction: .06 },
+    { throwKind: "extinguisher", throwAction: .3 }]
+  for (const action of actions) for (const gait of [0, 1]) for (const recoil of [0, 1]) for (const scaleX of [.8, 1]) {
+    for (let i = 0; i <= SAMPLES; i++) {
+      const angle = -Math.PI + i / SAMPLES * TAU
+      const rig = art.pose("hero", { motion: "run", gait, gaitPhase: 1.2, armAngle: angle, recoil, ...action }, { gun: { scaleX } })
+      for (const arm of rig.arms) {
+        const label = `hero aim=${angle} gait=${gait} recoil=${recoil} weaponScale=${scaleX} support=${arm.support} action=${action.throwKind || "aim"}/${action.throwAction}`
+        assert.ok(arm.joint.y >= Math.min(arm.root.y, arm.end.y) - EPSILON,
+          `${label}: elbow folds above both the shoulder and hand`)
+        const elbowInBody = localRoot({ root: arm.joint }, rig.body)
+        assert.ok(elbowInBody.y > 6 - rig.body.height * .5,
+          `${label}: elbow enters the head/neck half of the body art`)
+        // A level leftward hold needs both elbows below the shoulder and hand,
+        // including the screen-left support arm that previously bent backward.
+        if (Math.abs(Math.sin(angle)) < .1 && Math.cos(angle) < 0)
+          assert.ok(arm.joint.y >= Math.max(arm.root.y, arm.end.y) - EPSILON,
+            `${label}: a level leftward arm bends upward instead of hanging below its grip`)
+      }
     }
   }
 })

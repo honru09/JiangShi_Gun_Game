@@ -35,5 +35,5 @@
     pizza: '<path d="M7 12Q34 3 57 14L29 58Z" fill="#dbb675"/><path d="M7 12Q34 3 57 14L51 23Q31 14 12 23Z" fill="#a97847"/><circle cx="26" cy="29" r="5" fill="#aa5141"/><circle cx="39" cy="24" r="4" fill="#aa5141"/><circle cx="28" cy="43" r="4" fill="#aa5141"/>',
     box: '<path d="M7 15L39 8 57 18 26 27Z" fill="#bca673"/><path d="M7 15L26 27 26 59 7 46Z" fill="#80674f"/><path d="M26 27L57 18 57 49 26 59Z" fill="#a28a60"/>'
   }
-  window.WASTELAND_ITEM_ART = item => `<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><g stroke="#242c29" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">${art[item.art] || art.box}</g></svg>`
+  window.WASTELAND_INVENTORY_ART = item => `<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><g stroke="#242c29" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">${art[item.art] || art.box}</g></svg>`
 })()

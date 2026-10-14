@@ -155,9 +155,15 @@ if (integration) for (const [runtime, expectedImages] of [[page, 1], [unavailabl
     const draws = target.calls.filter(call => call.name === "drawImage")
     assert.equal(draws.length, expectedImages)
     if (expectedImages) assert.equal(draws[0].args[0].src, `assets/items/${item.itemId}.png`)
-    assert.equal(target.calls.some(call => call.name === "fillText"), false, "loot has no character glyph or text label")
-    assert.equal(target.calls.some(call => call.name === "fillRect" && call.args[0] === -51), false, "removed labels leave no empty text plate")
-    assert.equal(target.calls.some(call => call.name === "fillRect"), false, "the item placeholder has no solid block")
+    if (expectedImages) {
+      assert.equal(target.calls.some(call => call.name === "fillText"), false, "loaded pictures replace character glyphs and labels")
+      assert.equal(target.calls.some(call => call.name === "fillRect"), false, "loaded pictures leave no empty text plate")
+    } else {
+      const labels = target.calls.filter(call => call.name === "fillText")
+      assert.equal(labels.length, 2, "missing pictures retain a pickup symbol and readable label")
+      assert.equal(labels[0].args[0], runtime.loot.describe(item).icon)
+      assert.ok(labels[1].args[0].length > 0)
+    }
     assert.equal(target.calls.filter(call => call.name === "fill").length, 1, "only the ground shadow is filled; the item placeholder is an outline")
     if (item.kind === "consumable") assert.ok(target.calls.some(call => call.name === "strokeRect" && call.args[2] === 36))
     else assert.ok(target.calls.some(call => call.name === "arc" && call.args[2] === 18))
@@ -167,6 +173,6 @@ if (integration) for (const [runtime, expectedImages] of [[page, 1], [unavailabl
     assert.equal(target.globalAlpha, .4)
   }
 }
-if (integration) console.log("PASS skill, firearm and consumable drops use matching art, preserve halos and fall back without text")
+if (integration) console.log("PASS skill, firearm and consumable drops use matching art, preserve halos and keep readable fallbacks")
 else console.log("SKIP Loot.draw integration checks; use --integration after the shared scene is connected")
 console.log("\nAll item-art unit checks passed (image pixels and actual browser appearance are not covered).")
