@@ -113,6 +113,37 @@ async function browserChecks() {
       await page.screenshot({ path: join(evidence, `${prefix}-item-levels.png`) });
       pass(`${prefix} browser touch collection and duplicate effect`, { viewport, ...contact });
 
+      await page.evaluate(() => {
+        const d = window.__LAST_NIGHT_DEBUG__;
+        d.searchSupplyBox({ id: "unknown-grid-fixture", lootType: "safe", contents: [
+          { itemId: "basketball", quality: "legendary" }, "vacuum", "scar"
+        ] });
+      });
+      assert.equal(await page.locator("#searchGrid .is-unidentified").count(), 3, "a locked box immediately shows all item footprints");
+      assert.equal(await page.locator("#searchGrid .is-searching").count(), 0, "a locked box cannot start identifying");
+      assert.equal(await page.locator("#searchGrid [data-item-id]").count(), 0, "unknown items cannot expose interactive identities");
+      assert((await page.locator("#searchSubtitle").textContent()).includes("箱内共 3 件 · 剩余 3 件"));
+      assert(!/篮球|吸尘器|SCAR/.test(await page.locator("#searchGrid").innerHTML()), "unknown cards hide names and art");
+      assert(await page.locator("#searchTakeAll").isDisabled());
+      await page.evaluate(() => {
+        const d = window.__LAST_NIGHT_DEBUG__; d.step(.2);
+        if (d.searchPanel.elapsed !== 0 || d.takeSearchItem(0)) throw new Error("locked box leaked identification or claim");
+        for (let i = 0; i < 4; i++) { d.searchPanel.lock.elapsed = .7; d.confirmLock(); }
+      });
+      assert.equal(await page.locator("#searchGrid .is-unidentified").count(), 3);
+      assert.equal(await page.locator("#searchGrid .is-searching").count(), 1);
+      const unknownPositions = await page.locator("#searchGrid .is-unidentified").evaluateAll(cards => cards.map(card => {
+        const r = card.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }));
+      await page.screenshot({ path: join(evidence, `${prefix}-all-unknown-footprints.png`) });
+      await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.step(20));
+      const knownPositions = await page.locator("#searchGrid .ready").evaluateAll(cards => cards.map(card => {
+        const r = card.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }));
+      assert.deepEqual(knownPositions, unknownPositions, "multi-cell items retain the same footprint after identification");
+      await page.locator("#bagClose").click();
+      pass(`${prefix} all unknown supplies and totals appear immediately without identity leaks or footprint changes`, { count: 3 });
+
       // Walk through the real exterior doorway. The floor plan is rendered at
       // the same world coordinate; the interaction button remains for search.
       const houseInfo = await page.evaluate(() => {
@@ -149,6 +180,8 @@ async function browserChecks() {
       assert.equal(found.ground.length, 0);
       assert.equal(found.bag, 0);
       assert.equal(await page.locator("#searchGrid .is-searching").count(), 1);
+      assert.equal(await page.locator("#searchGrid .is-unidentified").count(), 4);
+      assert((await page.locator("#searchSubtitle").textContent()).includes("箱内共 4 件 · 剩余 4 件"));
       await page.screenshot({ path: join(evidence, `${prefix}-search-unidentified.png`) });
       await page.locator('#searchGrid [data-search-index="0"]').dblclick();
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag[0].itemId), "pizza");
@@ -160,6 +193,8 @@ async function browserChecks() {
       assert.equal(await page.evaluate(() => window.__LAST_NIGHT_DEBUG__.bag.length), 1);
       await page.locator("#interactRun").click();
       assert.equal(await page.locator('#searchGrid [data-search-index="0"]').count(), 0);
+      assert((await page.locator("#searchSubtitle").textContent()).includes("箱内共 4 件 · 剩余 3 件"));
+      assert.equal(await page.locator("#searchGrid .loot-card").count(), 3, "reopened box shows every remaining item footprint");
       const sheetBox = await page.locator("#inventorySheet").boundingBox();
       assert(sheetBox.x >= 0 && sheetBox.y >= 0 && sheetBox.x + sheetBox.width <= viewport.width + 1 && sheetBox.y + sheetBox.height <= viewport.height + 1, "inventory fits landscape viewport");
 

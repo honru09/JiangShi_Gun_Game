@@ -286,6 +286,9 @@ export function runLootChecks() {
   assert.equal(houseDebug.takeSearchItem(0), false, "unknown items cannot be claimed");
   assert.equal(houseDebug.takeAllSearchItems(), 0, "batch claim cannot bypass identification");
   assert(!housePage.elements.get("searchGrid").innerHTML.includes("披萨"), "unidentified names are not leaked in search cards");
+  assert.equal((housePage.elements.get("searchGrid").innerHTML.match(/class="loot-card is-unidentified/g) || []).length, 4, "opening reveals every unknown item footprint immediately");
+  assert.equal((housePage.elements.get("searchGrid").innerHTML.match(/is-searching/g) || []).length, 1, "only the current item scans");
+  assert(housePage.elements.get("searchSubtitle").textContent.includes("箱内共 4 件 · 剩余 4 件"), "total supplies are visible before identification");
   const revealAt = plain(houseDebug.searchPanel.entries.map(entry => Number(entry.revealAt.toFixed(2))));
   assert.deepEqual(revealAt, [1.25, 2.07, 2.89, 3.31], "search is sequential with quality-based prototype delays");
   houseDebug.step(.5);
@@ -297,7 +300,9 @@ export function runLootChecks() {
   assert.equal(houseDebug.interact(), true);
   assert.equal(houseDebug.searchPanel.elapsed, searchProgress, "reopening resumes progress");
   houseDebug.step(.8);
+  assert.equal((housePage.elements.get("searchGrid").innerHTML.match(/class="loot-card is-unidentified/g) || []).length, 3, "identification changes an existing footprint rather than creating a new item");
   assert.equal(houseDebug.takeSearchItem(0), true, "identified items transfer to backpack");
+  assert(housePage.elements.get("searchSubtitle").textContent.includes("箱内共 4 件 · 剩余 3 件"), "claiming retains the original total and updates remaining supplies");
   assert.equal(houseDebug.takeSearchItem(0), false, "claimed items cannot duplicate");
   assert.equal(houseDebug.takeSearchItem(1), false, "later items remain hidden");
   assert.equal(houseDebug.bag[0].itemId, "pizza");
