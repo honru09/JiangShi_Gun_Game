@@ -21,7 +21,9 @@
     const buildings = []
     const blocks = []
     // Houses grow within six plots; the world and actors retain their scale.
-    const rows = [[40, 750], [936, 1570], [1776, 2416]]
+    // Leave a full actor-width verge above the first row so the new north
+    // entrances have a real street landing even for radius-24 infected.
+    const rows = [[104, 760], [936, 1570], [1776, 2416]]
     const columns = [[80, 628], [812, 1360]]
     const district = [
       { kind: "residential", houseType: "courtyard", width: 480, height: 656 },
@@ -418,7 +420,8 @@
       const pad = 6 * sx
       // The atlas base stays on the footprint's south edge, where the house
       // system places its entrance. Only the roof extends above the footprint.
-      const item = { id: `building-${building.variant}`, type: "building", index: houseAssets[building.kind] ?? 0, building, x: building.x - pad, y: building.y - roofLift, width: building.width + pad * 2, height: building.height + roofLift, sortY: building.y + building.height }
+      const facadeCropTop = ({ residential: .56, shop: .48, market: .48, clinic: .55, apartment: .45, warehouse: .4 }[building.kind] ?? .5)
+      const item = { id: `building-${building.variant}`, type: "building", index: houseAssets[building.kind] ?? 0, building, exteriorStyle: "roof-and-facade", facadeCropTop, x: building.x - pad, y: building.y - roofLift, width: building.width + pad * 2, height: building.height + roofLift, sortY: building.y + building.height }
       scenery.push(Object.freeze(item))
       // Ground contact shadows are baked; the roof itself belongs to depth order.
       oval(ctx, building.x + building.width / 2 + 7 * sx, building.y + building.height - 2 * sy, building.width * .58, 12 * sy, "#594d3245")
@@ -577,10 +580,98 @@
       }
     }
 
+    const roofCache = new WeakMap()
+    function drawExtendedRoof(context, item, facadeHeight) {
+      const roofHeight = item.height - facadeHeight + 16 * sy
+      let cached = roofCache.get(item)
+      if (!cached || cached.facadeHeight !== facadeHeight) {
+        const canvas = document.createElement("canvas")
+        canvas.width = Math.ceil(item.width + 12 * sx)
+        canvas.height = Math.ceil(roofHeight + 12 * sy)
+        const target = canvas.getContext("2d")
+        target.translate(6 * sx, 5 * sy)
+        const w = item.width, h = roofHeight, kind = item.building.kind
+        const flat = ["clinic", "apartment"].includes(kind)
+        const metal = kind === "warehouse"
+        const colors = flat ? ["#a29b78", "#89866c", "#c8bb8c"] : metal ? ["#8c8f80", "#737a71", "#b4b09a"] : ["#b1784c", "#965f3e", "#d2a16b"]
+        rect(target, 4 * sx, 5 * sy, w - 8 * sx, h, "#57422e", ink, 3)
+        polygon(target, [[3 * sx, 12 * sy], [14 * sx, 1], [w - 14 * sx, 1], [w - 3 * sx, 12 * sy], [w, h - 7 * sy], [0, h - 7 * sy]], colors[0], ink, 3)
+        target.save(); target.beginPath(); target.rect(10 * sx, 12 * sy, w - 20 * sx, h - 18 * sy); target.clip()
+        if (!flat) {
+          rect(target, w / 2, 6 * sy, w / 2 - 5 * sx, h, colors[1])
+          const pitch = metal ? 36 : 25
+          for (let row = 0, y = 10 * sy; y < h; y += pitch * sy, row++) {
+            line(target, 8 * sx, y, w - 8 * sx, y, "#63492ea0", 2)
+            line(target, 9 * sx, y + 3 * sy, w - 9 * sx, y + 3 * sy, colors[2], 1.4)
+            if (!metal) for (let x = (row % 2 ? 24 : 5) * sx; x < w; x += 44 * sx) {
+              line(target, x, y + 3 * sy, x - 5 * sx, y + pitch * sy, "#714b35", 1.6)
+              if ((row + Math.round(x / (44 * sx))) % 8 === 0) rect(target, x + 7 * sx, y + 7 * sy, 16 * sx, 4 * sy, "#d8ad7638")
+            }
+            else for (let x = 24 * sx; x < w; x += 34 * sx) oval(target, x, y + 8 * sy, 1.5, 1.5, "#4b5048")
+          }
+          line(target, w / 2 - 5 * sx, 4 * sy, w / 2 - 5 * sx, h, "#deaa71", 4 * sx)
+          line(target, w / 2 + 4 * sx, 4 * sy, w / 2 + 4 * sx, h, "#57412e", 3 * sx)
+        } else {
+          for (let y = 15 * sy; y < h; y += 52 * sy) {
+            line(target, 14 * sx, y, w - 14 * sx, y, "#716b5455", 1)
+            for (let x = 35 * sx; x < w; x += 67 * sx) line(target, x, y, x + 5 * sx, y + 52 * sy, "#78705440", 1)
+          }
+        }
+        // Fixed weathering varies by building, so the roof is stable while moving.
+        let weather = 81427 + item.building.variant * 177
+        const sample = () => { weather = Math.imul(weather, 1664525) + 1013904223 | 0; return (weather >>> 0) / 4294967296 }
+        for (let i = 0; i < 55; i++) {
+          const x = 18 * sx + sample() * (w - 36 * sx), y = 20 * sy + sample() * Math.max(1, h - 45 * sy)
+          oval(target, x, y, (3 + sample() * 10) * sx, (1.5 + sample() * 4) * sy, i % 3 ? "#57452b15" : "#e5c59126")
+        }
+        target.restore()
+        if (flat) {
+          for (const x of [2 * sx, w - 12 * sx]) {
+            rect(target, x, 2 * sy, 10 * sx, h - 7 * sy, "#c8ba8d", ink, 2.5)
+            line(target, x + 3 * sx, 4 * sy, x + 3 * sx, h - 8 * sy, "#efe0b3", 2)
+          }
+          rect(target, 10 * sx, 0, w - 20 * sx, 10 * sy, "#c8ba8d", ink, 2.5)
+          // Squat air conditioning units sit on roof supports, never stretched.
+          for (const [ux, uy] of [[w * .18, h * .2], [w * .64, h * .58]]) {
+            rect(target, ux + 5 * sx, uy + 6 * sy, 59 * sx, 44 * sy, "#584d3b44")
+            rect(target, ux, uy, 58 * sx, 39 * sy, "#b5b19c", ink, 2.5)
+            rect(target, ux + 4 * sx, uy + 4 * sy, 50 * sx, 31 * sy, "#7b8377", ink, 1.5)
+            oval(target, ux + 29 * sx, uy + 19 * sy, 12 * sx, 12 * sy, "#515e57", ink, 1.3)
+            for (let n = 0; n < 4; n++) line(target, ux + (15 + n * 9) * sx, uy + 8 * sy, ux + (15 + n * 9) * sx, uy + 30 * sy, "#c5c1a2", 1)
+          }
+        } else if (!metal) {
+          const chimneyX = w * .76, chimneyY = h * .16
+          rect(target, chimneyX + 7 * sx, chimneyY + 6 * sy, 47 * sx, 70 * sy, "#57412f55")
+          rect(target, chimneyX, chimneyY, 40 * sx, 55 * sy, "#a47950", ink, 3)
+          for (let y = chimneyY + 9 * sy; y < chimneyY + 55 * sy; y += 12 * sy) line(target, chimneyX + 2 * sx, y, chimneyX + 38 * sx, y, "#66462f", 1.7)
+          rect(target, chimneyX - 5 * sx, chimneyY - 5 * sy, 50 * sx, 15 * sy, "#c5a471", ink, 2.5)
+          rect(target, chimneyX + 5 * sx, chimneyY - 1 * sy, 30 * sx, 5 * sy, "#443629")
+        }
+        // Moss clings to the parapet and old gutters rather than floating in the street.
+        for (let n = 0; n < 8; n++) {
+          const x = n % 2 ? 12 * sx : w - 14 * sx, y = (32 + n * 45) * sy
+          if (y < h - 20 * sy) { oval(target, x, y, 9 * sx, 6 * sy, "#768a39", "#58672c", 1.3); oval(target, x + 5 * sx, y - 3 * sy, 5 * sx, 4 * sy, "#9fab4d") }
+        }
+        line(target, 4 * sx, h - 9 * sy, w - 4 * sx, h - 9 * sy, "#4e3c2b", 5)
+        cached = { canvas, facadeHeight }
+        roofCache.set(item, cached)
+      }
+      context.drawImage(cached.canvas, item.x - 6 * sx, item.y - 5 * sy)
+    }
+
+    function drawBuilding(context, item) {
+      const size = art?.environmentSize?.(item.index, { cropTop: item.facadeCropTop })
+      if (!size) { drawFallbackBuilding(context, item); return }
+      const facadeHeight = size.height * item.width / size.width
+      drawExtendedRoof(context, item, facadeHeight)
+      art.drawEnvironment(context, item.index, item.x, item.y, item.width, item.height, { cropTop: item.facadeCropTop, fit: "width", anchorY: 1 })
+    }
+
     function drawScenery(context, item) {
       context.save()
       context.lineJoin = "round"
       // If the image has not arrived, the detailed Canvas art remains playable.
+      if (item.type === "building") { drawBuilding(context, item); context.restore(); return }
       const drawn = art && art.drawEnvironment(context, item.index, item.x, item.y, item.width, item.height)
       if (!drawn) {
         if (item.type === "building") drawFallbackBuilding(context, item)
