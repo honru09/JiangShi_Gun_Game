@@ -234,9 +234,11 @@ async function browserChecks() {
         const debug = window.__LAST_NIGHT_DEBUG__;
         debug.state.paused = true;
         debug.state.godMode = true;
-        return { enemies: debug.state.enemies.length, cap: debug.config.enemyCap, slots: debug.build.slots().length };
+        return { enemies: debug.state.enemies.length, rooms: debug.state.houseRooms.size,
+          cap: debug.config.enemyCap, slots: debug.build.slots().length };
       });
-      assert.equal(initial.enemies, 8);
+      assert(initial.enemies >= initial.rooms * 2 + 3 && initial.enemies <= initial.rooms * 5 + 6,
+        "browser startup has prepopulated interiors and a small outdoor resident pack");
       assert.equal(initial.cap, mobile ? 104 : 160);
       assert.equal(initial.slots, 2);
       assert.equal(await page.locator(".skill-slot").count(), 7);
@@ -276,9 +278,12 @@ async function browserChecks() {
       assert.deepEqual(afterObject, beforeObject);
       pass(`${mobile ? "touch" : "desktop"} browser startup, gait state, stop, and pause`, initial);
 
+      await page.evaluate(() => { window.__LAST_NIGHT_DEBUG__.state.paused = false; });
+      await page.keyboard.down("Space");
       const closeHit = await page.evaluate(() => {
         const debug = window.__LAST_NIGHT_DEBUG__;
         const state = debug.state;
+        state.paused = true;
         const target = state.enemies[0];
         target.x = state.player.x; target.y = state.player.y;
         const hp = target.hp;
@@ -313,6 +318,7 @@ async function browserChecks() {
           simulatedSeconds: state.time - simulationStart, milliseconds: Math.round(performance.now() - started) };
       });
       assert(metrics.shots > 0); assert(metrics.hits > 0); assert(metrics.kills > 0);
+      await page.keyboard.up("Space");
       assert(metrics.simulatedSeconds >= 299 && metrics.simulatedSeconds < 299.3);
       await page.screenshot({ path: join(evidence, `${mobile ? "touch" : "desktop"}-pressure.png`) });
       // Safe spawning may reject a crowded edge. Isolate the capacity gate by clearing

@@ -345,19 +345,14 @@ function unitChecks() {
     debug.state.enemies = [];
     game.click("adminHorde");
     assert(debug.state.enemies.length > 0);
-    const spawnCamera = debug.snapshot().camera;
     for (const spawned of debug.state.enemies) {
-      const indoorWalkable = debug.houses.houses.some(candidate => {
-        const room = debug.houses.createRoom(candidate);
-        return room.bounds.minX <= spawned.x && spawned.x <= room.bounds.maxX && room.bounds.minY <= spawned.y && spawned.y <= room.bounds.maxY
-          && debug.houses.isFree(room, spawned.x, spawned.y, spawned.radius);
-      });
-      assert(map.isFree(spawned.x, spawned.y, spawned.radius) || indoorWalkable,
-        "spawned infected remains walkable on either the street or its shared floor plan");
+      assert.equal(spawned.spawnSource, "map-edge");
+      assert(map.isFree(spawned.x, spawned.y, spawned.radius),
+        "reinforcement stands on traversable perimeter ground or street");
       assert(Math.hypot(spawned.x - x, spawned.y - y) > spawned.radius + debug.state.player.radius);
-      assert(spawned.x >= spawnCamera.x - 120 && spawned.x <= spawnCamera.x + 1280 + 120
-        && spawned.y >= spawnCamera.y - 120 && spawned.y <= spawnCamera.y + 720 + 120,
-        "spawn pressure remains near the current landscape camera");
+      const edgeDistance = Math.min(spawned.x, spawned.y, map.width - spawned.x, map.height - spawned.y);
+      assert(Math.abs(edgeDistance - (debug.config.worldMargin + spawned.radius + 4)) < 1e-6,
+        "spawn pressure comes from the whole-map perimeter regardless of the current camera");
     }
   }
   pass("walking crosses a real doorway on one city layer, then follows the camera and clamps all four corners", { entry, exit });
