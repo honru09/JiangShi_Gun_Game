@@ -258,7 +258,9 @@ export function runLootChecks() {
   assert.equal(room.layer, "city", "room stays on the shared city canvas layer");
   assert(room.invasionEntrances.some(entry => entry.kind === "door"), "room exposes a zombie door entrance");
   assert(room.invasionEntrances.filter(entry => entry.kind === "window").length >= 4, "room exposes multiple zombie window entrances");
-  assert(houseDebug.state.enemies.some(enemy => enemy.spawnSource === "invasion" && enemy.invasionEntryId), "indoor zombies spawn from a door or window");
+  const residents = houseDebug.state.enemies.filter(enemy => enemy.spawnSource === "initial-room" && enemy.spawnHouseId === house.id);
+  assert(residents.length >= 2 && residents.length <= 5, "indoor residents already exist before the player enters");
+  assert.equal(houseDebug.state.enemies.length, outdoorEnemyIds.length, "entering does not add a second resident pack");
   housePage.drawCalls.length = 0;
   houseDebug.step(1 / 60);
   const insideSnapshot = houseDebug.snapshot();

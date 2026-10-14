@@ -63,7 +63,12 @@ const page = boot()
 page.start()
 const debug = page.debug
 assert.equal(debug.snapshot().phase, "playing")
-assert.equal(debug.snapshot().enemies, 8)
+function assertResidentPopulation(api) {
+  const rooms = api.state.houseRooms.size
+  assert.ok(api.state.enemies.length >= rooms * 2 + 3 && api.state.enemies.length <= rooms * 5 + 6,
+    "startup includes 2–5 residents in every interior and 3–6 outdoor zombies")
+}
+assertResidentPopulation(debug)
 assert.equal(debug.snapshot().build.slots.length, 2)
 assert.equal((page.elements.get("skillDock").innerHTML.match(/class="skill-slot /g) || []).length, 7)
 assert.equal(debug.config.runSeconds, 300)
@@ -73,13 +78,18 @@ debug.state.godMode = true
 debug.state.nextXp = 1e9
 debug.step(.5)
 assert.equal(debug.snapshot().stats.shots, 0, "the rifle waits for manual fire input")
+// Shooting coverage needs a visible street target independent of the random
+// startup distribution, whose residents can now be elsewhere on the map.
+debug.state.enemies.push({ ...debug.state.enemies[0], id: 900000,
+  x: debug.state.player.x + 110, y: debug.state.player.y,
+  speed: 0, baseSpeed: 0, damage: 0, contactTimer: Infinity })
 page.key("Space")
 debug.step(5)
 page.key("Space", false)
 assert.ok(debug.snapshot().stats.shots > 0)
 assert.ok(debug.snapshot().stats.hits > 0)
 assert.ok(debug.snapshot().kills > 0)
-console.log("PASS real page script starts with two skills, seven dock slots, 8 slow walkers, rifle shots and hits")
+console.log("PASS real page script starts with two skills, seven dock slots, random slow residents, manual rifle shots and hits")
 
 const beforeMove = debug.snapshot().player
 page.key("KeyD")
@@ -237,12 +247,13 @@ function pressure(coarse) {
   api.state.godMode = true
   api.state.nextXp = 1e9
   api.state.player.fireTimer = Infinity
+  const residentCount = api.state.enemies.length
   // Disable tactical skills to isolate spawn pressure and preserve enemies.
   for (const skill of api.build.selectedSkills()) api.build.levels[skill.id] = 0
   // Move into the later roster, then let the real spawn loop build a capped horde.
   api.state.time = 65
   api.step(50)
-  assert.ok(api.state.enemies.length > 8)
+  assert.ok(api.state.enemies.length > residentCount)
   assert.ok(api.state.enemies.length <= api.config.enemyCap)
   assert.equal(api.config.enemyCap, coarse ? 104 : 160)
   assert.ok(api.state.enemies.some(enemy => enemy.type === "runner"))
@@ -265,7 +276,7 @@ function pressure(coarse) {
   assert.equal(api.state.phase, "playing")
   assert.equal(api.snapshot().build.slots.length, 2)
   assert.equal(api.state.time, 0)
-  assert.equal(api.state.enemies.length, 8)
+  assertResidentPopulation(api)
   console.log(`PASS ${coarse ? "touch" : "desktop"} pressure: peak ${finished.stats.peakEnemies}/${api.config.enemyCap}; 299s live, 300s victory, frozen result and restart`)
 }
 pressure(false)

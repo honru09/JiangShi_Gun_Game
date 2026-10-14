@@ -25,7 +25,28 @@
 | 掉落 | 场景道具按室内外品质生成，物资箱沿用当前搜打撤物资与枪械表，完整原作数据仍待核验；击杀只有经验与0.5%概率的一次性临时增益 |
 | 搜打撤 | 背包默认 5 列×8 行（40 格）；真实占格、空格移动及交换校验；箱内全部未知物资格与总/剩余数量首开即显示，按品质逐项识别；进度持久化，显式领取/使用、拖出丢弃；完整原作规则尚未对齐 |
 | 角色 | 命名两帧walk/run/crawl及跳跃阶段；左右瞄准肩掌连接、双臂层级、爬行者双臂双腿完整；重型腾空免接触伤害 |
-| 数量上限 | 网页桌面160、触屏104；微信标准104、省电72；室内另有18感染者局部上限 |
+| 僵尸生成 | 开局室外随机3–6只，每屋2–5只；15秒首波，此后每20秒从地图边缘可通行空地/街道涌入；波次人数4只起、每波+2、默认最多22只 |
+| 数量上限 | 网页桌面160、触屏104；房内外共享全局上限，室内人数不阻止地图边缘增援；微信标准104、省电72 |
+
+## 2026-10-14 延迟波次与开局居民
+
+任务：[Issue #5](https://github.com/honru09/JiangShi_Gun_Game/issues/5)，交付分支 `work/codex/zombie-waves-20261014`，基线为已推送的 `work/codex/search-slots-20261014@a0a767c`。
+
+- 开局全地图室外随机3–6只慢速僵尸，六栋房屋内各随机2–5只，避开墙体、家具和其他僵尸。
+- 室内居民开局已存在；进入该屋或伤害居民后唤醒，之后沿同一地图追击。首次进入、离开和重入均不补怪。
+- 第15秒首次增援，此后每20秒一批；每波4只起、逐波+2至22只，管理员密度按批次缩放人数。
+- 增援只在世界四周的可通行室外产生，独立于相机和玩家所在房屋；取消原连续生成与房内直接生成。
+- HUD显示准备倒计时、实际波次和下一波倒计时；五分钟结算、后期类型/强度增长、160/104上限及0.5%临时增益掉落保持。
+
+改动文件：`prototype-2d/index.html`、`prototype-2d/tests/spawn-schedule-smoke.mjs`、`prototype-2d/tests/combat-smoke.mjs`、`prototype-2d/tests/loot-smoke.mjs`、`prototype-2d/tests/city-map-smoke.mjs`、`scripts/verify-combat.mjs`、`STATUS.md`。测试任务独立分支提交 `e70701a` 已集成。
+
+实际验收：`node scripts/validate.mjs`、`node prototype-2d/tests/spawn-schedule-smoke.mjs`、`node prototype-2d/tests/combat-smoke.mjs`、`node scripts/verify-loot.mjs --unit-only`、`node prototype-2d/tests/city-map-smoke.mjs --unit-only`、`node prototype-2d/tests/landscape-controls-smoke.mjs`、`node prototype-2d/tests/character-motion-smoke.mjs`、`node scripts/verify-combat.mjs --browser-only`、`git diff --check` 均 PASS。刷怪脚本包含8轮随机重开、15/35秒边界、每波人数至22只、每屋居民/唤醒、合法世界边缘、密度0/无限计时器、数量上限、暂停/死亡/结算。
+
+Edge实际1280×720及844×390通过开局数量、15秒首波、35秒第二波、暂停、真实键盘穿门、进屋不增加人数、房内玩家时增援仍在世界边缘、素材加载和重开；桌面及触屏另通过299秒模拟战斗、160/104上限、手动射击和300秒结算，页面无脚本错误。浏览器截图/报告保存在忽略目录`work/runtime-current/zombie-waves-*`及本机`evidence/local/`。微信逻辑未修改；微信仅桩测试通过，微信真机与真人五分钟试玩未执行。
+
+新临时公网：[进入本轮试玩](https://z2fepo-ip-66-90-98-34.tunnelmole.net/)。独立8082端口，公开`work/releases/zombie-waves-20261014/prototype-2d`的`4d6a863`静态快照；入口与环境/角色PNG均HTTP 200，禁用缓存，内容与快照一致。公网Edge实际1280×720及844×390通过开局、15/35秒边缘波次、穿门、暂停、重开及素材加载，无页面脚本错误。本机服务进程12668、隧道进程12604，运行信息及证据保存在忽略目录`work/runtime-current/zombie-waves-*`。
+
+旧物资格测试快照与8081服务保留；本轮检查旧域名`vr5kij-ip-66-90-98-34.tunnelmole.net`已返回404、旧隧道进程已结束，不能把它标为仍在线。临时公网依赖本机及隧道进程持续运行。
 
 ## 2026-10-14 物资箱首开显示修复
 
@@ -101,7 +122,7 @@
 - 最新玩法来自 `work/codex/house-scale` 的 `9563199`，前置 `dfb2928`。
 - 地图整合提交 `6644c7b`，角色整合 `d47fb9d`，角色回归测试 `f4b2187`。
 - 原项目未提交文件已保存到 `work/integration-backup-20261009/` 与名为`Preserve pre-integration root edits 2026-10-09`的Git stash；历史未跟踪设计、证据、个人文件保留。
-- 最新交付分支为 `work/codex/search-slots-20261014`，在界面集成基础上完成物资箱首开显示修复；GitHub 交付走任务分支及 PR。
+- 最新交付分支为 `work/codex/zombie-waves-20261014`，在物资箱首开显示修复基础上调整开局僵尸与15秒后波次；GitHub 交付走任务分支及 PR。
 - 所有窗口每次更新必须验收、提交、推送任务分支并创建/更新PR，见 `AGENTS.md` 和 `COLLABORATION.md`。
 - GitHub：已配置 `origin` 为 `https://github.com/honru09/JiangShi_Gun_Game.git`，并成功推送 `work/codex/firearms-integration`。后续继续推进前先推送当前已验收版本；`main` 仍只通过 PR 更新。
 
