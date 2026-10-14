@@ -497,7 +497,7 @@
       <header class="hud" aria-live="polite">
         <div class="hud-top">
           <div class="run-mark">LAST NIGHT</div>
-          <div class="hud-clock"><div class="time" id="timeValue">05:00</div><div class="wave" id="waveValue">尸潮 01 · 等待撤离</div></div>
+          <div class="hud-clock"><div class="time" id="timeValue">05:00</div><div class="wave" id="waveValue">准备探索 · 首波倒计时 15秒</div></div>
         </div>
         <div class="health-row"><div class="health-track"><div class="health-fill" id="healthFill"></div></div><div class="health-copy" id="healthValue">100 / 100</div></div>
         <div class="stat-row"><span>等级 <strong id="levelValue">1</strong></span><span>击倒 <strong id="killValue">0</strong></span><span>场上 <strong id="enemyValue">0</strong></span></div>
@@ -635,24 +635,20 @@
       ammoReserveCap: 240,
       extractionRadius: 92,
       combatDropChance: .005,
-      indoorEnemyCap: 18,
       firstLootTime: 3,
-      baseSpawnRate: .8,
       runSeconds: RUN_SECONDS,
       waveSeconds: 20,
-      spawnGrowth: .025,
-      waveSpawnGrowth: .12,
-      maxSpawnRate: 8,
-      initialEnemies: 8,
+      initialOutdoorMin: 3,
+      initialOutdoorMax: 6,
+      initialRoomMin: 2,
+      initialRoomMax: 5,
       worldWidth: WORLD_WIDTH,
       worldHeight: WORLD_HEIGHT,
       worldMargin: 24,
       cameraTopGutter: 150,
       cameraBottomGutter: 170,
       mapAreaScale: 4,
-      firstHordeTime: 20,
-      hordeInterval: 12,
-      finalHordeInterval: 7,
+      firstHordeTime: 15,
       hordeBase: 4,
       hordeCap: 22
     }
@@ -690,6 +686,7 @@
     function lerp(start, end, amount) { return start + (end - start) * amount }
     function distanceSquared(firstX, firstY, secondX, secondY) { const x = firstX - secondX; const y = firstY - secondY; return x * x + y * y }
     function randomBetween(minimum, maximum) { return minimum + Math.random() * (maximum - minimum) }
+    function randomInteger(minimum, maximum) { return Math.floor(randomBetween(minimum, maximum + 1)) }
     function formatTime(totalSeconds) { const value = Math.max(0, Math.floor(totalSeconds)); return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}` }
     function id() { entityId += 1; return entityId }
 
@@ -896,13 +893,12 @@
         showHitboxes: false,
         density: Number(ui.densityRange.value),
         time: 0,
-        wave: 1,
-        previousWave: 1,
+        wave: 0,
+        previousWave: 0,
         level: 1,
         xp: 0,
         nextXp: 5,
         kills: 0,
-        spawnBudget: 0,
         hordeTimer: CONFIG.firstHordeTime,
         cameraShake: 0,
         redFlash: 0,
@@ -1020,16 +1016,23 @@
       // indoor geometry part of the same map before the player reaches a door;
       // entering only reveals the matching overlay and collision context.
       state.houseRooms = new Map(houseSystem.houses.map(house => [house.id, houseSystem.createRoom(house)]))
-      for (let index = 0; index < CONFIG.initialEnemies; index += 1) spawnEnemy(index < 15 ? "walker" : undefined)
+      const outdoorCount = randomInteger(CONFIG.initialOutdoorMin, CONFIG.initialOutdoorMax)
+      for (let index = 0; index < outdoorCount; index += 1) spawnEnemy("walker", { source: "initial-outdoor" })
+      for (const room of state.houseRooms.values()) {
+        room.initialSpawned = true
+        room.residentsAwake = false
+        const residentCount = randomInteger(CONFIG.initialRoomMin, CONFIG.initialRoomMax)
+        for (let index = 0; index < residentCount; index += 1) spawnEnemy("walker", { source: "initial-room", room })
+      }
       renderSkillDock()
       showOnlyOverlay(null)
       canvas.focus({ preventScroll: true })
-      ui.waveCallout.textContent = "尸潮 01"
+      ui.waveCallout.textContent = "准备探索 · 15秒后首波"
       ui.waveCallout.classList.remove("show")
       void ui.waveCallout.offsetWidth
       ui.waveCallout.classList.add("show")
-      toast("物资箱搜索披萨 / 牛奶 / 弹药 / 杂物 · 击杀感染者仅有0.5%概率掉落临时增益", 3)
-      logEvent("尸潮开始 · 搜索物资箱并带回撤离区")
+      toast("15秒后尸潮从地图边缘涌入 · 房屋内已有感染者，搜索时小心", 3)
+      logEvent("准备探索 · 首波15秒后抵达，此后每20秒一波")
     }
 
     function syncPlayerStats(healAdded = false) {
@@ -1158,9 +1161,11 @@
     }
 
     function ensureRoomActivity(room) {
-      if (!room || room.initialSpawned || !state || state.phase !== "playing") return
-      room.initialSpawned = true
-      for (let index = 0; index < 3; index += 1) spawnEnemy("walker")
+      if (!room || !state || state.phase !== "playing") return
+      // Residents already occupy this shared-world floor at the start. A
+      // visit wakes them once; entering or revisiting never adds enemies.
+      room.residentsAwake = true
+      for (const enemy of state.enemies) if (enemy.spawnHouseId === room.houseId) enemy.dormant = false
     }
 
     function updateActiveRoom() {
@@ -1897,69 +1902,18 @@
       crawler: { hp: 48, speed: 22, radius: 18, damage: 7, xp: 2, color: "#8a9472", motion: "crawl" }
     }
 
-    function roomInvasionEntrances(room) {
-      if (!room) return []
-      const sources = []
-      if (typeof houseSystem.getInvasionEntrances === "function") sources.push(houseSystem.getInvasionEntrances(room))
-      if (Array.isArray(houseSystem.invasionEntrances)) sources.push(houseSystem.invasionEntrances)
-      for (const key of ["invasionEntrances", "invasionPoints", "entryPoints"]) if (Array.isArray(room[key])) sources.push(room[key])
-      // Keep every source: older room objects expose only invasionPoints while
-      // the two-door plan exposes exits plus windows. Deduping below keeps a
-      // single north/south doorway even when both APIs describe it.
-      const entries = sources.filter(Array.isArray).flat()
-      for (const door of roomDoors(room)) entries.push({ ...door, kind: "door", exterior: true })
-      const seen = new Set()
-      return entries.map((entry, index) => {
-        if (!entry || !Number.isFinite(Number(entry.x)) || !Number.isFinite(Number(entry.y))) return null
-        const source = entry.source && Number.isFinite(Number(entry.source.x)) ? entry.source : entry
-        const width = Number(source.width) || 0
-        const height = Number(source.height) || 0
-        const fromRect = source === entry && (width > 0 || height > 0) && !entry.kind
-        const x = fromRect ? Number(source.x) + width / 2 : Number(entry.x)
-        const y = fromRect ? Number(source.y) + height / 2 : Number(entry.y)
-        if (!Number.isFinite(x) || !Number.isFinite(y)) return null
-        const side = entry.side || "interior"
-        const id = entry.id || `${entry.kind || "entry"}-${side}-${Math.round(x)}-${Math.round(y)}`
-        const key = `${entry.kind || "entry"}:${side}:${Math.round(x)}:${Math.round(y)}`
-        if (seen.has(key)) return null
-        seen.add(key)
-        return { ...entry, x, y, id, side }
-      }).filter(Boolean)
-    }
-
-    function indoorSpawnCandidate(room, entry, radius) {
-      const margin = radius + 12
-      const door = entry?.side ? entry : roomDoorForPoint(room, entry?.x, entry?.y)
-      let x = Number.isFinite(Number(entry?.x)) ? Number(entry.x) : door?.x
-      let y = Number.isFinite(Number(entry?.y)) ? Number(entry.y) : door?.y
-      if (!Number.isFinite(x) || !Number.isFinite(y)) return { x: room?.bounds?.minX || 0, y: room?.bounds?.minY || 0 }
-      // Windows sit on the perimeter; move the spawn point inward so the
-      // collision radius remains inside the room. Interior doors keep their
-      // center point and are clamped by the room bounds below.
-      if (door?.side === "north") y += margin
-      else if (door?.side === "south") y -= margin
-      else if (door?.side === "west") x += margin
-      else if (door?.side === "east") x -= margin
-      return {
-        x: clamp(x, room.bounds.minX + margin, room.bounds.maxX - margin),
-        y: clamp(y, room.bounds.minY + margin, room.bounds.maxY - margin)
-      }
-    }
-
     function runProgress() { return state ? clamp(state.time / RUN_SECONDS, 0, 1) : 0 }
     function spawnRate() {
-      // Spread the pressure ramp across the full five-minute run instead of
-      // reaching the old three-minute peak early, while keeping a small wave
-      // contribution so each escalation remains readable.
-      return Math.min(CONFIG.maxSpawnRate, CONFIG.baseSpawnRate + runProgress() * 4.2 + (state.wave - 1) * CONFIG.waveSpawnGrowth) * state.density
+      return waveSize(state.wave + 1) / CONFIG.waveSeconds
     }
 
-    function spawnEnemy(type) {
+    function waveSize(wave) {
+      return Math.max(0, Math.round(Math.min(CONFIG.hordeCap, CONFIG.hordeBase + Math.max(0, wave - 1) * 2) * state.density))
+    }
+
+    function spawnEnemy(type, { source = "map-edge", room = null } = {}) {
       if (!state) return null
-      const indoorCount = state.room
-        ? state.enemies.filter(enemy => !enemy.dead && pointInRoom(state.room, enemy.x, enemy.y, enemy.radius || 0)).length
-        : 0
-      if (state.enemies.length >= CONFIG.enemyCap || (state.room && indoorCount >= CONFIG.indoorEnemyCap)) return null
+      if (state.enemies.length >= CONFIG.enemyCap || (source === "initial-room" && !room)) return null
       if (!type || !ENEMY_TYPES[type]) {
         const roll = Math.random()
         type = state.time >= 40 && roll < .12 ? "crawler"
@@ -1969,45 +1923,44 @@
       }
       const template = ENEMY_TYPES[type]
       let position = null
-      let invasionEntry = null
-      const camera = cameraFor(state.player)
-      const invasionEntrances = roomInvasionEntrances(state.room)
-      for (let attempt = 0; attempt < 80; attempt += 1) {
-        const edge = Math.floor(Math.random() * 4)
-        let candidate
-        if (state.room && invasionEntrances.length && attempt < 40) {
-          invasionEntry = invasionEntrances[Math.floor(Math.random() * invasionEntrances.length)]
-          candidate = indoorSpawnCandidate(state.room, invasionEntry, template.radius + 4)
-        } else {
-          // A malformed or crowded entrance list must never block indoor
-          // spawning; retain the old safe area fallback for that case.
-          invasionEntry = null
-          candidate = state.room
-            ? { x: randomBetween(state.room.bounds.minX + 35, state.room.bounds.maxX - 35), y: randomBetween(state.room.bounds.minY + 35, state.room.bounds.minY + 210) }
-          : edge < 2
-          ? { x: camera.x + (edge === 0 ? -64 : WIDTH + 64), y: randomBetween(camera.y - 32, camera.y + HEIGHT + 32) }
-          : { x: randomBetween(camera.x - 32, camera.x + WIDTH + 32), y: camera.y + (edge === 2 ? -64 : HEIGHT + 64) }
+      const radius = template.radius + 4
+      const indoor = source === "initial-room"
+      const bounds = indoor ? room.worldBounds : { minX: CONFIG.worldMargin, minY: CONFIG.worldMargin, maxX: WORLD_WIDTH - CONFIG.worldMargin, maxY: WORLD_HEIGHT - CONFIG.worldMargin }
+      const minX = bounds.minX + radius, maxX = bounds.maxX - radius
+      const minY = bounds.minY + radius, maxY = bounds.maxY - radius
+      const valid = candidate => {
+        // Wave entrances use street collision only. A visible floor or the
+        // current camera must never turn a building into a spawn location.
+        if (indoor ? !houseSystem.isFree(room, candidate.x, candidate.y, radius) : !city.isFree(candidate.x, candidate.y, radius)) return false
+        const minimumDistance = source === "initial-outdoor" ? 220 : radius + state.player.radius + 24
+        if (distanceSquared(candidate.x, candidate.y, state.player.x, state.player.y) < minimumDistance ** 2) return false
+        return !state.enemies.some(enemy => !enemy.dead && distanceSquared(candidate.x, candidate.y, enemy.x, enemy.y) < (radius + enemy.radius + 4) ** 2)
+      }
+      for (let attempt = 0; attempt < 240; attempt += 1) {
+        const candidate = { x: randomBetween(minX, maxX), y: randomBetween(minY, maxY) }
+        if (source === "map-edge") {
+          const edge = Math.floor(Math.random() * 4)
+          if (edge < 2) candidate.x = edge === 0 ? minX : maxX
+          else candidate.y = edge === 2 ? minY : maxY
         }
-        const inset = template.radius + 4
-        const spawnBounds = state.room
-          ? { minX: state.room.bounds.minX, minY: state.room.bounds.minY, maxX: state.room.bounds.maxX, maxY: state.room.bounds.maxY }
-          : { minX: CONFIG.worldMargin, minY: CONFIG.worldMargin, maxX: WORLD_WIDTH - CONFIG.worldMargin, maxY: WORLD_HEIGHT - CONFIG.worldMargin }
-        candidate.x = clamp(candidate.x, spawnBounds.minX + inset, spawnBounds.maxX - inset)
-        candidate.y = clamp(candidate.y, spawnBounds.minY + inset, spawnBounds.maxY - inset)
-        if (!activeIsFree(candidate.x, candidate.y, template.radius + 4)) continue
-        const minimumDistance = state.room ? 45 : 220
-        if (distanceSquared(candidate.x, candidate.y, state.player.x, state.player.y) < minimumDistance * minimumDistance) continue
-        if (state.enemies.some(enemy => distanceSquared(candidate.x, candidate.y, enemy.x, enemy.y) < (template.radius + enemy.radius) ** 2)) continue
-        position = candidate
-        break
+        if (valid(candidate)) { position = candidate; break }
+      }
+      // A floor must receive its initial residents even if random samples
+      // hit furniture repeatedly. The fallback still checks all collisions.
+      if (!position && indoor) {
+        for (let y = minY; y <= maxY && !position; y += 32) for (let x = minX; x <= maxX; x += 32) {
+          const candidate = { x, y }
+          if (valid(candidate)) { position = candidate; break }
+        }
       }
       // A crowded edge can wait for the next spawn attempt; never place an enemy on the player.
       if (!position) return null
-      const scaling = 1 + (state.wave - 1) * .13
+      const scaling = 1 + Math.max(0, state.wave - 1) * .13
       const enemy = {
         id: id(), type, ...position, radius: template.radius,
-        spawnSource: state.room ? "invasion" : "street",
-        invasionEntryId: state.room ? invasionEntry?.id || null : null,
+        spawnSource: source,
+        spawnHouseId: indoor ? room.houseId : null,
+        dormant: indoor && !room.residentsAwake,
         hp: template.hp * scaling, maxHp: template.hp * scaling,
         speed: template.speed * (1 + Math.min(.85, state.time / 240)),
         baseSpeed: template.speed,
@@ -2044,6 +1997,7 @@
 
     function hitEnemy(enemy, amount, source = "bullet") {
       if (!enemy || enemy.dead) return
+      if (enemy.dormant) ensureRoomActivity(state.houseRooms.get(enemy.spawnHouseId))
       state.stats.damage += Math.min(enemy.hp, amount)
       enemy.hp -= amount
       enemy.hit = .13
@@ -2336,6 +2290,10 @@
       }
       for (const enemy of state.enemies) {
         if (enemy.dead) continue
+        if (enemy.dormant) {
+          if (playerRoom?.houseId === enemy.spawnHouseId) ensureRoomActivity(playerRoom)
+          else { enemy.moveAmount = 0; continue }
+        }
         enemy.trapTimer = Math.max(0, (enemy.trapTimer || 0) - dt)
         if (enemy.trapTimer <= 0) enemy.trapSlow = 0
         enemy.speed = enemy.baseSpeed * (1 + Math.min(.85, state.time / 240)) * (enemy.trapTimer > 0 ? (enemy.trapSlow || .3) : 1)
@@ -2782,28 +2740,24 @@
       }
       if (state.time >= RUN_SECONDS - 30 && !state.extractionAnnounced) {
         state.extractionAnnounced = true
-        state.hordeTimer = Math.min(state.hordeTimer, CONFIG.finalHordeInterval)
         toast("最后 30 秒 · 坚持到撤离", 4)
         logEvent("撤离车接近 · 最后30秒")
       }
-      state.wave = 1 + Math.floor(state.time / CONFIG.waveSeconds)
       updateExtractionState()
-      if (state.wave !== state.previousWave) {
+      // One schedule controls the announcement and the actual batch. The
+      // preparation window contains only the initial street/floor residents.
+      state.hordeTimer -= dt
+      while (state.hordeTimer <= 1e-8) {
+        state.wave += 1
         state.previousWave = state.wave
+        let spawned = 0
+        for (let index = 0; index < waveSize(state.wave); index += 1) if (spawnEnemy()) spawned += 1
+        state.hordeTimer += CONFIG.waveSeconds
         ui.waveCallout.textContent = `尸潮 ${String(state.wave).padStart(2, "0")}`
         ui.waveCallout.classList.remove("show")
         void ui.waveCallout.offsetWidth
         ui.waveCallout.classList.add("show")
-        logEvent(`尸潮 ${state.wave} · 刷新压力增加`)
-      }
-      state.spawnBudget = Math.min(8, state.spawnBudget + (state.room ? Math.min(1.4, spawnRate() * .35) : spawnRate()) * dt)
-      while (state.spawnBudget >= 1) { spawnEnemy(); state.spawnBudget -= 1 }
-      state.hordeTimer -= dt
-      if (state.hordeTimer <= 0) {
-        const size = state.room ? 2 : Math.min(CONFIG.hordeCap, CONFIG.hordeBase + Math.floor(state.time / CONFIG.waveSeconds) * 2)
-        for (let index = 0; index < size; index += 1) spawnEnemy()
-        state.hordeTimer += state.time >= RUN_SECONDS - 30 ? CONFIG.finalHordeInterval : CONFIG.hordeInterval
-        logEvent(`边缘尸潮涌入 · 当前 ${state.enemies.length}`)
+        logEvent(`尸潮 ${state.wave} · 地图边缘涌入 ${spawned} 只`)
       }
       const stats = modifiers()
       updatePlayer(dt, stats)
@@ -3168,7 +3122,9 @@
     function syncHud() {
       if (!Number.isFinite(state.weapon?.ammoInMag) || !Number.isFinite(state.weapon?.ammoReserve)) state.weapon = weaponState(state.weapon?.id, state.weapon?.quality)
       ui.timeValue.textContent = formatTime(Math.ceil(Math.max(0, RUN_SECONDS - state.time)))
-      ui.waveValue.textContent = `尸潮 ${String(state.wave).padStart(2, "0")} · ${state.time >= RUN_SECONDS - 30 ? "撤离车接近" : "五分钟撤离"}`
+      ui.waveValue.textContent = state.wave === 0
+        ? `准备探索 · 首波倒计时 ${Math.max(0, Math.ceil(state.hordeTimer - 1e-8))}秒`
+        : `尸潮 ${String(state.wave).padStart(2, "0")} · ${state.time >= RUN_SECONDS - 30 ? "撤离车接近" : `下波 ${Math.max(0, Math.ceil(state.hordeTimer - 1e-8))}秒`}`
       ui.healthFill.style.width = `${state.player.hp / state.player.maxHp * 100}%`
       ui.healthValue.textContent = `${Math.ceil(state.player.hp)} / ${state.player.maxHp}`
       ui.levelValue.textContent = state.level
@@ -3189,7 +3145,7 @@
       renderSearchWindow()
       ui.adminPause.textContent = state.paused ? "继续" : "暂停"
       if (adminMode && !ui.adminPanel.hidden) {
-        ui.adminMetrics.textContent = `时间 ${formatTime(state.time)} · ${state.phase}${state.paused ? " / 暂停" : ""}\n感染者 ${state.enemies.length}/${CONFIG.enemyCap} · 峰值 ${state.stats.peakEnemies}\n刷怪 ${spawnRate().toFixed(2)}/秒 · FPS ${state.lastFps.toFixed(0)}\n射击 ${state.stats.shots} · 命中 ${state.stats.hits}\n累计伤害 ${Math.round(state.stats.damage)} · 爆炸 ${state.stats.explosions}\n弹丸 ${state.projectiles.length} · 特效 ${state.particles.length}\n玩家 ${state.player.x.toFixed(0)},${state.player.y.toFixed(0)} · ${state.player.movingSpeed.toFixed(0)}px/s`
+        ui.adminMetrics.textContent = `时间 ${formatTime(state.time)} · ${state.phase}${state.paused ? " / 暂停" : ""}\n感染者 ${state.enemies.length}/${CONFIG.enemyCap} · 峰值 ${state.stats.peakEnemies}\n下波 ${waveSize(state.wave + 1)}只 / ${Math.max(0, Math.ceil(state.hordeTimer))}秒 · FPS ${state.lastFps.toFixed(0)}\n射击 ${state.stats.shots} · 命中 ${state.stats.hits}\n累计伤害 ${Math.round(state.stats.damage)} · 爆炸 ${state.stats.explosions}\n弹丸 ${state.projectiles.length} · 特效 ${state.particles.length}\n玩家 ${state.player.x.toFixed(0)},${state.player.y.toFixed(0)} · ${state.player.movingSpeed.toFixed(0)}px/s`
       }
     }
 
@@ -3384,7 +3340,7 @@
       ui.densityRange.addEventListener("input", () => { state.density = Number(ui.densityRange.value); ui.densityValue.textContent = `${state.density.toFixed(1)}×` })
       ui.adminPause.addEventListener("click", () => togglePause())
       ui.adminStep.addEventListener("click", () => { togglePause(true); update(FIXED_STEP); draw(); syncHud() })
-      ui.adminHorde.addEventListener("click", () => { if (state.phase === "playing") { for (let count = 0; count < 20; count += 1) spawnEnemy(); logEvent("管理员生成感染者"); draw(); syncHud() } })
+      ui.adminHorde.addEventListener("click", () => { if (state.phase === "playing") { for (let count = 0; count < 20; count += 1) spawnEnemy(); logEvent("管理员从地图边缘生成感染者"); draw(); syncHud() } })
       ui.adminLevel.addEventListener("click", () => { if (state.phase === "playing") { const ball = spawnLoot(); if (ball) toast("被动投掷物资已落地 · 走近拾取"); draw(); syncHud() } })
       ui.adminClear.addEventListener("click", () => { state.enemies = []; state.projectiles = []; logEvent("管理员清场"); draw(); syncHud() })
       ui.adminGod.addEventListener("click", () => { state.godMode = !state.godMode; ui.adminGod.textContent = `无敌：${state.godMode ? "开" : "关"}` })
