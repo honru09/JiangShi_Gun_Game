@@ -1,15 +1,19 @@
 /* Transparent environment atlas; browser gameplay waits for the active art. */
 (() => {
   "use strict"
+  /* Pages deploy note: this branch carries text only; art PNGs load from the
+     public repo's main branch through a CORS-enabled CDN. */
+  const CDN_BASE = "https://cdn.jsdelivr.net/gh/honru09/JiangShi_Gun_Game@main/prototype-2d/assets/"
   const sheets = {
-    environment: { url: "assets/apocalypse-environment.png", columns: 4, rows: 4 },
-    characters: { url: "assets/apocalypse-characters.png", columns: 3, rows: 2 }
+    environment: { url: CDN_BASE + "apocalypse-environment.png", columns: 4, rows: 4 },
+    characters: { url: CDN_BASE + "apocalypse-characters.png", columns: 3, rows: 2 }
   }
 
   function loadSheet(config) {
     return new Promise(resolve => {
       if (typeof Image === "undefined") { resolve(null); return }
       const img = new Image()
+      img.crossOrigin = "anonymous"
       img.onload = () => {
         const cells = []
         const cellWidth = img.naturalWidth / config.columns

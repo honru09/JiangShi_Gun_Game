@@ -317,6 +317,9 @@
     return Object.freeze({ drawPlayer, drawEnemy, pose: getPose, bounds, ready: true })
   }
 
+  /* Pages deploy note: atlas PNGs load from the public repo's main branch
+     through a CORS-enabled CDN; this branch carries text only. */
+  const CDN_BASE = "https://cdn.jsdelivr.net/gh/honru09/JiangShi_Gun_Game@main/prototype-2d/assets/"
   function load(manifest) {
     if (!manifest?.image || typeof Image !== "function") { loadStatus = "unavailable"; return }
     loadStatus = "loading"; loadError = null; browserRenderer = null
@@ -334,10 +337,11 @@
       } catch { loadStatus = "error"; loadError = "atlas-cache-failed" }
     }
     for (const name of names) {
-      const image = new Image(); images[name] = image; image.decoding = "async"; let finished = false
+      const image = new Image(); images[name] = image; image.decoding = "async"; image.crossOrigin = "anonymous"; let finished = false
       image.onload = () => { if (!finished && !settled) { finished = true; remaining--; complete() } }
       image.onerror = () => { if (!settled) { settled = true; loadStatus = "error"; loadError = `atlas-load-failed:${name}` } }
-      image.src = name.startsWith("assets/") ? name : `assets/${name}`
+      const file = name.startsWith("assets/") ? name.slice(7) : name
+      image.src = file.startsWith("http") ? file : CDN_BASE + file
       if (image.complete && (image.naturalWidth || image.width)) image.onload()
     }
   }
