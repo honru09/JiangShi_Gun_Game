@@ -1,4 +1,4 @@
-# 《尸潮：最后一夜》
+> **In English:** *Last Night Survivor* — a vertical 2D zombie roguelike survival prototype. Web version: survive 5 minutes per run, explore cities and buildings, auto-targeting combat with hand-drawn art. WeChat mini-program keeps a 3-minute combat prototype. Built with vanilla JS.\n\n---\n\n# 《尸潮：最后一夜》
 
 **LAST NIGHT SURVIVOR**
 
